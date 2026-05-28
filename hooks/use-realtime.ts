@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import type { Alert, NvrHealthStatus } from '@/lib/types'
 
@@ -15,6 +15,7 @@ interface UseRealtimeHandlers {
 export function useRealtime(handlers: UseRealtimeHandlers) {
   const socketRef = useRef<Socket | null>(null)
   const handlersRef = useRef(handlers)
+  const [connected, setConnected] = useState(false)
   
   // Actualizar referencia de handlers sin reconectar
   useEffect(() => {
@@ -33,6 +34,11 @@ export function useRealtime(handlers: UseRealtimeHandlers) {
     })
 
     socketRef.current = socket
+
+    const syncConnection = () => setConnected(socket.connected)
+    syncConnection()
+    socket.on('connect', syncConnection)
+    socket.on('disconnect', syncConnection)
 
     socket.on('alert:new', (alert: Alert) => {
       handlersRef.current.onAlertNew?.(alert)
@@ -61,8 +67,11 @@ export function useRealtime(handlers: UseRealtimeHandlers) {
 
     return () => {
       clearInterval(heartbeatInterval)
+      socket.off('connect', syncConnection)
+      socket.off('disconnect', syncConnection)
       socket.disconnect()
       socketRef.current = null
+      setConnected(false)
     }
   }, [])
 
@@ -77,5 +86,6 @@ export function useRealtime(handlers: UseRealtimeHandlers) {
   return {
     subscribeToAlert,
     isConnected,
+    connected,
   }
 }

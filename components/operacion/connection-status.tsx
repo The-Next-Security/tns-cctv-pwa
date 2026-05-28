@@ -1,33 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { Wifi, WifiOff } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
-export function ConnectionStatus() {
-  const [isConnected, setIsConnected] = useState(true)
-  const [lastPing, setLastPing] = useState<Date>(new Date())
+interface ConnectionStatusProps {
+  /** Estado del WebSocket `/realtime` (Socket.IO) */
+  isConnected: boolean
+}
 
-  // This would be replaced with actual WebSocket connection status
-  useEffect(() => {
-    // Simulate connection check
-    const interval = setInterval(() => {
-      // In real implementation, check socket.connected
-      setLastPing(new Date())
-    }, 5000)
-
-    return () => clearInterval(interval)
-  }, [])
-
+export function ConnectionStatus({ isConnected }: ConnectionStatusProps) {
   return (
     <Badge
       variant="outline"
       className={cn(
         'gap-1.5',
         isConnected
-          ? 'border-status-ok/30 text-status-ok'
-          : 'border-status-down/30 text-status-down'
+          ? 'border-status-connected/30 bg-status-connected-bg text-status-connected'
+          : 'border-status-disconnected/30 bg-status-disconnected-bg text-status-disconnected'
       )}
     >
       {isConnected ? (

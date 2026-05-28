@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Camera, Clock, MapPin, Check, X, ArrowUpRight, ChevronDown } from 'lucide-react'
@@ -22,6 +21,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
 import { alerts as alertsApi } from '@/lib/api'
+import { resolveSnapshotUrl } from '@/lib/demo-media'
+import { LiveCameraPanel } from '@/components/operacion/live-camera-panel'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
 import { DISCARD_REASON_LABELS, CRITICALITY_LABELS } from '@/lib/types'
@@ -127,21 +129,31 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
           </DialogDescription>
         </DialogHeader>
 
-        {/* Snapshot */}
-        <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-          {alert.snapshot_url ? (
-            <Image
-              src={alert.snapshot_url}
-              alt="Snapshot del evento"
-              fill
-              className="object-cover"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Camera className="h-16 w-16 text-muted-foreground/30" />
+        {/* Snapshot / en vivo */}
+        <Tabs defaultValue="snapshot">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
+            <TabsTrigger value="live">En vivo</TabsTrigger>
+          </TabsList>
+          <TabsContent value="snapshot" className="mt-3">
+            <div className="relative aspect-video overflow-hidden rounded-lg bg-muted">
+              {alert.snapshot_url || alert.event_type ? (
+                <img
+                  src={resolveSnapshotUrl(alert.snapshot_url, alert.event_type)}
+                  alt="Snapshot del evento"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Camera className="h-16 w-16 text-muted-foreground/30" />
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </TabsContent>
+          <TabsContent value="live" className="mt-3">
+            <LiveCameraPanel cameraName={alert.camera?.name ?? 'Cámara'} />
+          </TabsContent>
+        </Tabs>
 
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-end gap-2 pt-2">

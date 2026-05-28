@@ -13,12 +13,15 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { LiveCameraPanel } from '@/components/operacion/live-camera-panel'
+import { resolveSnapshotUrl } from '@/lib/demo-media'
 import { cn } from '@/lib/utils'
 import type { Alert } from '@/lib/types'
 import { CRITICALITY_STYLES, DISCARD_REASONS } from '@/lib/constants'
@@ -43,6 +46,7 @@ export function AlertPopup({
   if (!alert) return null
 
   const styles = CRITICALITY_STYLES[alert.criticality]
+  const snapshotSrc = resolveSnapshotUrl(alert.snapshot_url, alert.event_type)
   const recentSameCamera = recentAlerts.filter(
     a => a.id !== alert.id && a.camera?.id === alert.camera?.id
   ).slice(0, 5)
@@ -68,27 +72,34 @@ export function AlertPopup({
         </DialogHeader>
 
         <div className="grid grid-cols-3 gap-6">
-          {/* Evidencia visual - Snapshot desde Dahua */}
           <div className="col-span-2 space-y-3">
-            <div className="aspect-video bg-muted rounded-lg overflow-hidden border border-border">
-              {alert.snapshot_url && !imageError ? (
-                <img
-                  src={`/api/v1${alert.snapshot_url}`}
-                  className="w-full h-full object-cover"
-                  alt="Snapshot de la alerta"
-                  onError={() => setImageError(true)}
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
-                  <Image className="h-12 w-12 opacity-50" />
-                  <p className="text-sm">
-                    {imageError ? 'Error al cargar imagen' : 'Sin snapshot disponible'}
-                  </p>
+            <Tabs defaultValue="snapshot">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
+                <TabsTrigger value="live">En vivo</TabsTrigger>
+              </TabsList>
+              <TabsContent value="snapshot" className="mt-3">
+                <div className="aspect-video overflow-hidden rounded-lg border border-border bg-muted">
+                  {!imageError ? (
+                    <img
+                      src={snapshotSrc}
+                      className="h-full w-full object-cover"
+                      alt="Snapshot de la alerta"
+                      onError={() => setImageError(true)}
+                    />
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                      <Image className="h-12 w-12 opacity-50" />
+                      <p className="text-sm">Error al cargar imagen</p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </TabsContent>
+              <TabsContent value="live" className="mt-3">
+                <LiveCameraPanel cameraName={alert.camera?.name ?? 'Cámara'} />
+              </TabsContent>
+            </Tabs>
 
-            {/* Información de la alerta */}
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-muted-foreground">Zona</p>
@@ -106,28 +117,26 @@ export function AlertPopup({
               </div>
               <div>
                 <p className="text-muted-foreground">Regla</p>
-                <p className="font-medium text-xs truncate">{alert.observation || 'N/A'}</p>
+                <p className="font-medium text-xs truncate">{alert.observation || alert.event_code || 'N/A'}</p>
               </div>
             </div>
           </div>
 
-          {/* Contexto y acciones */}
           <div className="space-y-4">
-            {/* Historial de alertas en esta cámara */}
-            <div className="border border-border rounded-lg p-3 space-y-2">
-              <h4 className="font-medium text-sm">Alertas recientes (cámara)</h4>
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <h4 className="text-sm font-medium">Alertas recientes (cámara)</h4>
               {recentSameCamera.length > 0 ? (
-                <div className="space-y-2 max-h-32 overflow-y-auto">
+                <div className="max-h-32 space-y-2 overflow-y-auto">
                   {recentSameCamera.map(a => (
                     <div
                       key={a.id}
                       className={cn(
-                        'p-2 rounded text-xs border-l-2',
+                        'rounded border-l-2 p-2 text-xs',
                         CRITICALITY_STYLES[a.criticality].border,
                         'bg-secondary/50'
                       )}
                     >
-                      <p className="font-medium truncate">{a.description}</p>
+                      <p className="truncate font-medium">{a.description}</p>
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(a.timestamp), 'HH:mm', { locale: es })}
                       </p>
@@ -141,8 +150,7 @@ export function AlertPopup({
               )}
             </div>
 
-            {/* Estadísticas */}
-            <div className="border border-border rounded-lg p-3 space-y-1 text-xs">
+            <div className="space-y-1 rounded-lg border border-border p-3 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Estado:</span>
                 <Badge variant="outline" className="capitalize">
@@ -154,14 +162,14 @@ export function AlertPopup({
                 <span className="font-mono">
                   {Math.round(
                     (new Date().getTime() - new Date(alert.timestamp).getTime()) / 1000
-                  )}s
+                  )}
+                  s
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Acciones */}
         <DialogFooter className="flex-col gap-2 sm:flex-col">
           <Button
             className="w-full"

@@ -59,8 +59,8 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { MOCK_TENANTS, MOCK_VEHICLE_ENTRIES } from '@/lib/mock-data'
-import type { VehicleEntry, Tenant, VehicleType } from '@/lib/types'
-import { VEHICLE_TYPE_LABELS } from '@/lib/types'
+import type { VehicleEntry, Tenant, VehicleType, PlateSource } from '@/lib/types'
+import { VEHICLE_TYPE_LABELS, PLATE_SOURCE_LABELS } from '@/lib/types'
 
 const vehicleEntrySchema = z.object({
   plate: z.string()
@@ -75,6 +75,7 @@ const vehicleEntrySchema = z.object({
   vehicle_type: z.string().min(1, 'Seleccione el tipo de vehiculo'),
   entry_at: z.string().min(1, 'La hora de ingreso es requerida'),
   observations: z.string().optional(),
+  plate_source: z.enum(['anpr', 'manual', 'hybrid']),
 })
 
 type VehicleEntryForm = z.infer<typeof vehicleEntrySchema>
@@ -88,6 +89,7 @@ export default function RecepcionPage() {
   const [exitingEntry, setExitingEntry] = useState<VehicleEntry | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [entries, setEntries] = useState<VehicleEntry[]>(MOCK_VEHICLE_ENTRIES)
+  const [anprReading, setAnprReading] = useState<string | null>(null)
 
   const activeEntries = entries.filter(e => !e.exit_at)
 
@@ -104,8 +106,18 @@ export default function RecepcionPage() {
       entry_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
       vehicle_type: '',
       tenant_id: '',
+      plate_source: 'hybrid',
     },
   })
+
+  const plateSource = watch('plate_source')
+
+  function simulateAnprCapture() {
+    const demoPlate = 'BCDF12'
+    setAnprReading(demoPlate)
+    setValue('plate', demoPlate, { shouldValidate: true })
+    toast.success('Patente capturada por cámara ANPR de recepción')
+  }
 
   async function onSubmit(data: VehicleEntryForm) {
     setIsSubmitting(true)
@@ -127,6 +139,13 @@ export default function RecepcionPage() {
         exit_at: null,
         registered_by: '1',
         created_at: new Date().toISOString(),
+        plate_source: data.plate_source as PlateSource,
+        anpr_confidence:
+          data.plate_source === 'manual'
+            ? null
+            : data.plate_source === 'anpr'
+              ? 94
+              : 91,
       }
       
       setEntries(prev => [newEntry, ...prev])
@@ -135,7 +154,9 @@ export default function RecepcionPage() {
         entry_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
         vehicle_type: '',
         tenant_id: '',
+        plate_source: 'hybrid',
       })
+      setAnprReading(null)
       setSelectedTenant(null)
       setIsSubmitting(false)
     }, 500)
@@ -200,8 +221,8 @@ export default function RecepcionPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                <Building2 className="h-5 w-5 text-blue-500" />
+              <div className="h-10 w-10 rounded-xl bg-accent/50 flex items-center justify-center">
+                <Building2 className="h-5 w-5 text-[var(--crextio-brown)]" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{MOCK_TENANTS.length}</p>
@@ -239,6 +260,50 @@ export default function RecepcionPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              {/* Fuente del dato — ANPR / manual */}
+              <div className="space-y-2">
+                <Label>Fuente del registro</Label>
+                <Select
+                  value={plateSource}
+                  onValueChange={val => {
+                    setValue('plate_source', val as PlateSource)
+                    if (val === 'manual') setAnprReading(null)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar fuente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(PLATE_SOURCE_LABELS) as PlateSource[]).map(source => (
+                      <SelectItem key={source} value={source}>
+                        {PLATE_SOURCE_LABELS[source]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(plateSource === 'anpr' || plateSource === 'hybrid') && (
+                <div className="rounded-xl border border-[var(--crextio-gold-strong)]/30 bg-[var(--warning-bg)] p-3 space-y-2">
+                  <p className="text-sm font-medium">Cámara ANPR — Portón recepción</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-sm">
+                      {anprReading ? (
+                        <>
+                          Lectura: <strong>{anprReading}</strong>
+                          <span className="ml-2 text-xs text-muted-foreground">(94% confianza)</span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">Sin lectura — simule captura</span>
+                      )}
+                    </span>
+                    <Button type="button" variant="outline" size="sm" onClick={simulateAnprCapture}>
+                      Capturar ANPR
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Patente */}
               <div className="space-y-2">
                 <Label htmlFor="plate">
@@ -432,6 +497,7 @@ export default function RecepcionPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Patente</TableHead>
+                      <TableHead>Fuente</TableHead>
                       <TableHead>Conductor</TableHead>
                       <TableHead>Empresa</TableHead>
                       <TableHead>Ingreso</TableHead>
@@ -450,6 +516,15 @@ export default function RecepcionPage() {
                               </Badge>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {entry.plate_source ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              {PLATE_SOURCE_LABELS[entry.plate_source]}
+                            </Badge>
+                          ) : (
+                            '-'
+                          )}
                         </TableCell>
                         <TableCell className="text-sm">
                           {entry.declared_driver_name || '-'}

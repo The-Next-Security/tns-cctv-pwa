@@ -110,6 +110,7 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
           <p>Patente: ${caseFile.infraction?.plate_read}</p>
           <p>Velocidad: ${caseFile.infraction?.speed_kmh} km/h</p>`,
       })
+      toast.success('Correo enviado al arrendatario (demo)')
       await handleResolve('notificado')
     } catch (error) {
       toast.error('Error al enviar notificacion')

@@ -3,133 +3,167 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* TNS Track - Sistema de seguridad para Parque Agrolivo */
-/* Design System 2026: Dark-first, Spatial UI, Glassmorphism 2.0 */
+/* TNS Track — Crextio / Nixtio design system */
 
 :root {
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  
-  /* Criticidad */
-  --criticality-baja: oklch(0.554 0.046 257.417);
-  --criticality-media: oklch(0.769 0.188 70.08);
-  --criticality-alta: oklch(0.646 0.222 41.116);
-  --criticality-critica: oklch(0.577 0.245 27.325);
-  
-  /* Status */
-  --status-ok: oklch(0.696 0.17 162.48);
-  --status-degraded: oklch(0.769 0.188 70.08);
-  --status-down: oklch(0.577 0.245 27.325);
-  
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-  
-  /* Spatial UI - Elevation levels */
-  --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --elevation-2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --elevation-3: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --elevation-4: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  /* Layout */
+  --sidebar-width: 260px;
+  --context-width: 340px;
+  --app-padding: 24px;
+
+  /* Crextio — crema, dorado, carbón */
+  --crextio-cream: #F0ECDD;
+  --crextio-cream-warm: #DFD09A;
+  --crextio-peach: #F5E6C8;
+  --crextio-charcoal: #0A0807;
+  --crextio-charcoal-soft: #1A1A1A;
+  --crextio-muted: #A8A49E;
+  --crextio-gold: #F5D175;
+  --crextio-gold-strong: #E6A434;
+  --crextio-brown: #684B3D;
+  --crextio-terracotta: #9A5F48;
+
+  --background: #F0ECDD;
+  --foreground: #0A0807;
+  --card: #FFFFFF;
+  --card-foreground: #0A0807;
+  --popover: #FFFFFF;
+  --popover-foreground: #0A0807;
+  --primary: #0A0807;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F5F0E6;
+  --secondary-foreground: #684B3D;
+  --muted: #F5F0E6;
+  --muted-foreground: #A8A49E;
+  --accent: #F5D175;
+  --accent-foreground: #0A0807;
+  --destructive: #C24033;
+  --destructive-foreground: #FFFFFF;
+  --border: #DFD09A;
+  --input: #F5F0E6;
+  --ring: #E6A434;
+
+  --success: #684B3D;
+  --success-bg: #F5F0E6;
+  --warning: #E6A434;
+  --warning-bg: #FDF6E8;
+  --danger: #C24033;
+  --danger-bg: #FAE8E5;
+  --info: #684B3D;
+  --info-bg: #F0EBE8;
+
+  /* Escala de urgencia operativa (4 niveles, de mayor a menor) */
+  --urgency-critical: #C24033;
+  --urgency-critical-bg: #FAE8E5;
+  --urgency-critical-border: rgb(194 64 51 / 0.35);
+
+  --urgency-pending: #D4920A;
+  --urgency-pending-bg: #FDF6E8;
+  --urgency-pending-border: rgb(212 146 10 / 0.35);
+
+  --urgency-review: #9A7344;
+  --urgency-review-bg: #F3EDE4;
+  --urgency-review-border: rgb(154 115 68 / 0.35);
+
+  --urgency-resolved: #A8A49E;
+  --urgency-resolved-bg: #EFEBE6;
+  --urgency-resolved-border: rgb(168 164 158 / 0.4);
+
+  /* Alias KPI / stats — misma escala */
+  --stat-critical: var(--urgency-critical);
+  --stat-critical-bg: var(--urgency-critical-bg);
+  --stat-pending: var(--urgency-pending);
+  --stat-pending-bg: var(--urgency-pending-bg);
+  --stat-review: var(--urgency-review);
+  --stat-review-bg: var(--urgency-review-bg);
+  --stat-resolved: var(--urgency-resolved);
+  --stat-resolved-bg: var(--urgency-resolved-bg);
+
+  --criticality-baja: #A8A49E;
+  --criticality-media: #D4920A;
+  --criticality-alta: #B54A38;
+  --criticality-critica: #C24033;
+
+  --status-ok: #684B3D;
+  --status-degraded: #E6A434;
+  --status-down: #9A5F48;
+  --status-connected: #16A34A;
+  --status-connected-bg: #F0FDF4;
+  --status-disconnected: #C24033;
+  --status-disconnected-bg: #FAE8E5;
+
+  --chart-1: #E6A434;
+  --chart-2: #684B3D;
+  --chart-3: #9A5F48;
+  --chart-4: #F5D175;
+  --chart-5: #A8A49E;
+
+  --radius: 1.25rem;
+
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #684B3D;
+  --sidebar-primary: #0A0807;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F5F0E6;
+  --sidebar-accent-foreground: #0A0807;
+  --sidebar-border: #DFD09A;
+  --sidebar-ring: #E6A434;
+
+  --shadow-card: 0 2px 8px rgb(104 75 61 / 0.06);
+  --shadow-card-md: 0 8px 28px rgb(104 75 61 / 0.1);
+  --shadow-soft-sm: var(--shadow-card);
+  --shadow-soft-md: var(--shadow-card-md);
+  --shadow-soft-lg: 0 16px 44px rgb(104 75 61 / 0.12);
+
+  --elevation-1: var(--shadow-card);
+  --elevation-2: var(--shadow-card-md);
+  --elevation-3: var(--shadow-soft-lg);
+  --elevation-4: 0 24px 48px rgb(104 75 61 / 0.14);
 }
 
-/* Dark Mode - Primary Design Surface (2026 trend) */
+/* Dark Mode — Crextio cálido */
 .dark {
-  /* 4 surface levels for proper depth hierarchy */
-  --background: oklch(0.11 0.01 260);
-  --foreground: oklch(0.96 0 0);
-  
-  /* Elevated surfaces - lighter shades of dark base */
-  --card: oklch(0.15 0.01 260);
-  --card-foreground: oklch(0.96 0 0);
-  --popover: oklch(0.18 0.01 260);
-  --popover-foreground: oklch(0.96 0 0);
-  
-  /* Brand color - vibrant blue for dark mode */
-  --primary: oklch(0.65 0.2 250);
-  --primary-foreground: oklch(0.98 0 0);
-  
-  /* Secondary surfaces */
-  --secondary: oklch(0.2 0.01 260);
-  --secondary-foreground: oklch(0.96 0 0);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: oklch(0.6 0 0);
-  --accent: oklch(0.25 0.015 260);
-  --accent-foreground: oklch(0.96 0 0);
-  
-  /* Semantic colors */
-  --destructive: oklch(0.6 0.24 27);
-  --destructive-foreground: oklch(0.98 0 0);
-  
-  /* Borders - subtle, using luminance instead of opacity */
-  --border: oklch(0.26 0.01 260);
-  --input: oklch(0.22 0.01 260);
-  --ring: oklch(0.65 0.2 250);
-  
-  /* Criticidad - vibrant colors that pop on dark */
-  --criticality-baja: oklch(0.65 0.12 250);
-  --criticality-media: oklch(0.78 0.16 85);
-  --criticality-alta: oklch(0.72 0.2 45);
-  --criticality-critica: oklch(0.65 0.26 27);
-  
-  /* Status indicators */
-  --status-ok: oklch(0.72 0.18 155);
-  --status-degraded: oklch(0.78 0.16 85);
-  --status-down: oklch(0.65 0.26 27);
-  
-  /* Charts - distinct, accessible colors */
-  --chart-1: oklch(0.65 0.2 250);
-  --chart-2: oklch(0.72 0.18 155);
-  --chart-3: oklch(0.78 0.16 85);
-  --chart-4: oklch(0.68 0.22 320);
-  --chart-5: oklch(0.65 0.26 27);
-  
-  /* Sidebar */
-  --sidebar: oklch(0.13 0.01 260);
-  --sidebar-foreground: oklch(0.96 0 0);
-  --sidebar-primary: oklch(0.65 0.2 250);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.2 0.01 260);
-  --sidebar-accent-foreground: oklch(0.96 0 0);
-  --sidebar-border: oklch(0.22 0.01 260);
-  --sidebar-ring: oklch(0.65 0.2 250);
-  
-  /* Dark mode elevation - using tonal surfaces instead of shadows */
-  --elevation-1: 0 1px 3px 0 rgb(0 0 0 / 0.3);
-  --elevation-2: 0 4px 8px -1px rgb(0 0 0 / 0.4);
-  --elevation-3: 0 12px 20px -3px rgb(0 0 0 / 0.5);
-  --elevation-4: 0 24px 32px -5px rgb(0 0 0 / 0.6);
+  --background: #141210;
+  --foreground: #F0ECDD;
+  --card: #1A1816;
+  --card-foreground: #F0ECDD;
+  --popover: #1F1C1A;
+  --popover-foreground: #F0ECDD;
+  --primary: #F5D175;
+  --primary-foreground: #0A0807;
+  --secondary: #252220;
+  --secondary-foreground: #DFD09A;
+  --muted: #252220;
+  --muted-foreground: #A8A49E;
+  --accent: #E6A434;
+  --accent-foreground: #0A0807;
+  --destructive: #9A5F48;
+  --destructive-foreground: #FFFFFF;
+  --border: #3A3530;
+  --input: #252220;
+  --ring: #E6A434;
+  --sidebar: #1A1816;
+  --sidebar-foreground: #DFD09A;
+  --sidebar-primary: #F5D175;
+  --sidebar-primary-foreground: #0A0807;
+  --sidebar-accent: #252220;
+  --sidebar-accent-foreground: #F0ECDD;
+  --sidebar-border: #3A3530;
+  --sidebar-ring: #E6A434;
+  --stat-critical-bg: rgb(154 95 72 / 0.15);
+  --stat-pending-bg: rgb(230 164 52 / 0.12);
+  --stat-review-bg: rgb(104 75 61 / 0.15);
+  --stat-resolved-bg: rgb(104 75 61 / 0.12);
+  --status-connected: #22C55E;
+  --status-connected-bg: rgb(34 197 94 / 0.12);
+  --status-disconnected: #C24033;
+  --status-disconnected-bg: rgb(194 64 51 / 0.15);
+  --shadow-card: 0 2px 8px rgb(0 0 0 / 0.25);
+  --shadow-card-md: 0 8px 28px rgb(0 0 0 / 0.35);
 }
 
 @theme inline {
-  --font-sans: 'Inter', 'Geist', system-ui, sans-serif;
+  --font-sans: var(--font-plus-jakarta), 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -179,6 +213,10 @@
   --color-status-ok: var(--status-ok);
   --color-status-degraded: var(--status-degraded);
   --color-status-down: var(--status-down);
+  --color-status-connected: var(--status-connected);
+  --color-status-connected-bg: var(--status-connected-bg);
+  --color-status-disconnected: var(--status-disconnected);
+  --color-status-disconnected-bg: var(--status-disconnected-bg);
 }
 
 @layer base {
@@ -186,7 +224,21 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased font-medium;
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  h1 {
+    font-weight: 700;
+  }
+
+  table {
+    font-weight: 500;
   }
   
   /* Smooth scrolling */
@@ -224,6 +276,200 @@
   }
   .elevation-4 {
     box-shadow: var(--elevation-4);
+  }
+
+  .shadow-soft-sm {
+    box-shadow: var(--shadow-soft-sm);
+  }
+
+  .shadow-soft-md {
+    box-shadow: var(--shadow-soft-md);
+  }
+
+  .shadow-soft-lg {
+    box-shadow: var(--shadow-soft-lg);
+  }
+
+  .soft-card {
+    @apply rounded-2xl bg-card;
+    border: 1px solid rgb(223 208 154 / 0.45);
+    box-shadow: var(--shadow-card);
+  }
+
+  .soft-panel {
+    @apply rounded-2xl bg-card;
+    border: 1px solid rgb(223 208 154 / 0.5);
+    box-shadow: var(--shadow-card-md);
+  }
+
+  .shadow-card-md {
+    box-shadow: var(--shadow-card-md);
+  }
+
+  .dashboard-canvas {
+    background:
+      radial-gradient(ellipse 90% 60% at 0% 0%, #E8E4D8 0%, transparent 55%),
+      radial-gradient(ellipse 80% 50% at 100% 100%, #F5E6C8 0%, transparent 50%),
+      linear-gradient(145deg, #F0ECDD 0%, #F8F3E8 42%, #F5E6C8 100%);
+  }
+
+  .dark .dashboard-canvas {
+    background:
+      radial-gradient(ellipse 80% 50% at 10% 0%, #252220 0%, transparent 50%),
+      radial-gradient(ellipse 70% 40% at 90% 100%, #1F1A14 0%, transparent 50%),
+      linear-gradient(145deg, #141210 0%, #1A1816 50%, #141210 100%);
+  }
+
+  /* Tipografia — Crextio / Plus Jakarta Sans */
+  .text-display {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    color: var(--foreground);
+  }
+
+  .text-section {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.4;
+    color: var(--foreground);
+  }
+
+  .text-body {
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--foreground);
+  }
+
+  .text-body-secondary {
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--muted-foreground);
+  }
+
+  .text-caption {
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--muted-foreground);
+  }
+
+  .text-numeral {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Icon boxes — fondo 10% del color del icono */
+  .icon-box {
+    @apply flex h-9 w-9 items-center justify-center rounded-xl;
+  }
+
+  .icon-box-primary {
+    background: rgb(10 8 7 / 0.08);
+    color: var(--crextio-charcoal);
+  }
+
+  .icon-box-accent {
+    background: rgb(245 209 117 / 0.35);
+    color: var(--crextio-gold-strong);
+  }
+
+  .icon-box-neutral {
+    background: var(--stat-review-bg);
+    color: var(--crextio-brown);
+  }
+
+  .icon-box-success {
+    background: var(--success-bg);
+    color: var(--success);
+  }
+
+  .icon-box-warning {
+    background: var(--warning-bg);
+    color: var(--warning);
+  }
+
+  .icon-box-danger {
+    background: var(--urgency-critical-bg);
+    color: var(--urgency-critical);
+  }
+
+  .icon-box-urgency-critical {
+    background: var(--urgency-critical-bg);
+    color: var(--urgency-critical);
+  }
+
+  .icon-box-urgency-pending {
+    background: var(--urgency-pending-bg);
+    color: var(--urgency-pending);
+  }
+
+  .icon-box-urgency-review {
+    background: var(--urgency-review-bg);
+    color: var(--urgency-review);
+  }
+
+  .icon-box-urgency-resolved {
+    background: var(--urgency-resolved-bg);
+    color: var(--urgency-resolved);
+  }
+
+  /* Urgencia — texto y badges reutilizables */
+  .text-urgency-critical {
+    color: var(--urgency-critical);
+    font-weight: 600;
+  }
+
+  .text-urgency-pending {
+    color: var(--urgency-pending);
+    font-weight: 600;
+  }
+
+  .text-urgency-review {
+    color: var(--urgency-review);
+    font-weight: 600;
+  }
+
+  .text-urgency-resolved {
+    color: var(--urgency-resolved);
+    font-weight: 500;
+  }
+
+  .badge-urgency {
+    @apply inline-flex items-center rounded-lg border px-2.5 py-0.5 text-xs font-semibold tracking-wide;
+  }
+
+  .badge-urgency-critical {
+    background: var(--urgency-critical-bg);
+    color: var(--urgency-critical);
+    border-color: var(--urgency-critical-border);
+  }
+
+  .badge-urgency-pending {
+    background: var(--urgency-pending-bg);
+    color: var(--urgency-pending);
+    border-color: var(--urgency-pending-border);
+  }
+
+  .badge-urgency-review {
+    background: var(--urgency-review-bg);
+    color: var(--urgency-review);
+    border-color: var(--urgency-review-border);
+  }
+
+  .badge-urgency-resolved {
+    background: var(--urgency-resolved-bg);
+    color: var(--urgency-resolved);
+    border-color: var(--urgency-resolved-border);
+  }
+
+  .badge-urgency-critical-pulse {
+    animation: criticality-pulse 1.5s ease-in-out infinite;
   }
   
   /* Thumb-friendly touch targets */

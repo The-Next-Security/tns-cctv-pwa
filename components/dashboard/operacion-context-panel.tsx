@@ -1,0 +1,193 @@
+'use client'
+
+import { formatDistanceToNow } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { Activity, MapPin, Users, TrendingUp } from 'lucide-react'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { CRITICALITY_LABELS, getCriticalityBadgeClass } from '@/lib/constants'
+import { countAlertsToday, groupAlertsByHourSlot } from '@/lib/alert-stats'
+import type { Alert } from '@/lib/types'
+import { cn } from '@/lib/utils'
+
+interface OperacionContextPanelProps {
+  alerts: Alert[]
+}
+
+const ON_DUTY = [
+  { name: 'Carlos Rodriguez', role: 'Supervisor', status: 'online' as const },
+  { name: 'Maria Soto', role: 'Operador', status: 'online' as const },
+  { name: 'Pedro Nunez', role: 'Recepcion', status: 'away' as const },
+]
+
+export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
+  const recentActivity = [...alerts]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 5)
+
+  const zoneCounts = alerts.reduce<Record<string, number>>((acc, alert) => {
+    const name = alert.zone?.name ?? 'Sin zona'
+    acc[name] = (acc[name] ?? 0) + 1
+    return acc
+  }, {})
+
+  const zoneEntries = Object.entries(zoneCounts)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5)
+
+  const chartBars = groupAlertsByHourSlot(alerts)
+  const alertsToday = countAlertsToday(alerts)
+  const maxBar = Math.max(...chartBars.map(b => b.value), 1)
+  const peakBar = chartBars.reduce((best, bar) => (bar.value > best.value ? bar : best), chartBars[0])
+
+  return (
+    <aside className="flex flex-col gap-6 w-full xl:w-[340px] shrink-0">
+      {/* Actividad reciente */}
+      <section className="soft-card p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="icon-box icon-box-neutral">
+            <Activity className="h-4 w-4" />
+          </div>
+          <h3 className="text-section">Actividad reciente</h3>
+        </div>
+        <ul className="space-y-0 divide-y divide-border">
+          {recentActivity.map(alert => (
+            <li key={alert.id} className="py-3 first:pt-0 last:pb-0">
+              <p className="text-body font-medium line-clamp-1">
+                {alert.description ?? alert.event_code}
+              </p>
+              <div className="flex items-center justify-between mt-1 gap-2">
+                <span className="text-caption">
+                  {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true, locale: es })}
+                </span>
+                <span
+                  className={getCriticalityBadgeClass(
+                    alert.criticality,
+                    alert.criticality === 'critica'
+                  )}
+                >
+                  {CRITICALITY_LABELS[alert.criticality]}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Alertas por zona */}
+      <section className="soft-card p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="icon-box icon-box-warning">
+            <MapPin className="h-4 w-4" />
+          </div>
+          <h3 className="text-section">Alertas por zona</h3>
+        </div>
+        <ul className="space-y-3">
+          {zoneEntries.map(([zone, count]) => (
+            <li key={zone} className="flex items-center justify-between gap-3">
+              <span className="text-body truncate">{zone}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[var(--crextio-gold-strong)] transition-all"
+                    style={{ width: `${Math.min(100, (count / alerts.length) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-caption font-semibold tabular-nums w-4 text-right">{count}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Operadores en turno */}
+      <section className="soft-card p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="icon-box icon-box-success">
+            <Users className="h-4 w-4" />
+          </div>
+          <h3 className="text-section">En turno ahora</h3>
+        </div>
+        <ul className="space-y-3">
+          {ON_DUTY.map(person => (
+            <li key={person.name} className="flex items-center gap-3">
+              <div className="relative">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-accent/60 text-foreground text-xs font-semibold">
+                    {person.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  </AvatarFallback>
+                </Avatar>
+                <span
+                  className={cn(
+                    'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-card',
+                    person.status === 'online' ? 'bg-[var(--success)]' : 'bg-[var(--warning)]'
+                  )}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-body font-medium truncate">{person.name}</p>
+                <p className="text-caption">{person.role}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Mini grafico — alertas hoy por franja horaria (bloques de 2 h) */}
+      <section className="soft-card p-5">
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div className="flex items-center gap-2">
+            <div className="icon-box icon-box-accent">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <h3 className="text-section">Alertas hoy</h3>
+          </div>
+          <span className="text-caption font-semibold tabular-nums text-[var(--crextio-gold-strong)]">
+            {alertsToday} total
+          </span>
+        </div>
+        <p className="text-caption mb-4 pl-11">Por franja horaria · bloques de 2 h</p>
+        <div className="flex items-end justify-between gap-1.5 h-28">
+          {chartBars.map(bar => {
+            const isPeak = bar.value > 0 && bar.value === peakBar.value
+            return (
+              <div
+                key={bar.label}
+                className="group/bar flex flex-col items-center gap-1 flex-1 min-w-0"
+                title={`${bar.label}–${String(bar.hour + 2).padStart(2, '0')}h: ${bar.value} alerta${bar.value === 1 ? '' : 's'}`}
+              >
+                <span
+                  className={cn(
+                    'text-[10px] font-semibold tabular-nums leading-none transition-opacity',
+                    bar.value > 0 ? 'text-[var(--crextio-gold-strong)] opacity-100' : 'text-transparent'
+                  )}
+                >
+                  {bar.value}
+                </span>
+                <div className="relative w-full flex-1 flex items-end min-h-[4px]">
+                  <div
+                    className={cn(
+                      'w-full rounded-t-md transition-all duration-300',
+                      isPeak
+                        ? 'bg-gradient-to-t from-[var(--crextio-gold-strong)]/50 to-[var(--crextio-gold-strong)]'
+                        : 'bg-gradient-to-t from-[var(--crextio-gold)]/35 to-[var(--crextio-gold-strong)]/75 group-hover/bar:from-[var(--crextio-gold)]/50 group-hover/bar:to-[var(--crextio-gold-strong)]'
+                    )}
+                    style={{
+                      height: `${Math.max((bar.value / maxBar) * 100, bar.value > 0 ? 12 : 0)}%`,
+                      minHeight: bar.value > 0 ? '10px' : '2px',
+                    }}
+                  />
+                </div>
+                <span className="text-[9px] text-muted-foreground tabular-nums">{bar.label}</span>
+              </div>
+            )
+          })}
+        </div>
+        {peakBar.value > 0 && (
+          <p className="text-caption mt-3 text-center">
+            Mayor actividad: {peakBar.label}–{String(peakBar.hour + 2).padStart(2, '0')}h ({peakBar.value})
+          </p>
+        )}
+      </section>
+    </aside>
+  )
+}

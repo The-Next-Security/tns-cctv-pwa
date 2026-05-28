@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { AlertTriangle, Filter, RefreshCw, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { StatCard } from '@/components/dashboard/stat-card'
+import { OperacionContextPanel } from '@/components/dashboard/operacion-context-panel'
 import { AlertCard } from '@/components/operacion/alert-card'
 import { AlertDialog } from '@/components/operacion/alert-dialog'
 import { AlertPopup } from '@/components/operacion/alert-popup'
@@ -15,19 +15,49 @@ import { EscalateSheet } from '@/components/operacion/escalate-sheet'
 import { ConnectionStatus } from '@/components/operacion/connection-status'
 import { useRealtime } from '@/hooks/use-realtime'
 import { MOCK_ALERTS, MOCK_ZONES } from '@/lib/mock-data'
-import { CRITICALITY_STYLES, CRITICALITY_LABELS } from '@/lib/constants'
+import { CRITICALITY_STYLES, CRITICALITY_LABELS, getCriticalityBadgeClass } from '@/lib/constants'
+import { UrgencyBadge, UrgencyText } from '@/components/ui/urgency-badge'
 import type { Alert, Criticality } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
+type StatusView = 'activas' | 'pendiente' | 'en_revision' | 'resueltas' | 'criticas' | 'all'
+
+const STATUS_VIEW_LABELS: Record<StatusView, string> = {
+  activas: 'Alertas activas',
+  pendiente: 'Pendientes de atencion',
+  en_revision: 'En revision',
+  resueltas: 'Resueltas hoy',
+  criticas: 'Críticas sin atender',
+  all: 'Todas las alertas',
+}
+
+function matchesStatusView(alert: Alert, view: StatusView): boolean {
+  switch (view) {
+    case 'activas':
+      return alert.status === 'pendiente' || alert.status === 'en_revision'
+    case 'pendiente':
+      return alert.status === 'pendiente'
+    case 'en_revision':
+      return alert.status === 'en_revision'
+    case 'resueltas':
+      return alert.status === 'resuelta' || alert.status === 'escalada' || alert.status === 'descartada'
+    case 'criticas':
+      return alert.criticality === 'critica' && alert.status === 'pendiente'
+    case 'all':
+      return true
+    default:
+      return true
+  }
+}
+
 export default function OperacionPage() {
-  const [statusFilter, setStatusFilter] = useState<string>('pendiente')
+  const [statusView, setStatusView] = useState<StatusView>('activas')
   const [zoneFilter, setZoneFilter] = useState<string>('all')
   const [criticalityFilter, setCriticalityFilter] = useState<string>('all')
   const [priorityAlert, setPriorityAlert] = useState<Alert | null>(null)
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
   const [showPopup, setShowPopup] = useState(false)
   const [escalateAlert, setEscalateAlert] = useState<Alert | null>(null)
-  const [historyOpen, setHistoryOpen] = useState(false)
   const [localAlerts, setLocalAlerts] = useState<Alert[]>(MOCK_ALERTS)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -38,6 +68,24 @@ export default function OperacionPage() {
     }, 800)
     return () => clearTimeout(timer)
   }, [])
+
+  // Demo: popup automático de alerta crítica al entrar a operación
+  useEffect(() => {
+    if (isLoading) return
+    if (sessionStorage.getItem('tns_demo_alert_popup') === '1') return
+
+    const timer = setTimeout(() => {
+      const incoming = localAlerts.find(
+        a => a.criticality === 'critica' && a.status === 'pendiente'
+      )
+      if (incoming) {
+        setPriorityAlert(incoming)
+        sessionStorage.setItem('tns_demo_alert_popup', '1')
+      }
+    }, 1500)
+
+    return () => clearTimeout(timer)
+  }, [isLoading, localAlerts])
 
   // Handle new alert from WebSocket (mock)
   const handleNewAlert = useCallback((alert: Alert) => {
@@ -55,18 +103,17 @@ export default function OperacionPage() {
     setLocalAlerts(prev => prev.map(a => a.id === alert.id ? alert : a))
   }, [])
 
-  useRealtime({
+  const { connected: isRealtimeConnected } = useRealtime({
     onAlertNew: handleNewAlert,
     onAlertUpdated: handleAlertUpdated,
   })
 
   // Filter alerts
   const filteredAlerts = localAlerts.filter(alert => {
-    // Status filter
-    if (statusFilter !== 'all' && alert.status !== statusFilter) return false
+    if (!matchesStatusView(alert, statusView)) return false
     // Zone filter
     if (zoneFilter !== 'all' && alert.zone_id !== parseInt(zoneFilter)) return false
-    // Criticality filter
+    // Criticality filter (independent quick filter)
     if (criticalityFilter === 'alta_critica') {
       return alert.criticality === 'alta' || alert.criticality === 'critica'
     }
@@ -74,8 +121,9 @@ export default function OperacionPage() {
     return true
   })
 
-  const pendingAlerts = filteredAlerts.filter(a => a.status === 'pendiente' || a.status === 'en_revision')
-  const historyAlerts = filteredAlerts.filter(a => a.status === 'resuelta' || a.status === 'escalada')
+  const pendingOnlyAlerts = filteredAlerts.filter(a => a.status === 'pendiente')
+  const inReviewAlerts = filteredAlerts.filter(a => a.status === 'en_revision')
+  const showGroupedActivas = statusView === 'activas'
 
   // Stats
   const stats = {
@@ -105,6 +153,12 @@ export default function OperacionPage() {
       return a
     }))
     setPriorityAlert(null)
+
+    if (action === 'acknowledge') {
+      setStatusView('en_revision')
+    } else if (action === 'resolve' || action === 'escalate') {
+      setStatusView('resueltas')
+    }
   }
 
   // Handler para abrir popup con detalles de alerta y snapshot
@@ -125,109 +179,127 @@ export default function OperacionPage() {
           ? { ...a, status: 'descartada' as const, discard_reason: reason as any, discard_note: '' }
           : a
       ))
+      setStatusView('resueltas')
     }
     setShowPopup(false)
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header with Stats */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="flex flex-col xl:flex-row gap-6 xl:gap-8">
+      {/* Columna central — contenido principal (~65%) */}
+      <div className="flex-1 min-w-0 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Consola Operativa</h1>
-          <p className="text-muted-foreground">
-            Monitoreo de alertas en tiempo real
+          <p className="text-caption text-primary font-semibold mb-1">Consola operativa</p>
+          <h1 className="text-display">
+            Monitoreo de alertas
+          </h1>
+          <p className="text-body text-muted-foreground mt-1">
+            Gestione incidentes en tiempo real del parque Agrolivo
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <ConnectionStatus />
-        </div>
+        <ConnectionStatus isConnected={isRealtimeConnected} />
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Pendientes</p>
-                <p className="text-2xl font-bold text-amber-500">{stats.pending}</p>
-              </div>
-              <Clock className="h-8 w-8 text-amber-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">En Revision</p>
-                <p className="text-2xl font-bold text-blue-500">{stats.inReview}</p>
-              </div>
-              <AlertTriangle className="h-8 w-8 text-blue-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Resueltas Hoy</p>
-                <p className="text-2xl font-bold text-green-500">{stats.resolved}</p>
-              </div>
-              <CheckCircle2 className="h-8 w-8 text-green-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-red-500/10 to-red-600/5 border-red-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Criticas</p>
-                <p className="text-2xl font-bold text-red-500">{stats.critical}</p>
-              </div>
-              <XCircle className="h-8 w-8 text-red-500/50" />
-            </div>
-          </CardContent>
-        </Card>
+      {/* Stats Cards — orden: Criticas, Pendientes, En Revision, Resueltas */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <StatCard
+          label="Críticas"
+          value={stats.critical}
+          hint="Urgentes sin atender"
+          icon={XCircle}
+          tone="critical"
+          active={statusView === 'criticas'}
+          onClick={() => setStatusView('criticas')}
+        />
+        <StatCard
+          label="Pendientes"
+          value={stats.pending}
+          hint="Sin atender"
+          icon={Clock}
+          tone="pending"
+          active={statusView === 'pendiente'}
+          onClick={() => setStatusView('pendiente')}
+        />
+        <StatCard
+          label="En Revision"
+          value={stats.inReview}
+          hint="Atendiendo ahora"
+          icon={AlertTriangle}
+          tone="review"
+          active={statusView === 'en_revision'}
+          onClick={() => setStatusView('en_revision')}
+        />
+        <StatCard
+          label="Resueltas Hoy"
+          value={stats.resolved}
+          hint="Cerradas o escaladas"
+          icon={CheckCircle2}
+          tone="resolved"
+          active={statusView === 'resueltas'}
+          onClick={() => setStatusView('resueltas')}
+        />
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
+      {/* Main panel */}
+      <div className="soft-panel overflow-hidden">
+        {/* Filters bar */}
+        <div className="border-b border-border/60 px-5 py-4 lg:px-6">
           <div className="flex flex-wrap items-center gap-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            
-            <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-auto">
-              <TabsList>
-                <TabsTrigger value="all">Todas</TabsTrigger>
-                <TabsTrigger value="pendiente">
-                  Pendientes
-                  {stats.pending > 0 && (
-                    <Badge variant="secondary" className="ml-2 h-5 px-1.5">
-                      {stats.pending}
+            <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+
+            <Tabs value={statusView} onValueChange={(v) => setStatusView(v as StatusView)} className="w-auto">
+              <TabsList className="h-10 rounded-xl bg-secondary/80 p-1">
+                <TabsTrigger value="activas" className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md">
+                  Activas
+                  {(stats.pending + stats.inReview) > 0 && (
+                    <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-accent/50 text-foreground border-0">
+                      {stats.pending + stats.inReview}
                     </Badge>
                   )}
                 </TabsTrigger>
+                <TabsTrigger
+                  value="pendiente"
+                  className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
+                >
+                  Pendientes
+                </TabsTrigger>
+                <TabsTrigger
+                  value="en_revision"
+                  className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-review)]"
+                >
+                  En Revisión
+                </TabsTrigger>
+                <TabsTrigger
+                  value="resueltas"
+                  className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-resolved)]"
+                >
+                  Resueltas
+                </TabsTrigger>
+                <TabsTrigger value="all" className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md">Todas</TabsTrigger>
               </TabsList>
             </Tabs>
 
             <Tabs value={criticalityFilter} onValueChange={setCriticalityFilter} className="w-auto">
-              <TabsList>
-                <TabsTrigger value="all">Todas</TabsTrigger>
-                <TabsTrigger value="alta_critica" className="text-destructive">
-                  Alta/Critica
+              <TabsList className="h-10 rounded-xl bg-secondary/80 p-1">
+                <TabsTrigger value="all" className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md">Todas</TabsTrigger>
+                <TabsTrigger
+                  value="alta_critica"
+                  className="rounded-lg px-3 data-[state=active]:bg-[var(--urgency-critical-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-critical)] text-[var(--urgency-critical)]"
+                >
+                  Alta / <strong>Crítica</strong>
                   {stats.critical > 0 && (
-                    <Badge variant="destructive" className="ml-2 h-5 px-1.5">
+                    <UrgencyBadge level="critical" pulse className="ml-2 h-5 px-1.5 py-0">
                       {stats.critical}
-                    </Badge>
+                    </UrgencyBadge>
                   )}
                 </TabsTrigger>
               </TabsList>
             </Tabs>
 
             <Select value={zoneFilter} onValueChange={setZoneFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[180px] rounded-xl border-0 bg-secondary/80 shadow-none">
                 <SelectValue placeholder="Zona" />
               </SelectTrigger>
               <SelectContent>
@@ -240,52 +312,154 @@ export default function OperacionPage() {
               </SelectContent>
             </Select>
 
-            <Button variant="outline" size="icon" onClick={handleRefresh} className="ml-auto">
-              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+            <Button variant="outline" size="icon" onClick={handleRefresh} className="ml-auto rounded-xl border-0 bg-secondary/80 shadow-none hover:bg-secondary">
+              <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
               <span className="sr-only">Actualizar</span>
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Alerts List */}
+        {/* List header + content */}
+        <div className="px-5 py-5 lg:px-6 space-y-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-section">
+                {statusView === 'criticas' ? (
+                  <>
+                    <UrgencyText level="critical" pulse>Críticas</UrgencyText>
+                    {' sin atender'}
+                  </>
+                ) : (
+                  STATUS_VIEW_LABELS[statusView]
+                )}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {filteredAlerts.length} alerta{filteredAlerts.length === 1 ? '' : 's'} en esta vista
+              </p>
+            </div>
+            {statusView !== 'activas' && (
+              <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="rounded-xl border-0 bg-secondary/80 shadow-none">
+                Volver a activas
+              </Button>
+            )}
+          </div>
+
+          <p className="text-caption rounded-xl bg-accent/40 px-4 py-3 border border-[var(--crextio-gold-strong)]/20">
+            <span className="font-medium text-foreground">Flujo: </span>
+            <UrgencyText level="pending">Pendiente</UrgencyText>
+            {' → Atender → '}
+            <UrgencyText level="review">En Revisión</UrgencyText>
+            {' → Resolver / Escalar → '}
+            <UrgencyText level="resolved">Resueltas Hoy</UrgencyText>
+          </p>
+
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map(i => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  <div className="h-6 w-20 bg-muted rounded" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-5 w-48 bg-muted rounded" />
-                    <div className="h-4 w-32 bg-muted rounded" />
-                  </div>
-                  <div className="h-9 w-24 bg-muted rounded" />
+            <div key={i} className="soft-card animate-pulse p-5">
+              <div className="flex items-start gap-4">
+                <div className="h-6 w-20 bg-muted rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-5 w-48 bg-muted rounded-lg" />
+                  <div className="h-4 w-32 bg-muted rounded-lg" />
                 </div>
-              </CardContent>
-            </Card>
+                <div className="h-9 w-24 bg-muted rounded-lg" />
+              </div>
+            </div>
           ))}
         </div>
-      ) : pendingAlerts.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <div className="h-16 w-16 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
-              <CheckCircle2 className="h-8 w-8 text-green-500" />
-            </div>
-            <p className="text-lg font-medium">Sin alertas pendientes</p>
-            <p className="text-muted-foreground">
-              El sistema esta funcionando correctamente
-            </p>
-          </CardContent>
-        </Card>
+      ) : filteredAlerts.length === 0 ? (
+        <div className="soft-card flex flex-col items-center justify-center py-16 text-center px-6">
+          <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center mb-4">
+            <CheckCircle2 className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <p className="text-lg font-medium">Sin alertas en esta vista</p>
+          <p className="text-muted-foreground max-w-md mt-1">
+            {statusView === 'pendiente' && 'No hay alertas esperando atencion. Revise las que ya estan en revision.'}
+            {statusView === 'en_revision' && 'Ninguna alerta esta siendo revisada. Atienda una pendiente para comenzar.'}
+            {statusView === 'resueltas' && 'Aun no hay alertas cerradas en esta sesion.'}
+            {statusView === 'criticas' && 'No hay alertas críticas sin atender en este momento.'}
+            {statusView === 'activas' && 'No hay alertas activas. El sistema esta funcionando correctamente.'}
+            {statusView === 'all' && 'No hay alertas que coincidan con los filtros seleccionados.'}
+          </p>
+          <div className="flex flex-wrap gap-2 mt-4 justify-center">
+            {statusView !== 'activas' && (
+              <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="rounded-xl border-0 bg-secondary/80">
+                Ver activas
+              </Button>
+            )}
+            {stats.inReview > 0 && statusView !== 'en_revision' && (
+              <Button variant="outline" size="sm" onClick={() => setStatusView('en_revision')} className="rounded-xl border-0 bg-secondary/80">
+                Ver en revision ({stats.inReview})
+              </Button>
+            )}
+            {stats.pending > 0 && statusView !== 'pendiente' && (
+              <Button variant="outline" size="sm" onClick={() => setStatusView('pendiente')} className="rounded-xl border-0 bg-secondary/80">
+                Ver pendientes ({stats.pending})
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : showGroupedActivas ? (
+        <div className="space-y-6">
+          {pendingOnlyAlerts.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <UrgencyBadge level="pending">
+                  Pendientes ({pendingOnlyAlerts.length})
+                </UrgencyBadge>
+                <p className="text-sm text-muted-foreground">Requieren accion: Atender o Descartar</p>
+              </div>
+              {pendingOnlyAlerts.map((alert, index) => (
+                <div
+                  key={alert.id}
+                  className={cn('animate-fade-in', index === 0 && 'animate-slide-in-up')}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <AlertCard
+                    alert={alert}
+                    onAction={(action, notes) => handleAlertAction(alert.id, action, notes)}
+                    onEscalate={() => setEscalateAlert(alert)}
+                    onShowDetails={handleShowDetails}
+                  />
+                </div>
+              ))}
+            </section>
+          )}
+
+          {inReviewAlerts.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <UrgencyBadge level="review">
+                  En Revisión ({inReviewAlerts.length})
+                </UrgencyBadge>
+                <p className="text-sm text-muted-foreground">Requieren accion: Resolver o Escalar</p>
+              </div>
+              {inReviewAlerts.map((alert, index) => (
+                <div
+                  key={alert.id}
+                  className={cn('animate-fade-in', index === 0 && 'animate-slide-in-up')}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <AlertCard
+                    alert={alert}
+                    onAction={(action, notes) => handleAlertAction(alert.id, action, notes)}
+                    onEscalate={() => setEscalateAlert(alert)}
+                    onShowDetails={handleShowDetails}
+                  />
+                </div>
+              ))}
+            </section>
+          )}
+        </div>
       ) : (
         <div className="space-y-3">
-          {pendingAlerts.map((alert, index) => (
+          {filteredAlerts.map((alert, index) => (
             <div
               key={alert.id}
               className={cn(
-                "animate-fade-in",
-                index === 0 && "animate-slide-in-up"
+                'animate-fade-in',
+                index === 0 && 'animate-slide-in-up'
               )}
               style={{ animationDelay: `${index * 50}ms` }}
             >
@@ -294,41 +468,20 @@ export default function OperacionPage() {
                 onAction={(action, notes) => handleAlertAction(alert.id, action, notes)}
                 onEscalate={() => setEscalateAlert(alert)}
                 onShowDetails={handleShowDetails}
+                readonly={alert.status === 'resuelta' || alert.status === 'escalada' || alert.status === 'descartada'}
               />
             </div>
           ))}
         </div>
       )}
+        </div>
+      </div>
+      </div>
 
-      {/* History Section */}
-      {historyAlerts.length > 0 && (
-        <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" className="w-full justify-between">
-              <span>Historico cerrado (ultimas 4h) - {historyAlerts.length} alertas</span>
-              <span className={cn(
-                'transition-transform duration-200',
-                historyOpen && 'rotate-180'
-              )}>
-                ▼
-              </span>
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-3 pt-3">
-            {historyAlerts.map(alert => (
-              <AlertCard
-                key={alert.id}
-                alert={alert}
-                onAction={() => {}}
-                onEscalate={() => {}}
-                readonly
-              />
-            ))}
-          </CollapsibleContent>
-        </Collapsible>
-      )}
+      {/* Columna derecha — contexto (~340px) */}
+      <OperacionContextPanel alerts={localAlerts} />
 
-      {/* Priority Alert Dialog */}
+      {/* Modales */}
       <AlertDialog
         alert={priorityAlert}
         onClose={() => setPriorityAlert(null)}

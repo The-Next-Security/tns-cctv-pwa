@@ -57,7 +57,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen dashboard-canvas">
       {/* Sidebar desktop */}
       <div className="hidden lg:block">
         <AppSidebar
@@ -91,11 +91,11 @@ export default function DashboardLayout({
       {/* Main content - with bottom padding for mobile nav */}
       <main
         className={cn(
-          'pt-16 pb-20 lg:pb-0 transition-all duration-300 ease-out',
-          sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-60'
+          'pt-16 pb-20 lg:pb-6 min-h-screen transition-all duration-300 ease-out',
+          sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[var(--sidebar-width)]'
         )}
       >
-        <div className="p-4 lg:p-6 animate-fade-in">
+        <div className="p-6 lg:p-8 animate-fade-in">
           {children}
         </div>
       </main>

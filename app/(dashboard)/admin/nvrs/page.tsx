@@ -145,7 +145,7 @@ export default function NVRsPage() {
                   <div className="flex-1">
                     <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-500"
+                        className="h-full bg-[var(--crextio-gold-strong)]"
                         style={{
                           width: `${(nvr.camarasConectadas / nvr.camarasTotal) * 100}%`,
                         }}

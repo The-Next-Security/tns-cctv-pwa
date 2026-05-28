@@ -1,5 +1,7 @@
 // TNS Track - API client
 
+import { mockCaseFilesApi, mockTenantsApi } from './mock-case-files-api'
+
 const API_BASE = '/api/v1'
 
 class ApiError extends Error {
@@ -164,6 +166,14 @@ export const vehicleEntries = {
     fetchApi<import('./types').VehicleEntry[]>(`/vehicle-entries/search?plate=${encodeURIComponent(plate)}`),
 }
 
+async function withMockFallback<T>(apiCall: () => Promise<T>, mockCall: () => T | Promise<T>): Promise<T> {
+  try {
+    return await apiCall()
+  } catch {
+    return await mockCall()
+  }
+}
+
 // Expedientes
 export const caseFiles = {
   list: (params?: {
@@ -185,11 +195,19 @@ export const caseFiles = {
       })
     }
     const query = searchParams.toString()
-    return fetchApi<import('./types').PaginatedResponse<import('./types').CaseFile>>(
-      `/case-files${query ? `?${query}` : ''}`
+    return withMockFallback(
+      () =>
+        fetchApi<import('./types').PaginatedResponse<import('./types').CaseFile>>(
+          `/case-files${query ? `?${query}` : ''}`
+        ),
+      () => mockCaseFilesApi.list(params)
     )
   },
-  get: (id: number) => fetchApi<import('./types').CaseFile>(`/case-files/${id}`),
+  get: (id: number) =>
+    withMockFallback(
+      () => fetchApi<import('./types').CaseFile>(`/case-files/${id}`),
+      () => mockCaseFilesApi.get(id)
+    ),
   resolve: (
     id: number,
     data: {
@@ -198,20 +216,34 @@ export const caseFiles = {
       selected_entry_id?: number
     }
   ) =>
-    fetchApi<import('./types').CaseFile>(`/case-files/${id}/resolve`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    withMockFallback(
+      () =>
+        fetchApi<import('./types').CaseFile>(`/case-files/${id}/resolve`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      () => mockCaseFilesApi.resolve(id, data)
+    ),
   notifyTenant: (id: number, data: { subject: string; body_html: string }) =>
-    fetchApi<void>(`/case-files/${id}/notify-tenant`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    withMockFallback(
+      () =>
+        fetchApi<void>(`/case-files/${id}/notify-tenant`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      () => {
+        mockCaseFilesApi.notifyTenant(id)
+      }
+    ),
 }
 
 // Tenants
 export const tenants = {
-  list: () => fetchApi<import('./types').Tenant[]>('/tenants'),
+  list: () =>
+    withMockFallback(
+      () => fetchApi<import('./types').Tenant[]>('/tenants'),
+      () => mockTenantsApi.list()
+    ),
   get: (id: number) => fetchApi<import('./types').Tenant>(`/tenants/${id}`),
   create: (data: Partial<import('./types').Tenant>) =>
     fetchApi<import('./types').Tenant>('/tenants', {

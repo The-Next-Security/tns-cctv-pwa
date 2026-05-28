@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, ReactNode, useCallback } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { AuthContext, getDefaultRoute } from '@/lib/auth'
+import { persistDemoUser, restoreDemoUserFromStorage } from '@/lib/demo-users'
 import type { User } from '@/lib/types'
 
 interface AuthProviderProps {
@@ -14,9 +15,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
   const router = useRouter()
-  const pathname = usePathname()
 
-  // Verificar autenticación al montar
   useEffect(() => {
     setMounted(true)
     checkAuthStatus()
@@ -25,17 +24,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const checkAuthStatus = useCallback(() => {
     const token = localStorage.getItem('tns_token')
     const userEmail = localStorage.getItem('tns_user_email')
-    
+
     if (token && userEmail) {
-      // Restaurar usuario del localStorage
-      const mockUser: User = {
-        id: '1',
-        email: userEmail,
-        nombre: userEmail.split('@')[0],
-        role: 'admin_parque',
-        ultimaConexion: new Date().toISOString(),
-      }
-      setUser(mockUser)
+      setUser(restoreDemoUserFromStorage(userEmail))
     } else {
       setUser(null)
     }
@@ -47,37 +38,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error('Correo o contraseña incorrectos')
     }
 
-    // Mock auth - validar credenciales localmente para demo
-    const mockUser: User = {
-      id: '1',
-      email: email,
-      nombre: email.split('@')[0],
-      role: 'admin_parque',
-      ultimaConexion: new Date().toISOString(),
-    }
+    const demoUser = restoreDemoUserFromStorage(email)
 
-    // Guardar en localStorage
     localStorage.setItem('tns_token', 'mock_token_' + Date.now())
-    localStorage.setItem('tns_user_email', email)
-    
-    setUser(mockUser)
-    
-    // Esperar a que se actualice el estado antes de redirigir
+    persistDemoUser(demoUser)
+
+    setUser(demoUser)
+
     setTimeout(() => {
-      const route = getDefaultRoute(mockUser.role)
-      router.push(route)
+      router.push(getDefaultRoute(demoUser.role))
     }, 100)
   }, [router])
 
   const logout = useCallback(async () => {
-    console.log('[v0] Logout called')
     localStorage.removeItem('tns_token')
     localStorage.removeItem('tns_user_email')
+    localStorage.removeItem('tns_user_role')
+    localStorage.removeItem('tns_user_id')
+    localStorage.removeItem('tns_user_name')
+    sessionStorage.removeItem('tns_demo_alert_popup')
     setUser(null)
     router.push('/login')
   }, [router])
 
-  // Solo renderizar cuando esté montado
   if (!mounted) {
     return <>{children}</>
   }

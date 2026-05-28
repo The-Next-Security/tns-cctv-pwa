@@ -25,7 +25,7 @@ const adminSections: AdminSection[] = [
     icon: <Users className="h-6 w-6" />,
     href: '/admin/usuarios',
     count: 24,
-    color: 'bg-blue-100 text-blue-700',
+    color: 'bg-[var(--stat-review-bg)] text-[var(--crextio-brown)]',
   },
   {
     id: 'zonas',
@@ -34,7 +34,7 @@ const adminSections: AdminSection[] = [
     icon: <MapPin className="h-6 w-6" />,
     href: '/admin/zonas',
     count: 8,
-    color: 'bg-green-100 text-green-700',
+    color: 'bg-[var(--success-bg)] text-[var(--success)]',
   },
   {
     id: 'camaras',
@@ -43,7 +43,7 @@ const adminSections: AdminSection[] = [
     icon: <Video className="h-6 w-6" />,
     href: '/admin/camaras',
     count: 40,
-    color: 'bg-purple-100 text-purple-700',
+    color: 'bg-accent/60 text-foreground',
   },
   {
     id: 'nvrs',

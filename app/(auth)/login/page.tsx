@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Shield, Eye, EyeOff, Fingerprint } from 'lucide-react'
+import { Eye, EyeOff, Fingerprint } from 'lucide-react'
+import { BrandLogo } from '@/components/brand/brand-logo'
+import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { getDemoRoleLabel } from '@/lib/demo-users'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -15,27 +16,18 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
+  const { login } = useAuth()
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    
+
     setError(null)
     setIsLoading(true)
 
     try {
-      if (!email || !password) {
-        throw new Error('Por favor ingrese correo y contrasena')
-      }
-
-      // Guardar en localStorage
-      localStorage.setItem('tns_token', 'mock_token_' + Date.now())
-      localStorage.setItem('tns_user_email', email)
-
-      // Redirigir inmediatamente
-      router.push('/operacion')
+      await login(email, password)
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error al iniciar sesion'
+      const errorMsg = err instanceof Error ? err.message : 'Error al iniciar sesión'
       setError(errorMsg)
       setIsLoading(false)
     }
@@ -47,84 +39,67 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Panel izquierdo - Info con Spatial UI */}
-      <div className="hidden lg:flex flex-1 flex-col justify-between bg-gradient-to-br from-secondary/50 via-background to-secondary/30 p-12 text-foreground relative overflow-hidden">
-        {/* Decorative elements - subtle depth */}
-        <div className="absolute top-20 right-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-40 left-10 w-48 h-48 bg-primary/5 rounded-full blur-3xl" />
-        
-        <div className="relative z-10">
-          <div className="mb-12 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary elevation-2">
-              <Shield className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">TNS Track</h1>
-              <p className="text-xs text-muted-foreground">Parque Agrolivo</p>
-            </div>
-          </div>
-          <h2 className="mb-6 text-4xl font-bold leading-tight text-balance">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-background">
+      {/* Panel izquierdo — marca + valor */}
+      <div className="relative hidden lg:flex flex-1 flex-col justify-between dashboard-canvas px-12 py-10 xl:px-16 xl:py-12 overflow-hidden">
+        <div className="pointer-events-none absolute top-16 right-16 h-64 w-64 rounded-full bg-accent/30 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-32 left-8 h-48 w-48 rounded-full bg-[var(--crextio-gold)]/20 blur-3xl" />
+
+        <div className="relative z-10 pt-2">
+          <BrandLogo variant="hero" subtitle="Track · Parque Agrolivo" href={null} priority />
+
+          <h1 className="mt-10 max-w-lg text-display text-[2rem] xl:text-[2.25rem] leading-tight">
             Consola de operaciones de seguridad inteligente
-          </h2>
-          <p className="mb-12 text-lg text-muted-foreground max-w-md">
-            Monitoreo en tiempo real, gestion de alertas, registro vehicular y trazabilidad completa de operaciones.
+          </h1>
+          <p className="mt-4 max-w-md text-body-secondary text-base">
+            Monitoreo en tiempo real, gestión de alertas, registro vehicular y trazabilidad completa de operaciones.
           </p>
 
-          {/* Stats with elevation */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-2xl bg-card/80 backdrop-blur-sm border border-border/50 p-5 elevation-1 transition-transform hover:scale-[1.02]">
-              <p className="text-3xl font-bold text-primary">60+</p>
-              <p className="text-sm text-muted-foreground">Camaras monitoreadas</p>
-            </div>
-            <div className="rounded-2xl bg-card/80 backdrop-blur-sm border border-border/50 p-5 elevation-1 transition-transform hover:scale-[1.02]">
-              <p className="text-3xl font-bold text-primary">&lt;5s</p>
-              <p className="text-sm text-muted-foreground">Latencia de alertas</p>
-            </div>
-            <div className="rounded-2xl bg-card/80 backdrop-blur-sm border border-border/50 p-5 elevation-1 transition-transform hover:scale-[1.02]">
-              <p className="text-3xl font-bold text-primary">24/7</p>
-              <p className="text-sm text-muted-foreground">Operacion continua</p>
-            </div>
-            <div className="rounded-2xl bg-card/80 backdrop-blur-sm border border-border/50 p-5 elevation-1 transition-transform hover:scale-[1.02]">
-              <p className="text-3xl font-bold text-primary">99.5%</p>
-              <p className="text-sm text-muted-foreground">Disponibilidad</p>
-            </div>
+          <div className="mt-10 grid max-w-md grid-cols-2 gap-3">
+            {[
+              { value: '60+', label: 'Cámaras monitoreadas' },
+              { value: '<5s', label: 'Latencia de alertas' },
+              { value: '24/7', label: 'Operación continua' },
+              { value: '99.5%', label: 'Disponibilidad' },
+            ].map(stat => (
+              <div key={stat.label} className="soft-card p-4 transition-transform hover:scale-[1.02]">
+                <p className="text-numeral text-2xl text-[var(--crextio-charcoal)]">{stat.value}</p>
+                <p className="mt-0.5 text-caption">{stat.label}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        <p className="text-xs text-muted-foreground relative z-10">
-          The Next Security - Sistema propietario - Todos los derechos reservados
+        <p className="relative z-10 text-caption">
+          The Next Security · Sistema propietario · Todos los derechos reservados
         </p>
       </div>
 
-      {/* Panel derecho - Formulario con Glassmorphism */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 safe-bottom">
-        <Card className="w-full max-w-md glass-strong elevation-3 border-border/50">
-          <CardHeader className="text-center pb-2">
-            <div className="mx-auto mb-6 flex items-center gap-3 lg:hidden">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <Shield className="h-6 w-6" />
-              </div>
-              <div className="text-left">
-                <span className="text-xl font-bold block">TNS Track</span>
-                <span className="text-xs text-muted-foreground">Parque Agrolivo</span>
-              </div>
+      {/* Panel derecho — formulario */}
+      <div className="flex flex-1 flex-col items-center justify-center dashboard-canvas lg:bg-card px-6 py-10 lg:px-12 lg:py-12 safe-bottom">
+        <div className="w-full max-w-md">
+          {/* Logo móvil / tablet estrecha */}
+          <div className="mb-8 flex flex-col items-center lg:hidden">
+            <BrandLogo variant="hero" subtitle="Track · Parque Agrolivo" href={null} priority />
+          </div>
+
+          <div className="soft-panel p-6 sm:p-8">
+            <div className="mb-6 text-center lg:text-left">
+              <h2 className="text-section text-xl">Bienvenido</h2>
+              <p className="mt-1 text-body-secondary">
+                Ingrese sus credenciales para continuar
+              </p>
             </div>
-            <CardTitle className="text-2xl">Bienvenido</CardTitle>
-            <CardDescription>
-              Ingrese sus credenciales para continuar
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+
             <form onSubmit={handleLogin} className="space-y-5">
               {error && (
-                <Alert variant="destructive" className="animate-slide-in-down">
+                <Alert variant="destructive" className="animate-slide-in-down rounded-xl">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">Correo electronico</Label>
+                <Label htmlFor="email">Correo electrónico</Label>
                 <Input
                   id="email"
                   type="email"
@@ -133,89 +108,82 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
-                  className="h-12 rounded-xl bg-secondary/50 border-border/50 focus:bg-secondary/80 transition-colors"
+                  className="h-12 rounded-xl border-border/60 bg-secondary/50 focus:bg-card"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium">Contrasena</Label>
+                <Label htmlFor="password">Contraseña</Label>
                 <div className="relative">
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Ingrese su contrasena"
+                    placeholder="Ingrese su contraseña"
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
-                    className="h-12 rounded-xl bg-secondary/50 border-border/50 focus:bg-secondary/80 transition-colors pr-12"
+                    className="h-12 rounded-xl border-border/60 bg-secondary/50 pr-12 focus:bg-card"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors touch-target flex items-center justify-center"
-                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   >
-                    {showPassword ? (
-                      <EyeOff className="h-5 w-5" />
-                    ) : (
-                      <Eye className="h-5 w-5" />
-                    )}
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
               </div>
 
-              <Button 
-                type="submit" 
-                className="w-full h-12 rounded-xl text-base font-medium touch-target transition-transform active:scale-[0.98]" 
+              <Button
+                type="submit"
+                className="h-12 w-full rounded-xl text-base font-semibold touch-target"
                 disabled={isLoading}
               >
                 {isLoading ? (
                   <>
                     <span className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                    Iniciando sesion...
+                    Iniciando sesión…
                   </>
                 ) : (
                   <>
                     <Fingerprint className="mr-2 h-5 w-5" />
-                    Iniciar sesion
+                    Iniciar sesión
                   </>
                 )}
               </Button>
 
-              {/* Usuarios de prueba - bottom position for thumb reach */}
-              <div className="mt-8 pt-6 border-t border-border/50">
-                <p className="mb-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Acceso rapido</p>
+              <div className="mt-6 border-t border-border/60 pt-6">
+                <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Acceso rápido
+                </p>
                 <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fillTestUser('admin@agrolivo.cl', 'password123')}
-                    className="rounded-xl border border-border/50 bg-secondary/30 px-3 py-3 text-xs hover:bg-secondary/60 transition-all active:scale-[0.98] touch-target"
-                  >
-                    <span className="font-semibold block">Admin</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillTestUser('operador@agrolivo.cl', 'password123')}
-                    className="rounded-xl border border-border/50 bg-secondary/30 px-3 py-3 text-xs hover:bg-secondary/60 transition-all active:scale-[0.98] touch-target"
-                  >
-                    <span className="font-semibold block">Operador</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillTestUser('recepcionista@agrolivo.cl', 'password123')}
-                    className="rounded-xl border border-border/50 bg-secondary/30 px-3 py-3 text-xs hover:bg-secondary/60 transition-all active:scale-[0.98] touch-target"
-                  >
-                    <span className="font-semibold block">Recepcion</span>
-                  </button>
+                  {[
+                    { label: 'Admin', email: 'admin@agrolivo.cl' },
+                    { label: 'Operador', email: 'operador@agrolivo.cl' },
+                    { label: 'Recepción', email: 'recepcionista@agrolivo.cl' },
+                  ].map(user => (
+                    <button
+                      key={user.email}
+                      type="button"
+                      onClick={() => fillTestUser(user.email, 'password123')}
+                      className="rounded-xl border border-border/50 bg-secondary/40 px-2 py-3 text-xs font-semibold transition-all hover:bg-secondary/70 active:scale-[0.98] touch-target"
+                    >
+                      <span className="block">{user.label}</span>
+                      <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
+                        {getDemoRoleLabel(user.email)}
+                      </span>
+                    </button>
+                  ))}
                 </div>
-                <p className="mt-4 text-[11px] text-muted-foreground text-center">
-                  Modo demo - cualquier contrasena funciona
+                <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                  Modo demo — cualquier contraseña funciona
                 </p>
               </div>
             </form>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   )

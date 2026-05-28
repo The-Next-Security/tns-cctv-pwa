@@ -1,5 +1,62 @@
 // Mock data for TNS Track MVP demonstration
-import type { Alert, Zone, Tenant, VehicleEntry, Rule, User, Camera, NVR } from './types'
+import type { Alert, Zone, Tenant, VehicleEntry, Rule, User, Camera, NVR, Criticality, AlertStatus, PlateSource } from './types'
+
+function todayAt(hour: number, minute = 0): string {
+  const date = new Date()
+  date.setHours(hour, minute, 0, 0)
+  return date.toISOString()
+}
+
+function resolvedAt(hour: number, minute: number, minutesAfter = 25): string {
+  const date = new Date()
+  date.setHours(hour, minute + minutesAfter, 0, 0)
+  return date.toISOString()
+}
+
+type TodayAlertSeed = {
+  event_type: string
+  event_code: string
+  criticality: Criticality
+  status: AlertStatus
+  zoneIndex: number
+  cameraIndex: number
+  hour: number
+  minute?: number
+  description: string
+  plate?: string
+  assigned_to?: string
+  resolved?: boolean
+  resolution_notes?: string
+}
+
+function buildTodayHistoricalAlerts(seeds: TodayAlertSeed[], startId: number): Alert[] {
+  return seeds.map((seed, index) => {
+    const zone = MOCK_ZONES[seed.zoneIndex]
+    const camera = MOCK_CAMERAS[seed.cameraIndex]
+    const timestamp = todayAt(seed.hour, seed.minute ?? 0)
+    const isResolved =
+      seed.resolved ?? (seed.status === 'resuelta' || seed.status === 'descartada' || seed.status === 'escalada')
+
+    return {
+      id: startId + index,
+      event_type: seed.event_type,
+      event_code: seed.event_code,
+      criticality: seed.criticality,
+      status: seed.status,
+      zone_id: zone.id,
+      zone,
+      camera_id: camera.id,
+      camera: { ...camera, zone_id: zone.id },
+      timestamp,
+      snapshot_url: '/placeholder.svg?height=200&width=300',
+      description: seed.description,
+      plate: seed.plate,
+      assigned_to: seed.assigned_to,
+      resolved_at: isResolved ? resolvedAt(seed.hour, seed.minute ?? 0) : null,
+      resolution_notes: seed.resolution_notes,
+    }
+  })
+}
 
 // Zonas mock
 export const MOCK_ZONES: Zone[] = [
@@ -25,8 +82,8 @@ export const MOCK_TENANTS: Tenant[] = [
   { id: 8, rut: '76.890.123-4', legal_name: 'Servicios Tecnicos SpA', commercial_name: 'ServTec', active: true },
 ]
 
-// Alertas mock
-export const MOCK_ALERTS: Alert[] = [
+// Alertas en tiempo real (ultimos minutos)
+const MOCK_ALERTS_LIVE: Alert[] = [
   {
     id: 1,
     event_type: 'intrusion',
@@ -164,6 +221,8 @@ export const MOCK_VEHICLE_ENTRIES: VehicleEntry[] = [
     registered_by: '1',
     observations: 'Transporta materiales de construccion',
     created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    plate_source: 'hybrid',
+    anpr_confidence: 96,
   },
   {
     id: 2,
@@ -180,6 +239,8 @@ export const MOCK_VEHICLE_ENTRIES: VehicleEntry[] = [
     registered_by: '1',
     observations: null,
     created_at: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
+    plate_source: 'anpr',
+    anpr_confidence: 92,
   },
   {
     id: 3,
@@ -196,6 +257,7 @@ export const MOCK_VEHICLE_ENTRIES: VehicleEntry[] = [
     registered_by: '1',
     observations: null,
     created_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+    plate_source: 'manual',
   },
   {
     id: 4,
@@ -212,6 +274,8 @@ export const MOCK_VEHICLE_ENTRIES: VehicleEntry[] = [
     registered_by: '1',
     observations: null,
     created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+    plate_source: 'hybrid',
+    anpr_confidence: 88,
   },
   {
     id: 5,
@@ -228,6 +292,8 @@ export const MOCK_VEHICLE_ENTRIES: VehicleEntry[] = [
     registered_by: '1',
     observations: 'Equipo de mantenimiento',
     created_at: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+    plate_source: 'anpr',
+    anpr_confidence: 94,
   },
 ]
 
@@ -353,6 +419,58 @@ export const MOCK_CAMERAS: Camera[] = [
   { id: 7, name: 'CAM-EST-02', ip: '192.168.1.107', channel: 7, nvr_id: 2, zone_id: 5, active: true },
   { id: 8, name: 'CAM-PER-S01', ip: '192.168.1.108', channel: 8, nvr_id: 2, zone_id: 7, active: true },
 ]
+
+/** Alertas históricas del mismo día, distribuidas por franja horaria para demos del panel lateral */
+const MOCK_ALERTS_TODAY_HISTORICAL = buildTodayHistoricalAlerts(
+  [
+    { event_type: 'intrusion', event_code: 'INTRUSION_PERIMETRO', criticality: 'alta', status: 'resuelta', zoneIndex: 5, cameraIndex: 7, hour: 6, minute: 12, description: 'Movimiento en perimetro norte al amanecer', resolved: true, resolution_notes: 'Guardia de turno verifico — fauna' },
+    { event_type: 'vehiculo', event_code: 'VEHICULO_ESTACIONADO', criticality: 'baja', status: 'resuelta', zoneIndex: 4, cameraIndex: 1, hour: 6, minute: 45, description: 'Camion de proveedor estacionado en anden', resolved: true, resolution_notes: 'Conductor reubicado' },
+    { event_type: 'acceso', event_code: 'ACCESO_NO_AUTORIZADO', criticality: 'media', status: 'resuelta', zoneIndex: 0, cameraIndex: 3, hour: 7, minute: 8, description: 'Peaton sin credencial en entrada principal', resolved: true, resolution_notes: 'Visitante registrado en recepcion' },
+    { event_type: 'movimiento', event_code: 'MOVIMIENTO_NOCTURNO', criticality: 'media', status: 'descartada', zoneIndex: 3, cameraIndex: 4, hour: 7, minute: 52, description: 'Actividad en muelle de carga antes de horario', resolved: true, resolution_notes: 'Personal autorizado de logistica' },
+    { event_type: 'velocidad', event_code: 'VELOCIDAD_EXCESIVA', criticality: 'alta', status: 'resuelta', zoneIndex: 4, cameraIndex: 1, hour: 8, minute: 5, description: 'Exceso de velocidad en acceso vehicular', plate: 'KLMN-34', resolved: true, resolution_notes: 'Notificado al conductor' },
+    { event_type: 'vehiculo', event_code: 'VEHICULO_ESTACIONADO', criticality: 'baja', status: 'resuelta', zoneIndex: 4, cameraIndex: 6, hour: 8, minute: 22, description: 'Furgon en zona de carga rapida', resolved: true },
+    { event_type: 'acceso', event_code: 'ACCESO_NO_AUTORIZADO', criticality: 'media', status: 'resuelta', zoneIndex: 0, cameraIndex: 3, hour: 8, minute: 41, description: 'Tarjeta de acceso vencida en torniquete', resolved: true },
+    { event_type: 'objeto', event_code: 'OBJETO_ABANDONADO', criticality: 'media', status: 'resuelta', zoneIndex: 3, cameraIndex: 4, hour: 9, minute: 10, description: 'Pallet abandonado en zona logistica', resolved: true },
+    { event_type: 'intrusion', event_code: 'INTRUSION_PERIMETRO', criticality: 'alta', status: 'resuelta', zoneIndex: 6, cameraIndex: 7, hour: 9, minute: 33, description: 'Salto de cerco en perimetro sur', resolved: true, resolution_notes: 'Falsa alarma — viento movio malla' },
+    { event_type: 'movimiento', event_code: 'MOVIMIENTO_NOCTURNO', criticality: 'media', status: 'resuelta', zoneIndex: 1, cameraIndex: 2, hour: 9, minute: 55, description: 'Operarios ingresando a nave industrial A', resolved: true },
+    { event_type: 'velocidad', event_code: 'VELOCIDAD_EXCESIVA', criticality: 'alta', status: 'resuelta', zoneIndex: 4, cameraIndex: 1, hour: 10, minute: 7, description: 'Camion en maniobra a velocidad inadecuada', plate: 'PQRS-78', resolved: true },
+    { event_type: 'acceso', event_code: 'ACCESO_NO_AUTORIZADO', criticality: 'media', status: 'resuelta', zoneIndex: 0, cameraIndex: 3, hour: 10, minute: 18, description: 'Intento de ingreso sin cita en recepcion', resolved: true },
+    { event_type: 'objeto', event_code: 'OBJETO_ABANDONADO', criticality: 'media', status: 'resuelta', zoneIndex: 3, cameraIndex: 4, hour: 10, minute: 34, description: 'Caja sin etiqueta en pasillo de despacho', resolved: true },
+    { event_type: 'vehiculo', event_code: 'VEHICULO_ESTACIONADO', criticality: 'baja', status: 'resuelta', zoneIndex: 4, cameraIndex: 6, hour: 10, minute: 50, description: 'Automovil en zona de descarga', resolved: true },
+    { event_type: 'intrusion', event_code: 'INTRUSION_PERIMETRO', criticality: 'critica', status: 'escalada', zoneIndex: 5, cameraIndex: 0, hour: 11, minute: 3, description: 'Intento de ingreso por sector norte', resolved: true, resolution_notes: 'Escalada a supervisor — persona identificada' },
+    { event_type: 'movimiento', event_code: 'MOVIMIENTO_NOCTURNO', criticality: 'alta', status: 'resuelta', zoneIndex: 2, cameraIndex: 5, hour: 11, minute: 21, description: 'Movimiento en zona industrial B sin EPP', resolved: true },
+    { event_type: 'persona', event_code: 'PERSONA_CAIDA', criticality: 'critica', status: 'resuelta', zoneIndex: 2, cameraIndex: 5, hour: 11, minute: 44, description: 'Posible tropiezo en pasillo de bodega', assigned_to: 'Maria Gonzalez', resolved: true, resolution_notes: 'Operario en buen estado — primeros auxilios' },
+    { event_type: 'acceso', event_code: 'ACCESO_NO_AUTORIZADO', criticality: 'media', status: 'resuelta', zoneIndex: 7, cameraIndex: 3, hour: 11, minute: 58, description: 'Acceso peatonal sin credencial en area admin', resolved: true },
+    { event_type: 'velocidad', event_code: 'VELOCIDAD_EXCESIVA', criticality: 'alta', status: 'resuelta', zoneIndex: 4, cameraIndex: 1, hour: 12, minute: 6, description: 'Motocicleta a exceso de velocidad', plate: 'TUVW-11', resolved: true },
+    { event_type: 'vehiculo', event_code: 'VEHICULO_ESTACIONADO', criticality: 'baja', status: 'resuelta', zoneIndex: 4, cameraIndex: 6, hour: 12, minute: 15, description: 'Vehiculo bloqueando salida de emergencia', resolved: true },
+    { event_type: 'objeto', event_code: 'OBJETO_ABANDONADO', criticality: 'media', status: 'resuelta', zoneIndex: 3, cameraIndex: 4, hour: 12, minute: 28, description: 'Mochila en zona de espera de camiones', resolved: true, resolution_notes: 'Pertenencia de conductor identificado' },
+    { event_type: 'acceso', event_code: 'ACCESO_NO_AUTORIZADO', criticality: 'media', status: 'resuelta', zoneIndex: 0, cameraIndex: 3, hour: 12, minute: 40, description: 'Proveedor ingreso por puerta lateral', resolved: true },
+    { event_type: 'intrusion', event_code: 'INTRUSION_PERIMETRO', criticality: 'alta', status: 'resuelta', zoneIndex: 6, cameraIndex: 7, hour: 13, minute: 2, description: 'Vibracion en sensor perimetral sur', resolved: true },
+    { event_type: 'movimiento', event_code: 'MOVIMIENTO_NOCTURNO', criticality: 'media', status: 'resuelta', zoneIndex: 1, cameraIndex: 2, hour: 13, minute: 19, description: 'Personal de mantenimiento en nave A', resolved: true },
+    { event_type: 'velocidad', event_code: 'VELOCIDAD_EXCESIVA', criticality: 'alta', status: 'resuelta', zoneIndex: 4, cameraIndex: 1, hour: 13, minute: 37, description: 'Camion de carga supera limite en curva', plate: 'XYZA-56', resolved: true },
+    { event_type: 'persona', event_code: 'PERSONA_CAIDA', criticality: 'alta', status: 'resuelta', zoneIndex: 3, cameraIndex: 4, hour: 13, minute: 51, description: 'Persona sentada en suelo — evaluacion medica', resolved: true },
+    { event_type: 'acceso', event_code: 'ACCESO_NO_AUTORIZADO', criticality: 'media', status: 'resuelta', zoneIndex: 0, cameraIndex: 3, hour: 14, minute: 9, description: 'Visitante sin escolta en zona restringida', resolved: true },
+    { event_type: 'objeto', event_code: 'OBJETO_ABANDONADO', criticality: 'media', status: 'resuelta', zoneIndex: 3, cameraIndex: 4, hour: 14, minute: 26, description: 'Herramientas en pasillo de logistica', resolved: true },
+    { event_type: 'intrusion', event_code: 'INTRUSION_PERIMETRO', criticality: 'alta', status: 'resuelta', zoneIndex: 5, cameraIndex: 0, hour: 14, minute: 48, description: 'Movimiento en franja boscosa perimetro norte', resolved: true },
+    { event_type: 'vehiculo', event_code: 'VEHICULO_ESTACIONADO', criticality: 'baja', status: 'resuelta', zoneIndex: 4, cameraIndex: 6, hour: 15, minute: 11, description: 'Camioneta en zona de visitas', resolved: true },
+    { event_type: 'movimiento', event_code: 'MOVIMIENTO_NOCTURNO', criticality: 'media', status: 'resuelta', zoneIndex: 2, cameraIndex: 5, hour: 15, minute: 33, description: 'Operacion de montacargas en horario permitido', resolved: true },
+    { event_type: 'velocidad', event_code: 'VELOCIDAD_EXCESIVA', criticality: 'alta', status: 'resuelta', zoneIndex: 4, cameraIndex: 1, hour: 15, minute: 52, description: 'Vehiculo liviano en calle interna', plate: 'BCDE-90', resolved: true },
+    { event_type: 'acceso', event_code: 'ACCESO_NO_AUTORIZADO', criticality: 'media', status: 'resuelta', zoneIndex: 0, cameraIndex: 3, hour: 16, minute: 8, description: 'Salida sin registro de visitante', resolved: true },
+    { event_type: 'objeto', event_code: 'OBJETO_ABANDONADO', criticality: 'baja', status: 'resuelta', zoneIndex: 3, cameraIndex: 4, hour: 16, minute: 24, description: 'Casco abandonado en muelle 2', resolved: true },
+    { event_type: 'intrusion', event_code: 'INTRUSION_PERIMETRO', criticality: 'alta', status: 'resuelta', zoneIndex: 6, cameraIndex: 7, hour: 16, minute: 41, description: 'Corte de cerco reportado por camara PTZ', resolved: true, resolution_notes: 'Danio menor — mantenimiento notificado' },
+    { event_type: 'vehiculo', event_code: 'VEHICULO_ESTACIONADO', criticality: 'baja', status: 'resuelta', zoneIndex: 4, cameraIndex: 6, hour: 17, minute: 5, description: 'Cola de camiones al cierre de turno', resolved: true },
+    { event_type: 'movimiento', event_code: 'MOVIMIENTO_NOCTURNO', criticality: 'media', status: 'resuelta', zoneIndex: 1, cameraIndex: 2, hour: 17, minute: 28, description: 'Personal extendiendo jornada en nave A', resolved: true },
+    { event_type: 'intrusion', event_code: 'INTRUSION_PERIMETRO', criticality: 'alta', status: 'resuelta', zoneIndex: 5, cameraIndex: 0, hour: 18, minute: 14, description: 'Actividad en perimetro durante cambio de turno', resolved: true },
+    { event_type: 'movimiento', event_code: 'MOVIMIENTO_NOCTURNO', criticality: 'alta', status: 'resuelta', zoneIndex: 2, cameraIndex: 5, hour: 18, minute: 36, description: 'Movimiento en zona industrial fuera de horario', resolved: true },
+    { event_type: 'acceso', event_code: 'ACCESO_NO_AUTORIZADO', criticality: 'media', status: 'resuelta', zoneIndex: 0, cameraIndex: 3, hour: 19, minute: 2, description: 'Ingreso nocturno sin autorizacion previa', resolved: true },
+    { event_type: 'velocidad', event_code: 'VELOCIDAD_EXCESIVA', criticality: 'alta', status: 'resuelta', zoneIndex: 4, cameraIndex: 1, hour: 19, minute: 27, description: 'Camion de salida acelerando en rampa', resolved: true },
+    { event_type: 'intrusion', event_code: 'INTRUSION_PERIMETRO', criticality: 'critica', status: 'resuelta', zoneIndex: 6, cameraIndex: 7, hour: 20, minute: 18, description: 'Sensor perimetral activado en sector sur', resolved: true },
+    { event_type: 'movimiento', event_code: 'MOVIMIENTO_NOCTURNO', criticality: 'alta', status: 'resuelta', zoneIndex: 1, cameraIndex: 2, hour: 21, minute: 6, description: 'Ronda nocturna detecto puerta entreabierta', resolved: true },
+  ],
+  100
+)
+
+export const MOCK_ALERTS: Alert[] = [...MOCK_ALERTS_LIVE, ...MOCK_ALERTS_TODAY_HISTORICAL]
 
 // NVRs mock
 export const MOCK_NVRS: NVR[] = [

@@ -46,6 +46,8 @@ export type VehicleType =
   | 'utilitario'
   | 'otro'
 
+export type PlateSource = 'anpr' | 'manual' | 'hybrid'
+
 export type NvrHealthStatus = 'ok' | 'degraded' | 'down'
 
 // Usuario
@@ -201,6 +203,8 @@ export interface VehicleEntry {
   registered_by: string | number
   observations: string | null
   created_at: string
+  plate_source?: PlateSource
+  anpr_confidence?: number | null
   tenant?: Tenant
   registered_by_user?: User
 }
@@ -318,6 +322,12 @@ export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
   moto: 'Moto',
   utilitario: 'Utilitario',
   otro: 'Otro'
+}
+
+export const PLATE_SOURCE_LABELS: Record<PlateSource, string> = {
+  anpr: 'ANPR automático',
+  manual: 'Registro manual',
+  hybrid: 'Híbrido (ANPR + guardia)',
 }
 
 export const ROLE_LABELS: Record<Role, string> = {

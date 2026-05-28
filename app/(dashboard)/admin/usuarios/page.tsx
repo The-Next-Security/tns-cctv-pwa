@@ -59,17 +59,17 @@ const roles: UserRole[] = ['admin_parque', 'supervisor', 'vigilante', 'recepcion
 
 const getRoleColor = (role: UserRole) => {
   const colors: Record<UserRole, string> = {
-    admin_parque: 'bg-red-500/10 text-red-500 border-red-500/30',
-    supervisor: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
-    vigilante: 'bg-green-500/10 text-green-500 border-green-500/30',
-    recepcionista: 'bg-purple-500/10 text-purple-500 border-purple-500/30',
-    tecnico: 'bg-amber-500/10 text-amber-500 border-amber-500/30',
-    visualizador: 'bg-gray-500/10 text-gray-500 border-gray-500/30',
-    recepcion: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/30',
-    responsable_seguridad: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/30',
-    soporte_tns: 'bg-pink-500/10 text-pink-500 border-pink-500/30',
+    admin_parque: 'bg-[var(--danger-bg)] text-[var(--danger)] border-[var(--danger)]/30',
+    supervisor: 'bg-[var(--stat-review-bg)] text-[var(--crextio-brown)] border-[var(--crextio-brown)]/30',
+    vigilante: 'bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30',
+    recepcionista: 'bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30',
+    tecnico: 'bg-accent/50 text-foreground border-[var(--crextio-gold-strong)]/30',
+    visualizador: 'bg-muted text-muted-foreground border-border',
+    recepcion: 'bg-[var(--stat-pending-bg)] text-[var(--stat-pending)] border-[var(--stat-pending)]/30',
+    responsable_seguridad: 'bg-[var(--danger-bg)] text-[var(--crextio-terracotta)] border-[var(--crextio-terracotta)]/30',
+    soporte_tns: 'bg-accent/60 text-foreground border-[var(--crextio-gold-strong)]/30',
   }
-  return colors[role] || 'bg-gray-500/10 text-gray-500'
+  return colors[role] || 'bg-muted text-muted-foreground'
 }
 
 interface UserFormData {

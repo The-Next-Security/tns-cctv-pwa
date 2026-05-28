@@ -50,12 +50,12 @@ const priorities: Priority[] = ['baja', 'media', 'alta', 'critica']
 
 const getPriorityColor = (priority: Priority) => {
   const colors: Record<Priority, string> = {
-    baja: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
-    media: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30',
-    alta: 'bg-orange-500/10 text-orange-500 border-orange-500/30',
-    critica: 'bg-red-500/10 text-red-500 border-red-500/30',
+    baja: 'bg-muted text-muted-foreground border-border',
+    media: 'bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30',
+    alta: 'bg-[var(--danger-bg)] text-[var(--crextio-terracotta)] border-[var(--crextio-terracotta)]/30',
+    critica: 'bg-[var(--danger-bg)] text-[var(--danger)] border-[var(--danger)]/30',
   }
-  return colors[priority] || 'bg-gray-500/10 text-gray-500'
+  return colors[priority] || 'bg-muted text-muted-foreground'
 }
 
 const getPriorityName = (priority: Priority) => {
@@ -233,14 +233,14 @@ export default function ZonasPage() {
                     zona.priority === 'critica' && 'bg-red-500/10',
                     zona.priority === 'alta' && 'bg-orange-500/10',
                     zona.priority === 'media' && 'bg-yellow-500/10',
-                    zona.priority === 'baja' && 'bg-blue-500/10',
+                    zona.priority === 'baja' && 'bg-muted',
                   )}>
                     <MapPin className={cn(
                       'h-5 w-5',
                       zona.priority === 'critica' && 'text-red-500',
                       zona.priority === 'alta' && 'text-orange-500',
                       zona.priority === 'media' && 'text-yellow-500',
-                      zona.priority === 'baja' && 'text-blue-500',
+                      zona.priority === 'baja' && 'text-muted-foreground',
                     )} />
                   </div>
                   <div>

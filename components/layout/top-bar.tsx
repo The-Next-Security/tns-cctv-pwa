@@ -56,11 +56,11 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
 
   return (
     <header
-      className={cn(
-        'fixed top-0 right-0 z-30 flex h-16 items-center justify-between border-b border-border/50 glass px-4 transition-all duration-300 ease-out',
-        'left-0 lg:left-60',
-        sidebarCollapsed && 'lg:left-[68px]'
-      )}
+        className={cn(
+          'fixed top-0 right-0 z-30 flex h-16 items-center justify-between bg-card border-b border-border px-6 transition-all duration-300 ease-out',
+          'left-0 lg:left-[var(--sidebar-width)]',
+          sidebarCollapsed && 'lg:left-[68px]'
+        )}
     >
       <div className="flex items-center gap-4">
         <SidebarTrigger onClick={onMobileMenuClick} />

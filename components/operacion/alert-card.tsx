@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
 import { DISCARD_REASON_LABELS } from '@/lib/types'
 import { CRITICALITY_STYLES, CRITICALITY_LABELS } from '@/lib/constants'
+import { UrgencyBadge } from '@/components/ui/urgency-badge'
 
 interface AlertCardProps {
   alert: Alert
@@ -37,11 +38,6 @@ interface AlertCardProps {
   readonly?: boolean
 }
 
-// Funcion helper para obtener clases de criticidad
-function getCriticalityClasses(criticality: Criticality) {
-  const styles = CRITICALITY_STYLES[criticality]
-  return cn(styles.bgSubtle, styles.text, styles.borderSubtle)
-}
 
 const discardReasons: DiscardReason[] = [
   'falso_positivo_iluminacion',
@@ -138,29 +134,22 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
     <>
       <Card 
         className={cn(
-          'transition-all duration-200 hover:shadow-md border-l-4 cursor-pointer group',
-          CRITICALITY_STYLES[alert.criticality].border,
-          alert.criticality === 'critica' && isPending && cn(
-            'ring-2 shadow-lg',
-            CRITICALITY_STYLES.critica.ring,
-            'shadow-red-600/10'
-          )
+          'soft-card border-0 transition-all duration-200 hover:shadow-soft-md cursor-pointer group overflow-hidden',
+          alert.criticality === 'critica' && isPending && 'ring-2 ring-[var(--urgency-critical)]/35'
         )}
         onClick={() => onShowDetails?.(alert)}
       >
-        <CardContent className="p-4">
+        <CardContent className="p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-            {/* Criticality Badge */}
-            <Badge
-              variant="outline"
-              className={cn(
-                'w-fit shrink-0 font-semibold uppercase tracking-wide',
-                getCriticalityClasses(alert.criticality),
-                alert.criticality === 'critica' && 'animate-pulse'
-              )}
-            >
-              {CRITICALITY_LABELS[alert.criticality]}
-            </Badge>
+            {/* Criticality indicator */}
+            <div className={cn(
+              'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[10px] font-bold uppercase tracking-wide',
+              CRITICALITY_STYLES[alert.criticality].bgSubtle,
+              CRITICALITY_STYLES[alert.criticality].text,
+              alert.criticality === 'critica' && isPending && 'badge-urgency-critical-pulse ring-1 ring-[var(--urgency-critical-border)]'
+            )}>
+              {alert.criticality === 'critica' ? 'CRÍ' : CRITICALITY_LABELS[alert.criticality].slice(0, 3)}
+            </div>
 
             {/* Content */}
             <div className="flex-1 min-w-0 space-y-2">
@@ -184,8 +173,8 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
                   <span className="flex items-center gap-1 font-mono text-xs">
                     <Clock className="h-3.5 w-3.5" />
                     <span className={cn(
-                      isPending && alert.criticality === 'critica' && CRITICALITY_STYLES.critica.text + ' font-semibold',
-                      isPending && alert.criticality === 'alta' && CRITICALITY_STYLES.alta.text + ' font-semibold'
+                      isPending && alert.criticality === 'critica' && 'text-[var(--urgency-critical)] font-semibold',
+                      isPending && alert.criticality === 'alta' && 'text-[var(--criticality-alta)] font-semibold'
                     )}>
                       hace {timeDisplay}
                     </span>
@@ -202,17 +191,23 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
 
               {/* Status for non-pending alerts */}
               {!isPending && !isInReview && (
-                <Badge variant="secondary" className="text-xs">
+                <UrgencyBadge level="resolved" className="text-xs">
                   {alert.status === 'resuelta' && `Resuelta: ${alert.resolution_notes || 'Sin notas'}`}
                   {alert.status === 'escalada' && 'Escalada a supervisor'}
-                </Badge>
+                  {alert.status === 'descartada' && 'Descartada'}
+                </UrgencyBadge>
               )}
 
-              {/* In review status */}
               {isInReview && (
-                <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-500 border-blue-500/30">
-                  En revision por: {alert.assigned_to || 'Usuario'}
-                </Badge>
+                <UrgencyBadge level="review" className="text-xs">
+                  En revisión por: {alert.assigned_to || 'Usuario'}
+                </UrgencyBadge>
+              )}
+
+              {isPending && (
+                <UrgencyBadge level="pending" className="text-xs">
+                  Pendiente de atención
+                </UrgencyBadge>
               )}
             </div>
 
@@ -225,7 +220,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
                       size="sm"
                       onClick={handleAcknowledge}
                       disabled={isLoading}
-                      className="touch-target"
+                      className="touch-target rounded-xl shadow-soft-sm"
                     >
                       <Eye className="h-4 w-4 mr-1" />
                       Atender
@@ -233,7 +228,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={isLoading} className="touch-target">
+                        <Button variant="outline" size="sm" disabled={isLoading} className="touch-target rounded-xl border-0 bg-secondary/80 shadow-none">
                           <X className="h-4 w-4 mr-1" />
                           Descartar
                           <ChevronDown className="h-3 w-3 ml-1" />
@@ -259,7 +254,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
                       size="sm"
                       onClick={() => setResolveDialogOpen(true)}
                       disabled={isLoading}
-                      className="bg-green-600 hover:bg-green-700 touch-target"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground touch-target rounded-xl shadow-soft-sm"
                     >
                       <Check className="h-4 w-4 mr-1" />
                       Resolver
