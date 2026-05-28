@@ -1,0 +1,368 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* TNS Track - Sistema de seguridad para Parque Agrolivo */
+/* Design System 2026: Dark-first, Spatial UI, Glassmorphism 2.0 */
+
+:root {
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  
+  /* Criticidad */
+  --criticality-baja: oklch(0.554 0.046 257.417);
+  --criticality-media: oklch(0.769 0.188 70.08);
+  --criticality-alta: oklch(0.646 0.222 41.116);
+  --criticality-critica: oklch(0.577 0.245 27.325);
+  
+  /* Status */
+  --status-ok: oklch(0.696 0.17 162.48);
+  --status-degraded: oklch(0.769 0.188 70.08);
+  --status-down: oklch(0.577 0.245 27.325);
+  
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  
+  /* Spatial UI - Elevation levels */
+  --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --elevation-2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --elevation-3: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --elevation-4: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+/* Dark Mode - Primary Design Surface (2026 trend) */
+.dark {
+  /* 4 surface levels for proper depth hierarchy */
+  --background: oklch(0.11 0.01 260);
+  --foreground: oklch(0.96 0 0);
+  
+  /* Elevated surfaces - lighter shades of dark base */
+  --card: oklch(0.15 0.01 260);
+  --card-foreground: oklch(0.96 0 0);
+  --popover: oklch(0.18 0.01 260);
+  --popover-foreground: oklch(0.96 0 0);
+  
+  /* Brand color - vibrant blue for dark mode */
+  --primary: oklch(0.65 0.2 250);
+  --primary-foreground: oklch(0.98 0 0);
+  
+  /* Secondary surfaces */
+  --secondary: oklch(0.2 0.01 260);
+  --secondary-foreground: oklch(0.96 0 0);
+  --muted: oklch(0.22 0.01 260);
+  --muted-foreground: oklch(0.6 0 0);
+  --accent: oklch(0.25 0.015 260);
+  --accent-foreground: oklch(0.96 0 0);
+  
+  /* Semantic colors */
+  --destructive: oklch(0.6 0.24 27);
+  --destructive-foreground: oklch(0.98 0 0);
+  
+  /* Borders - subtle, using luminance instead of opacity */
+  --border: oklch(0.26 0.01 260);
+  --input: oklch(0.22 0.01 260);
+  --ring: oklch(0.65 0.2 250);
+  
+  /* Criticidad - vibrant colors that pop on dark */
+  --criticality-baja: oklch(0.65 0.12 250);
+  --criticality-media: oklch(0.78 0.16 85);
+  --criticality-alta: oklch(0.72 0.2 45);
+  --criticality-critica: oklch(0.65 0.26 27);
+  
+  /* Status indicators */
+  --status-ok: oklch(0.72 0.18 155);
+  --status-degraded: oklch(0.78 0.16 85);
+  --status-down: oklch(0.65 0.26 27);
+  
+  /* Charts - distinct, accessible colors */
+  --chart-1: oklch(0.65 0.2 250);
+  --chart-2: oklch(0.72 0.18 155);
+  --chart-3: oklch(0.78 0.16 85);
+  --chart-4: oklch(0.68 0.22 320);
+  --chart-5: oklch(0.65 0.26 27);
+  
+  /* Sidebar */
+  --sidebar: oklch(0.13 0.01 260);
+  --sidebar-foreground: oklch(0.96 0 0);
+  --sidebar-primary: oklch(0.65 0.2 250);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.2 0.01 260);
+  --sidebar-accent-foreground: oklch(0.96 0 0);
+  --sidebar-border: oklch(0.22 0.01 260);
+  --sidebar-ring: oklch(0.65 0.2 250);
+  
+  /* Dark mode elevation - using tonal surfaces instead of shadows */
+  --elevation-1: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+  --elevation-2: 0 4px 8px -1px rgb(0 0 0 / 0.4);
+  --elevation-3: 0 12px 20px -3px rgb(0 0 0 / 0.5);
+  --elevation-4: 0 24px 32px -5px rgb(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --font-sans: 'Inter', 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  
+  /* Criticidad */
+  --color-criticality-baja: var(--criticality-baja);
+  --color-criticality-media: var(--criticality-media);
+  --color-criticality-alta: var(--criticality-alta);
+  --color-criticality-critica: var(--criticality-critica);
+  
+  /* Status */
+  --color-status-ok: var(--status-ok);
+  --color-status-degraded: var(--status-degraded);
+  --color-status-down: var(--status-down);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  /* Glassmorphism 2.0 - Surgical use for overlays */
+  .glass {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+  }
+  
+  .glass-strong {
+    @apply bg-card/90 backdrop-blur-2xl border border-border/60;
+  }
+  
+  /* Fallback for low-end devices */
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass, .glass-strong {
+      @apply bg-card/95 border border-border;
+    }
+  }
+  
+  /* Spatial UI - Elevation classes */
+  .elevation-1 {
+    box-shadow: var(--elevation-1);
+  }
+  .elevation-2 {
+    box-shadow: var(--elevation-2);
+  }
+  .elevation-3 {
+    box-shadow: var(--elevation-3);
+  }
+  .elevation-4 {
+    box-shadow: var(--elevation-4);
+  }
+  
+  /* Thumb-friendly touch targets */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+  
+  .touch-target-lg {
+    @apply min-h-[56px] min-w-[56px];
+  }
+  
+  /* Text balance for titles */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Animacion de pulso para criticidad critica */
+@keyframes criticality-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.02);
+  }
+}
+
+.animate-criticality-pulse {
+  animation: criticality-pulse 1.5s ease-in-out infinite;
+}
+
+/* Animacion suave de entrada - Spatial depth */
+@keyframes slide-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slide-in-down {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-slide-in-up {
+  animation: slide-in-up 0.25s ease-out;
+}
+
+.animate-slide-in-down {
+  animation: slide-in-down 0.25s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+
+/* Bottom sheet animation for mobile */
+@keyframes sheet-up {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-up {
+  animation: sheet-up 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Scrollbar personalizado para dark mode - subtle */
+.dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.3 0.01 260);
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.4 0.01 260);
+}
+
+/* Safe area for mobile devices */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
