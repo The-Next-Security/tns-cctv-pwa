@@ -73,7 +73,7 @@ export default function DashboardLayout({
             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden animate-fade-in"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="fixed left-0 top-0 z-50 lg:hidden animate-slide-in-up">
+          <div className="fixed left-0 top-0 z-50 h-full w-[min(100vw,280px)] lg:hidden animate-fade-in">
             <AppSidebar
               collapsed={false}
               onToggle={() => setMobileMenuOpen(false)}
@@ -88,14 +88,16 @@ export default function DashboardLayout({
         sidebarCollapsed={sidebarCollapsed}
       />
 
-      {/* Main content - with bottom padding for mobile nav */}
+      {/* Main content — mobile-first padding + bottom nav clearance */}
       <main
         className={cn(
-          'pt-16 pb-20 lg:pb-6 min-h-screen transition-all duration-300 ease-out',
+          'min-h-screen transition-all duration-300 ease-out',
+          'pt-[var(--topbar-height-mobile)] pb-[calc(var(--mobile-nav-height)+env(safe-area-inset-bottom,0px))]',
+          'lg:pt-[var(--topbar-height)] lg:pb-6',
           sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[var(--sidebar-width)]'
         )}
       >
-        <div className="p-6 lg:p-8 animate-fade-in">
+        <div className="page-content animate-fade-in">
           {children}
         </div>
       </main>
@@ -103,7 +105,7 @@ export default function DashboardLayout({
       {/* Mobile bottom navigation - thumb-friendly */}
       <MobileNav />
 
-      <Toaster position="top-right" />
+      <Toaster position="top-center" className="sm:!top-right" />
     </div>
   )
 }

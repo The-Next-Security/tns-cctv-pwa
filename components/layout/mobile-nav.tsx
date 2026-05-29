@@ -66,8 +66,8 @@ export function MobileNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden glass safe-bottom">
-      <div className="flex items-center justify-around px-2 py-1">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-border/60 bg-card/95 backdrop-blur-md safe-bottom">
+      <div className="flex h-[var(--mobile-nav-height)] items-stretch justify-around px-1">
         {filteredItems.map(item => {
           const active = isActive(item.href)
           return (
@@ -75,19 +75,22 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-all duration-200 touch-target',
-                active 
-                  ? 'text-primary bg-primary/10' 
-                  : 'text-muted-foreground hover:text-foreground active:scale-95'
+                'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 transition-all duration-200',
+                'min-h-[44px] active:scale-95',
+                active
+                  ? 'text-primary bg-primary/10'
+                  : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              <item.icon 
+              <item.icon
                 className={cn(
-                  'h-5 w-5 transition-transform duration-200',
-                  active && 'scale-110'
-                )} 
+                  'h-[22px] w-[22px] shrink-0 transition-transform duration-200',
+                  active && 'scale-105'
+                )}
               />
-              <span className="text-[10px] font-medium">{item.label}</span>
+              <span className="max-w-full truncate px-0.5 text-[10px] font-semibold leading-tight">
+                {item.label}
+              </span>
             </Link>
           )
         })}

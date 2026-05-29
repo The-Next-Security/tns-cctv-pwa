@@ -52,6 +52,7 @@ function HorizontalLogo({
       height={height}
       priority={priority}
       className={cn('block shrink-0 dark:brightness-0 dark:invert', imageClassName)}
+      style={imageClassName?.includes('!h-') ? { width: 'auto', maxWidth: '100%' } : undefined}
     />
   )
 }

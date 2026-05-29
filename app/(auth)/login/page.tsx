@@ -42,8 +42,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col lg:flex-row bg-background">
       {/* Panel izquierdo — marca + valor */}
       <div className="relative hidden lg:flex flex-1 flex-col justify-between dashboard-canvas px-12 py-10 xl:px-16 xl:py-12 overflow-hidden">
-        <div className="pointer-events-none absolute top-16 right-16 h-64 w-64 rounded-full bg-accent/30 blur-3xl" />
-        <div className="pointer-events-none absolute bottom-32 left-8 h-48 w-48 rounded-full bg-[var(--crextio-gold)]/20 blur-3xl" />
+        <div className="pointer-events-none absolute top-16 right-16 h-64 w-64 rounded-full bg-accent/45 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-32 left-8 h-48 w-48 rounded-full bg-[var(--crextio-gold)]/35 blur-3xl" />
 
         <div className="relative z-10 pt-2">
           <BrandLogo variant="hero" subtitle="Track · Parque Agrolivo" href={null} priority />
@@ -76,22 +76,22 @@ export default function LoginPage() {
       </div>
 
       {/* Panel derecho — formulario */}
-      <div className="flex flex-1 flex-col items-center justify-center dashboard-canvas lg:bg-card px-6 py-10 lg:px-12 lg:py-12 safe-bottom">
+      <div className="flex flex-1 flex-col items-center justify-center dashboard-canvas lg:bg-card px-4 py-6 sm:px-6 sm:py-10 lg:px-12 lg:py-12 safe-bottom">
         <div className="w-full max-w-md">
-          {/* Logo móvil / tablet estrecha */}
-          <div className="mb-8 flex flex-col items-center lg:hidden">
-            <BrandLogo variant="hero" subtitle="Track · Parque Agrolivo" href={null} priority />
+          {/* Logo móvil */}
+          <div className="mb-5 sm:mb-8 flex flex-col items-center lg:hidden">
+            <BrandLogo variant="hero" subtitle="Track · Parque Agrolivo" href={null} priority imageClassName="!h-10 sm:!h-14 !w-auto" />
           </div>
 
-          <div className="soft-panel p-6 sm:p-8">
-            <div className="mb-6 text-center lg:text-left">
-              <h2 className="text-section text-xl">Bienvenido</h2>
-              <p className="mt-1 text-body-secondary">
+          <div className="soft-panel soft-card-compact p-4 sm:p-8">
+            <div className="mb-4 sm:mb-6 text-center lg:text-left">
+              <h2 className="text-section text-lg sm:text-xl">Bienvenido</h2>
+              <p className="mt-1 text-xs sm:text-sm text-body-secondary">
                 Ingrese sus credenciales para continuar
               </p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-5">
+            <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
               {error && (
                 <Alert variant="destructive" className="animate-slide-in-down rounded-xl">
                   <AlertDescription>{error}</AlertDescription>
@@ -154,11 +154,11 @@ export default function LoginPage() {
                 )}
               </Button>
 
-              <div className="mt-6 border-t border-border/60 pt-6">
-                <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="mt-4 sm:mt-6 border-t border-border/60 pt-4 sm:pt-6">
+                <p className="mb-2 sm:mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   Acceso rápido
                 </p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                   {[
                     { label: 'Admin', email: 'admin@agrolivo.cl' },
                     { label: 'Operador', email: 'operador@agrolivo.cl' },
@@ -168,7 +168,7 @@ export default function LoginPage() {
                       key={user.email}
                       type="button"
                       onClick={() => fillTestUser(user.email, 'password123')}
-                      className="rounded-xl border border-border/50 bg-secondary/40 px-2 py-3 text-xs font-semibold transition-all hover:bg-secondary/70 active:scale-[0.98] touch-target"
+                      className="rounded-xl border border-border/50 bg-secondary/40 px-1.5 py-2.5 sm:px-2 sm:py-3 text-[11px] sm:text-xs font-semibold transition-all hover:bg-secondary/70 active:scale-[0.98] min-h-[44px]"
                     >
                       <span className="block">{user.label}</span>
                       <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">

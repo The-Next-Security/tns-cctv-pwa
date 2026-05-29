@@ -40,9 +40,9 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
   const peakBar = chartBars.reduce((best, bar) => (bar.value > best.value ? bar : best), chartBars[0])
 
   return (
-    <aside className="flex flex-col gap-6 w-full xl:w-[340px] shrink-0">
-      {/* Actividad reciente */}
-      <section className="soft-card p-5">
+    <aside className="flex flex-col gap-3 sm:gap-6 w-full xl:w-[340px] shrink-0">
+      {/* Actividad reciente — oculta en móvil para priorizar alertas */}
+      <section className="soft-card soft-card-compact panel-compact hidden md:block">
         <div className="flex items-center gap-2 mb-4">
           <div className="icon-box icon-box-neutral">
             <Activity className="h-4 w-4" />
@@ -74,14 +74,14 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
       </section>
 
       {/* Alertas por zona */}
-      <section className="soft-card p-5">
-        <div className="flex items-center gap-2 mb-4">
+      <section className="soft-card soft-card-compact panel-compact">
+        <div className="flex items-center gap-2 mb-3 sm:mb-4">
           <div className="icon-box icon-box-warning">
             <MapPin className="h-4 w-4" />
           </div>
           <h3 className="text-section">Alertas por zona</h3>
         </div>
-        <ul className="space-y-3">
+        <ul className="space-y-2 sm:space-y-3">
           {zoneEntries.map(([zone, count]) => (
             <li key={zone} className="flex items-center justify-between gap-3">
               <span className="text-body truncate">{zone}</span>
@@ -99,15 +99,15 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
         </ul>
       </section>
 
-      {/* Operadores en turno */}
-      <section className="soft-card p-5">
-        <div className="flex items-center gap-2 mb-4">
+      {/* Operadores en turno — tablet+ */}
+      <section className="soft-card soft-card-compact panel-compact hidden sm:block">
+        <div className="flex items-center gap-2 mb-3 sm:mb-4">
           <div className="icon-box icon-box-success">
             <Users className="h-4 w-4" />
           </div>
           <h3 className="text-section">En turno ahora</h3>
         </div>
-        <ul className="space-y-3">
+        <ul className="space-y-2 sm:space-y-3">
           {ON_DUTY.map(person => (
             <li key={person.name} className="flex items-center gap-3">
               <div className="relative">
@@ -132,21 +132,21 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
         </ul>
       </section>
 
-      {/* Mini grafico — alertas hoy por franja horaria (bloques de 2 h) */}
-      <section className="soft-card p-5">
-        <div className="flex items-start justify-between gap-3 mb-1">
-          <div className="flex items-center gap-2">
-            <div className="icon-box icon-box-accent">
-              <TrendingUp className="h-4 w-4" />
+      {/* Mini grafico — alertas hoy */}
+      <section className="soft-card soft-card-compact panel-compact">
+        <div className="flex items-start justify-between gap-2 sm:gap-3 mb-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="icon-box icon-box-accent shrink-0 h-8 w-8 sm:h-9 sm:w-9">
+              <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
-            <h3 className="text-section">Alertas hoy</h3>
+            <h3 className="text-section text-sm sm:text-base truncate">Alertas hoy</h3>
           </div>
-          <span className="text-caption font-semibold tabular-nums text-[var(--crextio-gold-strong)]">
-            {alertsToday} total
+          <span className="text-caption font-semibold tabular-nums text-[var(--crextio-gold-strong)] shrink-0">
+            {alertsToday}
           </span>
         </div>
-        <p className="text-caption mb-4 pl-11">Por franja horaria · bloques de 2 h</p>
-        <div className="flex items-end justify-between gap-1.5 h-28">
+        <p className="text-[10px] sm:text-caption mb-3 sm:mb-4 pl-0 sm:pl-11">Por franja · 2 h</p>
+        <div className="flex items-end justify-between gap-1 sm:gap-1.5 h-20 sm:h-28">
           {chartBars.map(bar => {
             const isPeak = bar.value > 0 && bar.value === peakBar.value
             return (
@@ -168,8 +168,8 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
                     className={cn(
                       'w-full rounded-t-md transition-all duration-300',
                       isPeak
-                        ? 'bg-gradient-to-t from-[var(--crextio-gold-strong)]/50 to-[var(--crextio-gold-strong)]'
-                        : 'bg-gradient-to-t from-[var(--crextio-gold)]/35 to-[var(--crextio-gold-strong)]/75 group-hover/bar:from-[var(--crextio-gold)]/50 group-hover/bar:to-[var(--crextio-gold-strong)]'
+                        ? 'bg-gradient-to-t from-[var(--crextio-gold-strong)]/75 to-[var(--crextio-gold-strong)]'
+                        : 'bg-gradient-to-t from-[var(--crextio-gold)]/55 to-[var(--crextio-gold-strong)] group-hover/bar:from-[var(--crextio-gold)]/70 group-hover/bar:to-[var(--crextio-gold-strong)]'
                     )}
                     style={{
                       height: `${Math.max((bar.value / maxBar) * 100, bar.value > 0 ? 12 : 0)}%`,

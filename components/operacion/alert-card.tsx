@@ -139,11 +139,11 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
         )}
         onClick={() => onShowDetails?.(alert)}
       >
-        <CardContent className="p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <CardContent className="p-3 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
             {/* Criticality indicator */}
             <div className={cn(
-              'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[10px] font-bold uppercase tracking-wide',
+              'flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-lg sm:rounded-xl text-[10px] font-bold uppercase tracking-wide',
               CRITICALITY_STYLES[alert.criticality].bgSubtle,
               CRITICALITY_STYLES[alert.criticality].text,
               alert.criticality === 'critica' && isPending && 'badge-urgency-critical-pulse ring-1 ring-[var(--urgency-critical-border)]'
@@ -152,12 +152,12 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
             </div>
 
             {/* Content */}
-            <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex-1 min-w-0 space-y-1.5 sm:space-y-2">
               <div>
-                <h3 className="font-medium">
+                <h3 className="font-medium text-sm sm:text-base leading-snug line-clamp-2">
                   {alert.description || alert.event_code || 'Evento de seguridad'}
                 </h3>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs sm:text-sm text-muted-foreground mt-1">
                   {alert.camera && (
                     <span className="flex items-center gap-1">
                       <Camera className="h-3.5 w-3.5" />
@@ -213,14 +213,17 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
 
             {/* Actions */}
             {!readonly && (
-              <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+              <div
+                className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:flex-wrap sm:justify-end sm:shrink-0"
+                onClick={e => e.stopPropagation()}
+              >
                 {isPending && (
                   <>
                     <Button
                       size="sm"
                       onClick={handleAcknowledge}
                       disabled={isLoading}
-                      className="touch-target rounded-xl shadow-soft-sm"
+                      className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl shadow-soft-sm"
                     >
                       <Eye className="h-4 w-4 mr-1" />
                       Atender
@@ -228,7 +231,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={isLoading} className="touch-target rounded-xl border-0 bg-secondary/80 shadow-none">
+                        <Button variant="outline" size="sm" disabled={isLoading} className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl border-0 bg-secondary/80 shadow-none">
                           <X className="h-4 w-4 mr-1" />
                           Descartar
                           <ChevronDown className="h-3 w-3 ml-1" />
@@ -254,7 +257,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
                       size="sm"
                       onClick={() => setResolveDialogOpen(true)}
                       disabled={isLoading}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground touch-target rounded-xl shadow-soft-sm"
+                      className="h-10 sm:h-9 bg-primary hover:bg-primary/90 text-primary-foreground touch-target rounded-xl shadow-soft-sm"
                     >
                       <Check className="h-4 w-4 mr-1" />
                       Resolver
@@ -265,7 +268,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
                       size="sm"
                       onClick={onEscalate}
                       disabled={isLoading}
-                      className="touch-target"
+                      className="h-10 sm:h-9 touch-target rounded-xl"
                     >
                       <ArrowUpRight className="h-4 w-4 mr-1" />
                       Escalar

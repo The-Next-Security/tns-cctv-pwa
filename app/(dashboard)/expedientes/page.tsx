@@ -76,20 +76,23 @@ export default function ExpedientesPage() {
   const cases = casesData?.data || []
 
   return (
-    <div className="space-y-6">
+    <div className="page-stack">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Expedientes</h1>
-        <p className="text-muted-foreground">
-          Gestion de infracciones y cruce con registros de ingreso
-        </p>
+      <div className="page-header">
+        <div className="min-w-0">
+          <h1 className="page-title">Expedientes</h1>
+          <p className="page-subtitle">
+            Infracciones y cruce con ingresos
+          </p>
+        </div>
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
+      <Card className="soft-card-compact">
+        <CardContent className="p-3 sm:p-4">
+          <div className="mobile-scroll-x">
+          <div className="filter-scroll-row">
+            <Filter className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
             
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[150px]">
@@ -140,6 +143,7 @@ export default function ExpedientesPage() {
                 className="pl-8 w-[150px] uppercase"
               />
             </div>
+          </div>
           </div>
         </CardContent>
       </Card>

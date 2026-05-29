@@ -185,25 +185,25 @@ export default function OperacionPage() {
   }
 
   return (
-    <div className="flex flex-col xl:flex-row gap-6 xl:gap-8">
-      {/* Columna central — contenido principal (~65%) */}
-      <div className="flex-1 min-w-0 space-y-6">
+    <div className="flex flex-col xl:flex-row gap-3 sm:gap-6 xl:gap-8">
+      {/* Columna central — contenido principal */}
+      <div className="flex-1 min-w-0 page-stack">
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-caption text-primary font-semibold mb-1">Consola operativa</p>
-          <h1 className="text-display">
+      <div className="page-header">
+        <div className="min-w-0">
+          <p className="text-[10px] sm:text-caption text-primary font-semibold mb-0.5">Consola operativa</p>
+          <h1 className="page-title">
             Monitoreo de alertas
           </h1>
-          <p className="text-body text-muted-foreground mt-1">
+          <p className="page-subtitle hidden sm:block">
             Gestione incidentes en tiempo real del parque Agrolivo
           </p>
         </div>
         <ConnectionStatus isConnected={isRealtimeConnected} />
       </div>
 
-      {/* Stats Cards — orden: Criticas, Pendientes, En Revision, Resueltas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Stats Cards — 2×2 en móvil */}
+      <div className="stat-grid">
         <StatCard
           label="Críticas"
           value={stats.critical}
@@ -243,54 +243,55 @@ export default function OperacionPage() {
       </div>
 
       {/* Main panel */}
-      <div className="soft-panel overflow-hidden">
-        {/* Filters bar */}
-        <div className="border-b border-border/60 px-5 py-4 lg:px-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+      <div className="soft-panel soft-card-compact overflow-hidden">
+        {/* Filters bar — scroll horizontal en móvil */}
+        <div className="border-b border-border/60 panel-compact pb-3 sm:pb-4">
+          <div className="mobile-scroll-x">
+          <div className="filter-scroll-row">
+            <Filter className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
 
-            <Tabs value={statusView} onValueChange={(v) => setStatusView(v as StatusView)} className="w-auto">
-              <TabsList className="h-10 rounded-xl bg-secondary/80 p-1">
-                <TabsTrigger value="activas" className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md">
+            <Tabs value={statusView} onValueChange={(v) => setStatusView(v as StatusView)} className="w-auto shrink-0">
+              <TabsList className="h-9 sm:h-10 rounded-xl bg-secondary/80 p-0.5 sm:p-1">
+                <TabsTrigger value="activas" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md">
                   Activas
                   {(stats.pending + stats.inReview) > 0 && (
-                    <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-accent/50 text-foreground border-0">
+                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 bg-accent/50 text-foreground border-0 text-[10px]">
                       {stats.pending + stats.inReview}
                     </Badge>
                   )}
                 </TabsTrigger>
                 <TabsTrigger
                   value="pendiente"
-                  className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
+                  className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
                 >
-                  Pendientes
+                  Pend.
                 </TabsTrigger>
                 <TabsTrigger
                   value="en_revision"
-                  className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-review)]"
+                  className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-review)]"
                 >
-                  En Revisión
+                  Revisión
                 </TabsTrigger>
                 <TabsTrigger
                   value="resueltas"
-                  className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-resolved)]"
+                  className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-resolved)]"
                 >
                   Resueltas
                 </TabsTrigger>
-                <TabsTrigger value="all" className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md">Todas</TabsTrigger>
+                <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md">Todas</TabsTrigger>
               </TabsList>
             </Tabs>
 
-            <Tabs value={criticalityFilter} onValueChange={setCriticalityFilter} className="w-auto">
-              <TabsList className="h-10 rounded-xl bg-secondary/80 p-1">
-                <TabsTrigger value="all" className="rounded-lg px-3 data-[state=active]:bg-card data-[state=active]:shadow-card-md">Todas</TabsTrigger>
+            <Tabs value={criticalityFilter} onValueChange={setCriticalityFilter} className="w-auto shrink-0">
+              <TabsList className="h-9 sm:h-10 rounded-xl bg-secondary/80 p-0.5 sm:p-1">
+                <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md">Todas</TabsTrigger>
                 <TabsTrigger
                   value="alta_critica"
-                  className="rounded-lg px-3 data-[state=active]:bg-[var(--urgency-critical-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-critical)] text-[var(--urgency-critical)]"
+                  className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-[var(--urgency-critical-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-critical)] text-[var(--urgency-critical)]"
                 >
-                  Alta / <strong>Crítica</strong>
+                  Alta/Crít.
                   {stats.critical > 0 && (
-                    <UrgencyBadge level="critical" pulse className="ml-2 h-5 px-1.5 py-0">
+                    <UrgencyBadge level="critical" pulse className="ml-1.5 h-5 px-1.5 py-0 text-[10px]">
                       {stats.critical}
                     </UrgencyBadge>
                   )}
@@ -299,7 +300,7 @@ export default function OperacionPage() {
             </Tabs>
 
             <Select value={zoneFilter} onValueChange={setZoneFilter}>
-              <SelectTrigger className="w-[180px] rounded-xl border-0 bg-secondary/80 shadow-none">
+              <SelectTrigger className="w-[130px] sm:w-[180px] h-9 sm:h-10 rounded-xl border-0 bg-secondary/80 shadow-none text-xs sm:text-sm shrink-0">
                 <SelectValue placeholder="Zona" />
               </SelectTrigger>
               <SelectContent>
@@ -312,18 +313,19 @@ export default function OperacionPage() {
               </SelectContent>
             </Select>
 
-            <Button variant="outline" size="icon" onClick={handleRefresh} className="ml-auto rounded-xl border-0 bg-secondary/80 shadow-none hover:bg-secondary">
+            <Button variant="outline" size="icon" onClick={handleRefresh} className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl border-0 bg-secondary/80 shadow-none hover:bg-secondary shrink-0">
               <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
               <span className="sr-only">Actualizar</span>
             </Button>
           </div>
+          </div>
         </div>
 
         {/* List header + content */}
-        <div className="px-5 py-5 lg:px-6 space-y-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-section">
+        <div className="panel-compact space-y-3 sm:space-y-5">
+          <div className="flex items-start justify-between gap-2 sm:gap-3">
+            <div className="min-w-0">
+              <h2 className="text-section text-sm sm:text-base">
                 {statusView === 'criticas' ? (
                   <>
                     <UrgencyText level="critical" pulse>Críticas</UrgencyText>
@@ -333,18 +335,18 @@ export default function OperacionPage() {
                   STATUS_VIEW_LABELS[statusView]
                 )}
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 {filteredAlerts.length} alerta{filteredAlerts.length === 1 ? '' : 's'} en esta vista
               </p>
             </div>
             {statusView !== 'activas' && (
-              <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="rounded-xl border-0 bg-secondary/80 shadow-none">
-                Volver a activas
+              <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="h-8 sm:h-9 shrink-0 rounded-xl border-0 bg-secondary/80 shadow-none text-xs sm:text-sm">
+                Volver
               </Button>
             )}
           </div>
 
-          <p className="text-caption rounded-xl bg-accent/40 px-4 py-3 border border-[var(--crextio-gold-strong)]/20">
+          <p className="hidden sm:block text-caption rounded-xl bg-accent/40 px-4 py-3 border border-[var(--crextio-gold-strong)]/20">
             <span className="font-medium text-foreground">Flujo: </span>
             <UrgencyText level="pending">Pendiente</UrgencyText>
             {' → Atender → '}
@@ -369,7 +371,7 @@ export default function OperacionPage() {
           ))}
         </div>
       ) : filteredAlerts.length === 0 ? (
-        <div className="soft-card flex flex-col items-center justify-center py-16 text-center px-6">
+        <div className="soft-card flex flex-col items-center justify-center py-10 sm:py-16 text-center px-4 sm:px-6">
           <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center mb-4">
             <CheckCircle2 className="h-8 w-8 text-muted-foreground" />
           </div>
@@ -401,14 +403,14 @@ export default function OperacionPage() {
           </div>
         </div>
       ) : showGroupedActivas ? (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {pendingOnlyAlerts.length > 0 && (
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
+            <section className="space-y-2 sm:space-y-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                 <UrgencyBadge level="pending">
                   Pendientes ({pendingOnlyAlerts.length})
                 </UrgencyBadge>
-                <p className="text-sm text-muted-foreground">Requieren accion: Atender o Descartar</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Atender o descartar</p>
               </div>
               {pendingOnlyAlerts.map((alert, index) => (
                 <div
@@ -428,12 +430,12 @@ export default function OperacionPage() {
           )}
 
           {inReviewAlerts.length > 0 && (
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
+            <section className="space-y-2 sm:space-y-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                 <UrgencyBadge level="review">
                   En Revisión ({inReviewAlerts.length})
                 </UrgencyBadge>
-                <p className="text-sm text-muted-foreground">Requieren accion: Resolver o Escalar</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Resolver o escalar</p>
               </div>
               {inReviewAlerts.map((alert, index) => (
                 <div

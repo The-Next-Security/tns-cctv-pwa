@@ -20,6 +20,7 @@ import {
 import { useAuth } from '@/lib/auth'
 import { ROLE_LABELS } from '@/lib/types'
 import { SystemHealthIndicator } from './system-health-indicator'
+import { BrandLogo } from '@/components/brand/brand-logo'
 import { SidebarTrigger } from './app-sidebar'
 import { cn } from '@/lib/utils'
 
@@ -57,22 +58,33 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
   return (
     <header
         className={cn(
-          'fixed top-0 right-0 z-30 flex h-16 items-center justify-between bg-card border-b border-border px-6 transition-all duration-300 ease-out',
+          'fixed top-0 right-0 z-30 flex items-center justify-between bg-card/95 backdrop-blur-md border-b border-border safe-top',
+          'h-[var(--topbar-height-mobile)] px-3 lg:h-[var(--topbar-height)] lg:px-6',
+          'transition-all duration-300 ease-out',
           'left-0 lg:left-[var(--sidebar-width)]',
           sidebarCollapsed && 'lg:left-[68px]'
         )}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <SidebarTrigger onClick={onMobileMenuClick} />
+        <div className="min-w-0 flex-1 lg:hidden">
+          <BrandLogo
+            variant="full"
+            subtitle={null}
+            href="/operacion"
+            className="max-w-[140px] sm:max-w-[180px]"
+            imageClassName="!h-7 !w-auto"
+          />
+        </div>
         <SystemHealthIndicator />
       </div>
 
-      <div className="flex items-center gap-2">
-        {/* Theme toggle */}
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        {/* Theme toggle — desktop/tablet */}
         {mounted && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-xl touch-target">
+              <Button variant="ghost" size="icon" className="hidden sm:inline-flex rounded-xl touch-target h-9 w-9">
                 {theme === 'dark' ? (
                   <Moon className="h-5 w-5" />
                 ) : theme === 'light' ? (
@@ -104,8 +116,8 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2 px-2 rounded-xl touch-target">
-                <Avatar className="h-9 w-9 ring-2 ring-primary/20">
+              <Button variant="ghost" className="flex items-center gap-2 px-1.5 sm:px-2 rounded-xl touch-target h-9 sm:h-10">
+                <Avatar className="h-8 w-8 sm:h-9 sm:w-9 ring-2 ring-primary/20">
                   <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
                     {getInitials(user.full_name)}
                   </AvatarFallback>

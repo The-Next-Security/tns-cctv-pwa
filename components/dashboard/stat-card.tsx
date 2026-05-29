@@ -42,49 +42,50 @@ export function StatCard({
       type="button"
       onClick={onClick}
       className={cn(
-        'group soft-card relative w-full cursor-pointer overflow-hidden text-left p-5',
+        'group soft-card soft-card-compact relative w-full cursor-pointer overflow-hidden text-left',
+        'p-3 sm:p-5',
         'transition-all duration-200 ease-out',
-        'hover:-translate-y-1 hover:ring-2 hover:ring-[var(--ring)]/30',
-        'active:translate-y-0 active:scale-[0.99] active:shadow-card',
+        'sm:hover:-translate-y-1 sm:hover:ring-2 sm:hover:ring-[var(--ring)]/30',
+        'active:scale-[0.98] active:shadow-card',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]/35',
         HOVER_BY_TONE[tone],
         active && `ring-2 ${styles.ring}`,
         showCriticalPulse && !active && 'ring-2 ring-[var(--urgency-critical)]/20'
       )}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className={cn('text-caption font-semibold transition-colors', styles.text)}>
+      <div className="flex items-center justify-between gap-2 sm:items-start sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <p className={cn('text-[11px] sm:text-caption font-semibold transition-colors truncate', styles.text)}>
             {label}
           </p>
           <p
             className={cn(
-              'mt-1 text-display text-numeral tabular-nums transition-transform duration-200 group-hover:scale-[1.02] origin-left',
+              'mt-0.5 sm:mt-1 text-2xl sm:text-display text-numeral tabular-nums transition-transform duration-200 sm:group-hover:scale-[1.02] origin-left',
               styles.text
             )}
           >
             {value}
           </p>
-          <p className="mt-1 text-body-secondary transition-colors group-hover:text-foreground/80">
+          <p className="mt-0.5 hidden sm:block text-body-secondary transition-colors group-hover:text-foreground/80">
             {hint}
           </p>
         </div>
         <div
           className={cn(
-            'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all duration-200',
-            'group-hover:scale-110 group-hover:shadow-sm',
+            'flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-lg sm:rounded-xl transition-all duration-200',
+            'sm:group-hover:scale-110 sm:group-hover:shadow-sm',
             styles.iconBox,
             showCriticalPulse && 'badge-urgency-critical-pulse'
           )}
         >
-          <Icon className="h-5 w-5" strokeWidth={1.75} />
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={1.75} />
         </div>
       </div>
 
       <ChevronRight
         aria-hidden
         className={cn(
-          'pointer-events-none absolute bottom-4 right-4 h-4 w-4 opacity-0',
+          'pointer-events-none absolute bottom-3 right-3 h-4 w-4 opacity-0 hidden sm:block',
           'translate-x-1 transition-all duration-200',
           'group-hover:opacity-70 group-hover:translate-x-0',
           styles.text

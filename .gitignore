@@ -156,4 +156,6 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
-public/
+# Static assets in public/ are required for the app (brand, demo media).
+# Do not ignore the whole public folder.
+public/.DS_Store
