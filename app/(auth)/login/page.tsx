@@ -42,8 +42,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col lg:flex-row bg-background">
       {/* Panel izquierdo — marca + valor */}
       <div className="relative hidden lg:flex flex-1 flex-col justify-between dashboard-canvas px-12 py-10 xl:px-16 xl:py-12 overflow-hidden">
-        <div className="pointer-events-none absolute top-16 right-16 h-64 w-64 rounded-full bg-accent/45 blur-3xl" />
-        <div className="pointer-events-none absolute bottom-32 left-8 h-48 w-48 rounded-full bg-[var(--crextio-gold)]/35 blur-3xl" />
+        <div className="pointer-events-none absolute top-16 right-16 h-64 w-64 rounded-full bg-[var(--cctv-accent-blue)]/10 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-32 left-8 h-48 w-48 rounded-full bg-[var(--cctv-accent-blue)]/8 blur-3xl" />
 
         <div className="relative z-10 pt-2">
           <BrandLogo variant="hero" subtitle="Track · Parque Agrolivo" href={null} priority />
@@ -63,7 +63,7 @@ export default function LoginPage() {
               { value: '99.5%', label: 'Disponibilidad' },
             ].map(stat => (
               <div key={stat.label} className="soft-card p-4 transition-transform hover:scale-[1.02]">
-                <p className="text-numeral text-2xl text-[var(--crextio-charcoal)]">{stat.value}</p>
+                <p className="text-numeral text-2xl text-foreground">{stat.value}</p>
                 <p className="mt-0.5 text-caption">{stat.label}</p>
               </div>
             ))}
