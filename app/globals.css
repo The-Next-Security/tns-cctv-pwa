@@ -1,13 +1,18 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+@config '../tailwind.config.ts';
+
 @custom-variant dark (&:is(.dark *));
 
-/* TNS Track — Pantone 14-0957 TCX Spectra Yellow
- * Base #F7B718 · tintes cercanos al base (poco blanco) · sombras #F5A800 #D9900F #B87800
+/* TNS Track — Consola CCTV / Vigilancia
+ * Paleta dark-first para sesiones largas de monitoreo
+ * Fondos #121212–#1e1e1e · Texto #eeeeee · Alertas semánticas de alta visibilidad
  */
 
 :root {
+  color-scheme: dark;
+
   /* Layout */
   --sidebar-width: 260px;
   --context-width: 340px;
@@ -17,77 +22,88 @@
   --topbar-height-mobile: 3.25rem;
   --mobile-nav-height: 4rem;
 
-  /* Spectra Yellow — tokens de marca (tintes más saturados, cerca del base) */
-  --spectra-yellow: #F7B718;
-  --spectra-yellow-light: #F9C93E;
-  --spectra-yellow-medium: #F5A800;
-  --spectra-yellow-dark: #D9900F;
-  --spectra-yellow-shade: #B87800;
-  --spectra-yellow-deep: #966000;
-  --spectra-yellow-muted: #785000;
-  --spectra-yellow-tint: #FACE62;
-  --spectra-yellow-tint-soft: #F9C84A;
-  --spectra-yellow-surface: #FBDA7A;
+  /* CCTV — Core palette */
+  --cctv-bg-base: #121212;
+  --cctv-bg-surface: #1a1a1a;
+  --cctv-bg-elevated: #1e1e1e;
+  --cctv-bg-muted: #252525;
+  --cctv-bg-panel: #27272a;
+  --cctv-text-primary: #e4e4e7; /* zinc-200 — evita blanco puro */
+  --cctv-text-secondary: #a1a1aa; /* zinc-400 */
+  --cctv-text-muted: #71717a; /* zinc-500 */
+  --cctv-border: #2d333b;
+  --cctv-border-subtle: #252525;
+  --cctv-accent-neutral: #4b5563;
+  --cctv-accent-blue: #5b7a9d;
+  --cctv-overlay: rgb(0 0 0 / 0.5);
 
-  /* Alias legacy (componentes existentes) */
-  --crextio-cream: var(--spectra-yellow-surface);
-  --crextio-cream-warm: var(--spectra-yellow-light);
-  --crextio-peach: var(--spectra-yellow-tint);
-  --crextio-charcoal: #0A0807;
-  --crextio-charcoal-soft: #1A1A1A;
-  --crextio-muted: #8A7048;
-  --crextio-gold: var(--spectra-yellow);
-  --crextio-gold-strong: var(--spectra-yellow-dark);
-  --crextio-brown: var(--spectra-yellow-deep);
-  --crextio-terracotta: #B54A38;
+  /* CCTV — Semantic status (uso sparingly para alertas) */
+  --alert-critical: #ff4d4f;
+  --alert-warning: #faad14;
+  --alert-success: #52c41a;
+  --alert-critical-bg: rgb(255 77 79 / 0.12);
+  --alert-warning-bg: rgb(250 173 20 / 0.12);
+  --alert-success-bg: rgb(82 196 26 / 0.12);
 
-  --background: var(--spectra-yellow-surface);
-  --foreground: #0A0807;
-  --card: #FFFFFF;
-  --card-foreground: #0A0807;
-  --popover: #FFFFFF;
-  --popover-foreground: #0A0807;
-  --primary: #0A0807;
-  --primary-foreground: #FFFFFF;
-  --secondary: var(--spectra-yellow-tint);
-  --secondary-foreground: var(--spectra-yellow-deep);
-  --muted: var(--spectra-yellow-tint-soft);
-  --muted-foreground: var(--spectra-yellow-muted);
-  --accent: var(--spectra-yellow);
-  --accent-foreground: #0A0807;
-  --destructive: #C24033;
-  --destructive-foreground: #FFFFFF;
-  --border: var(--spectra-yellow-light);
-  --input: var(--spectra-yellow-tint-soft);
-  --ring: var(--spectra-yellow-dark);
+  /* Alias legacy — mapeados a tokens CCTV */
+  --crextio-charcoal: var(--cctv-text-primary);
+  --crextio-charcoal-soft: var(--cctv-bg-surface);
+  --crextio-muted: var(--cctv-text-secondary);
+  --crextio-cream: var(--cctv-bg-elevated);
+  --crextio-cream-warm: var(--cctv-bg-muted);
+  --crextio-peach: var(--cctv-bg-muted);
+  --crextio-gold: var(--cctv-accent-blue);
+  --crextio-gold-strong: var(--cctv-accent-blue);
+  --crextio-brown: var(--cctv-text-secondary);
+  --crextio-terracotta: var(--alert-critical);
 
-  --success: #16A34A;
-  --success-bg: #F0FDF4;
-  --warning: var(--spectra-yellow-dark);
-  --warning-bg: var(--spectra-yellow-tint);
-  --danger: #C24033;
-  --danger-bg: #FAE8E5;
-  --info: var(--spectra-yellow-deep);
-  --info-bg: var(--spectra-yellow-tint-soft);
+  /* shadcn / UI tokens */
+  --background: var(--cctv-bg-base);
+  --foreground: var(--cctv-text-primary);
+  --card: var(--cctv-bg-surface);
+  --card-foreground: var(--cctv-text-primary);
+  --popover: var(--cctv-bg-elevated);
+  --popover-foreground: var(--cctv-text-primary);
+  --primary: var(--cctv-text-primary);
+  --primary-foreground: var(--cctv-bg-base);
+  --secondary: var(--cctv-bg-muted);
+  --secondary-foreground: var(--cctv-text-primary);
+  --muted: var(--cctv-bg-muted);
+  --muted-foreground: var(--cctv-text-secondary);
+  --accent: var(--cctv-bg-elevated);
+  --accent-foreground: var(--cctv-text-primary);
+  --destructive: var(--alert-critical);
+  --destructive-foreground: #ffffff;
+  --border: var(--cctv-border);
+  --input: var(--cctv-bg-muted);
+  --ring: var(--cctv-accent-blue);
 
-  /* Escala de urgencia operativa (4 niveles, de mayor a menor) */
-  --urgency-critical: #C24033;
-  --urgency-critical-bg: #FAE8E5;
-  --urgency-critical-border: rgb(194 64 51 / 0.35);
+  --success: var(--alert-success);
+  --success-bg: var(--alert-success-bg);
+  --warning: var(--alert-warning);
+  --warning-bg: var(--alert-warning-bg);
+  --danger: var(--alert-critical);
+  --danger-bg: var(--alert-critical-bg);
+  --info: var(--cctv-accent-blue);
+  --info-bg: rgb(91 122 157 / 0.12);
 
-  --urgency-pending: var(--spectra-yellow-shade);
-  --urgency-pending-bg: var(--spectra-yellow-tint);
-  --urgency-pending-border: rgb(184 120 0 / 0.35);
+  /* Escala de urgencia operativa */
+  --urgency-critical: var(--alert-critical);
+  --urgency-critical-bg: var(--alert-critical-bg);
+  --urgency-critical-border: rgb(255 77 79 / 0.35);
 
-  --urgency-review: var(--spectra-yellow-deep);
-  --urgency-review-bg: var(--spectra-yellow-tint-soft);
-  --urgency-review-border: rgb(150 96 0 / 0.35);
+  --urgency-pending: var(--alert-warning);
+  --urgency-pending-bg: var(--alert-warning-bg);
+  --urgency-pending-border: rgb(250 173 20 / 0.35);
 
-  --urgency-resolved: #8A7048;
-  --urgency-resolved-bg: #F5DC8A;
-  --urgency-resolved-border: rgb(138 112 72 / 0.4);
+  --urgency-review: var(--cctv-accent-blue);
+  --urgency-review-bg: var(--info-bg);
+  --urgency-review-border: rgb(91 122 157 / 0.35);
 
-  /* Alias KPI / stats — misma escala */
+  --urgency-resolved: var(--cctv-text-muted);
+  --urgency-resolved-bg: rgb(107 114 128 / 0.12);
+  --urgency-resolved-border: rgb(107 114 128 / 0.3);
+
   --stat-critical: var(--urgency-critical);
   --stat-critical-bg: var(--urgency-critical-bg);
   --stat-pending: var(--urgency-pending);
@@ -97,92 +113,208 @@
   --stat-resolved: var(--urgency-resolved);
   --stat-resolved-bg: var(--urgency-resolved-bg);
 
-  --criticality-baja: #8A7A4A;
-  --criticality-media: var(--spectra-yellow-shade);
-  --criticality-alta: #B54A38;
-  --criticality-critica: #C24033;
+  --criticality-baja: var(--cctv-text-muted);
+  --criticality-media: var(--alert-warning);
+  --criticality-alta: #ff7875;
+  --criticality-critica: var(--alert-critical);
 
-  --status-ok: var(--spectra-yellow-deep);
-  --status-degraded: var(--spectra-yellow-dark);
-  --status-down: #B54A38;
-  --status-connected: #16A34A;
-  --status-connected-bg: #F0FDF4;
-  --status-disconnected: #C24033;
-  --status-disconnected-bg: #FAE8E5;
+  --status-ok: var(--alert-success);
+  --status-degraded: var(--alert-warning);
+  --status-down: var(--alert-critical);
+  --status-connected: var(--alert-success);
+  --status-connected-bg: var(--alert-success-bg);
+  --status-disconnected: var(--alert-critical);
+  --status-disconnected-bg: var(--alert-critical-bg);
 
-  --chart-1: var(--spectra-yellow-dark);
-  --chart-2: var(--spectra-yellow-deep);
-  --chart-3: var(--spectra-yellow-shade);
-  --chart-4: var(--spectra-yellow);
-  --chart-5: var(--spectra-yellow-light);
+  --chart-1: var(--alert-critical);
+  --chart-2: var(--alert-warning);
+  --chart-3: var(--alert-success);
+  --chart-4: var(--cctv-accent-blue);
+  --chart-5: var(--cctv-accent-neutral);
 
-  --radius: 1.25rem;
+  --radius: 0.75rem;
 
-  --sidebar: #FFFFFF;
-  --sidebar-foreground: var(--spectra-yellow-deep);
-  --sidebar-primary: #0A0807;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: var(--spectra-yellow-tint-soft);
-  --sidebar-accent-foreground: #0A0807;
-  --sidebar-border: var(--spectra-yellow-light);
-  --sidebar-ring: var(--spectra-yellow-dark);
+  --sidebar: var(--cctv-bg-surface);
+  --sidebar-foreground: var(--cctv-text-primary);
+  --sidebar-primary: var(--cctv-text-primary);
+  --sidebar-primary-foreground: var(--cctv-bg-base);
+  --sidebar-accent: var(--cctv-bg-muted);
+  --sidebar-accent-foreground: var(--cctv-text-primary);
+  --sidebar-border: var(--cctv-border);
+  --sidebar-ring: var(--cctv-accent-blue);
 
-  --shadow-card: 0 2px 8px rgb(184 120 0 / 0.08);
-  --shadow-card-md: 0 8px 28px rgb(184 120 0 / 0.12);
+  --shadow-card: 0 2px 8px rgb(0 0 0 / 0.35);
+  --shadow-card-md: 0 8px 24px rgb(0 0 0 / 0.45);
   --shadow-soft-sm: var(--shadow-card);
   --shadow-soft-md: var(--shadow-card-md);
-  --shadow-soft-lg: 0 16px 44px rgb(184 120 0 / 0.14);
+  --shadow-soft-lg: 0 16px 40px rgb(0 0 0 / 0.5);
 
   --elevation-1: var(--shadow-card);
   --elevation-2: var(--shadow-card-md);
   --elevation-3: var(--shadow-soft-lg);
-  --elevation-4: 0 24px 48px rgb(184 120 0 / 0.16);
+  --elevation-4: 0 24px 48px rgb(0 0 0 / 0.55);
 }
 
-/* Dark Mode — Spectra Yellow sobre fondo carbón */
-.dark {
-  --background: #141210;
-  --foreground: var(--spectra-yellow-tint);
-  --card: #1A1816;
-  --card-foreground: var(--spectra-yellow-tint-soft);
-  --popover: #1F1C1A;
-  --popover-foreground: var(--spectra-yellow-tint-soft);
-  --primary: var(--spectra-yellow);
-  --primary-foreground: #0A0807;
-  --secondary: #252220;
-  --secondary-foreground: var(--spectra-yellow-light);
-  --muted: #252220;
-  --muted-foreground: #8A7048;
-  --accent: var(--spectra-yellow-dark);
-  --accent-foreground: #0A0807;
-  --destructive: #B54A38;
-  --destructive-foreground: #FFFFFF;
-  --border: #3A3530;
-  --input: #252220;
-  --ring: var(--spectra-yellow);
-  --sidebar: #1A1816;
-  --sidebar-foreground: var(--spectra-yellow-light);
-  --sidebar-primary: var(--spectra-yellow);
-  --sidebar-primary-foreground: #0A0807;
-  --sidebar-accent: #252220;
-  --sidebar-accent-foreground: var(--spectra-yellow-tint);
-  --sidebar-border: #3A3530;
-  --sidebar-ring: var(--spectra-yellow);
-  --stat-critical-bg: rgb(194 64 51 / 0.15);
-  --stat-pending-bg: rgb(247 183 24 / 0.1);
-  --stat-review-bg: rgb(217 144 15 / 0.12);
-  --stat-resolved-bg: rgb(138 122 74 / 0.12);
-  --status-connected: #22C55E;
-  --status-connected-bg: rgb(34 197 94 / 0.12);
-  --status-disconnected: #C24033;
-  --status-disconnected-bg: rgb(194 64 51 / 0.15);
-  --shadow-card: 0 2px 8px rgb(0 0 0 / 0.25);
-  --shadow-card-md: 0 8px 28px rgb(0 0 0 / 0.35);
+/* Consola — explícito (= :root, antigua opción "Claro" sin clase .dark) */
+[data-console-theme='consola'] {
+  color-scheme: dark;
+}
+
+/* Sala de control — más oscuro para muros de monitores */
+[data-console-theme='sala-control'] {
+  color-scheme: dark;
+
+  --cctv-bg-base: #0a0a0a;
+  --cctv-bg-surface: #0f0f0f;
+  --cctv-bg-elevated: #121212;
+  --cctv-bg-muted: #181818;
+  --cctv-bg-panel: #1c1c1c;
+  --cctv-text-primary: #e4e4e7;
+  --cctv-text-secondary: #9ca3af;
+  --cctv-border: #262626;
+  --cctv-border-subtle: #1a1a1a;
+
+  --background: var(--cctv-bg-base);
+  --foreground: var(--cctv-text-primary);
+  --card: var(--cctv-bg-surface);
+  --card-foreground: var(--cctv-text-primary);
+  --popover: var(--cctv-bg-elevated);
+  --popover-foreground: var(--cctv-text-primary);
+  --primary: var(--cctv-text-primary);
+  --primary-foreground: var(--cctv-bg-base);
+  --secondary: var(--cctv-bg-muted);
+  --secondary-foreground: var(--cctv-text-primary);
+  --muted: var(--cctv-bg-muted);
+  --muted-foreground: var(--cctv-text-secondary);
+  --accent: var(--cctv-bg-elevated);
+  --accent-foreground: var(--cctv-text-primary);
+  --border: var(--cctv-border);
+  --input: var(--cctv-bg-muted);
+  --sidebar: var(--cctv-bg-surface);
+  --sidebar-foreground: var(--cctv-text-primary);
+  --sidebar-primary: var(--cctv-text-primary);
+  --sidebar-primary-foreground: var(--cctv-bg-base);
+  --sidebar-accent: var(--cctv-bg-muted);
+  --sidebar-accent-foreground: var(--cctv-text-primary);
+  --sidebar-border: var(--cctv-border);
+}
+
+/* Alto contraste — fondos más claros y bordes marcados */
+[data-console-theme='alto-contraste'] {
+  color-scheme: dark;
+
+  --cctv-bg-base: #1a1a1a;
+  --cctv-bg-surface: #242428;
+  --cctv-bg-elevated: #2a2a30;
+  --cctv-bg-muted: #303038;
+  --cctv-bg-panel: #32323a;
+  --cctv-text-primary: #fafafa;
+  --cctv-text-secondary: #d4d4d8;
+  --cctv-text-muted: #a1a1aa;
+  --cctv-border: #52525b;
+  --cctv-border-subtle: #3f3f46;
+
+  --background: var(--cctv-bg-base);
+  --foreground: var(--cctv-text-primary);
+  --card: var(--cctv-bg-surface);
+  --card-foreground: var(--cctv-text-primary);
+  --popover: var(--cctv-bg-elevated);
+  --popover-foreground: var(--cctv-text-primary);
+  --primary: var(--cctv-text-primary);
+  --secondary: var(--cctv-bg-muted);
+  --secondary-foreground: var(--cctv-text-primary);
+  --muted: var(--cctv-bg-muted);
+  --muted-foreground: var(--cctv-text-secondary);
+  --accent: var(--cctv-bg-elevated);
+  --accent-foreground: var(--cctv-text-primary);
+  --border: var(--cctv-border);
+  --input: var(--cctv-bg-muted);
+  --sidebar: var(--cctv-bg-surface);
+  --sidebar-foreground: var(--cctv-text-primary);
+  --sidebar-accent: var(--cctv-bg-muted);
+  --sidebar-accent-foreground: var(--cctv-text-primary);
+  --sidebar-border: var(--cctv-border);
+}
+
+/* Administración clara — módulos de config / reportes diurnos */
+[data-console-theme='admin-claro'] {
+  color-scheme: light;
+
+  --cctv-bg-base: #f4f4f5;
+  --cctv-bg-surface: #ffffff;
+  --cctv-bg-elevated: #ffffff;
+  --cctv-bg-muted: #f4f4f5;
+  --cctv-bg-panel: #ffffff;
+  --cctv-text-primary: #18181b;
+  --cctv-text-secondary: #52525b;
+  --cctv-text-muted: #71717a;
+  --cctv-border: #e4e4e7;
+  --cctv-border-subtle: #f4f4f5;
+  --cctv-accent-blue: #3b5998;
+
+  --background: var(--cctv-bg-base);
+  --foreground: var(--cctv-text-primary);
+  --card: var(--cctv-bg-surface);
+  --card-foreground: var(--cctv-text-primary);
+  --popover: var(--cctv-bg-elevated);
+  --popover-foreground: var(--cctv-text-primary);
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --secondary: var(--cctv-bg-muted);
+  --secondary-foreground: var(--cctv-text-primary);
+  --muted: var(--cctv-bg-muted);
+  --muted-foreground: var(--cctv-text-secondary);
+  --accent: #e4e4e7;
+  --accent-foreground: var(--cctv-text-primary);
+  --border: var(--cctv-border);
+  --input: #e4e4e7;
+  --ring: var(--cctv-accent-blue);
+  --sidebar: var(--cctv-bg-surface);
+  --sidebar-foreground: var(--cctv-text-primary);
+  --sidebar-primary: #18181b;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: var(--cctv-bg-muted);
+  --sidebar-accent-foreground: var(--cctv-text-primary);
+  --sidebar-border: var(--cctv-border);
+  --sidebar-ring: var(--cctv-accent-blue);
+
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08);
+  --shadow-card-md: 0 4px 16px rgb(0 0 0 / 0.1);
+  --shadow-soft-lg: 0 12px 32px rgb(0 0 0 / 0.12);
+}
+
+/* Compatibilidad shadcn dark: variantes con clase .dark heredan sala / alto contraste */
+.dark:not([data-console-theme='admin-claro']) {
+  --background: var(--cctv-bg-base);
+  --foreground: var(--cctv-text-primary);
+  --card: var(--cctv-bg-surface);
+  --card-foreground: var(--cctv-text-primary);
+  --popover: var(--cctv-bg-elevated);
+  --popover-foreground: var(--cctv-text-primary);
+  --primary: var(--cctv-text-primary);
+  --primary-foreground: var(--cctv-bg-base);
+  --secondary: var(--cctv-bg-muted);
+  --secondary-foreground: var(--cctv-text-primary);
+  --muted: var(--cctv-bg-muted);
+  --muted-foreground: var(--cctv-text-secondary);
+  --accent: var(--cctv-bg-elevated);
+  --accent-foreground: var(--cctv-text-primary);
+  --border: var(--cctv-border);
+  --input: var(--cctv-bg-muted);
+  --ring: var(--cctv-accent-blue);
+  --sidebar: var(--cctv-bg-surface);
+  --sidebar-foreground: var(--cctv-text-primary);
+  --sidebar-primary: var(--cctv-text-primary);
+  --sidebar-primary-foreground: var(--cctv-bg-base);
+  --sidebar-accent: var(--cctv-bg-muted);
+  --sidebar-accent-foreground: var(--cctv-text-primary);
+  --sidebar-border: var(--cctv-border);
+  --sidebar-ring: var(--cctv-accent-blue);
 }
 
 @theme inline {
-  --font-sans: var(--font-plus-jakarta), 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
-  --font-mono: 'Geist Mono', ui-monospace, monospace;
+  --font-sans: var(--font-geist-sans), 'Geist Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -235,6 +367,10 @@
   --color-status-connected-bg: var(--status-connected-bg);
   --color-status-disconnected: var(--status-disconnected);
   --color-status-disconnected-bg: var(--status-disconnected-bg);
+
+  --color-alert-critical: var(--alert-critical);
+  --color-alert-warning: var(--alert-warning);
+  --color-alert-success: var(--alert-success);
 }
 
 @layer base {
@@ -242,17 +378,19 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground antialiased font-medium;
+    @apply bg-background text-foreground antialiased font-sans font-medium;
     font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-weight: 600;
+    @apply font-semibold text-foreground antialiased;
     letter-spacing: -0.02em;
   }
 
   h1 {
-    font-weight: 700;
+    @apply font-bold;
   }
 
   @media (max-width: 639px) {
@@ -320,15 +458,18 @@
   }
 
   .soft-card {
-    @apply rounded-2xl bg-card;
-    border: 1px solid rgb(249 201 62 / 0.65);
+    @apply rounded-xl bg-card;
+    border: 1px solid var(--cctv-border);
     box-shadow: var(--shadow-card);
   }
 
   .soft-panel {
-    @apply rounded-2xl bg-card;
-    border: 1px solid rgb(249 201 62 / 0.7);
-    box-shadow: var(--shadow-card-md);
+    @apply rounded-xl;
+    background: var(--cctv-bg-panel);
+    border: 1px solid rgb(255 255 255 / 0.07);
+    box-shadow:
+      var(--shadow-card-md),
+      inset 0 1px 0 rgb(255 255 255 / 0.04);
   }
 
   .shadow-card-md {
@@ -337,60 +478,128 @@
 
   .dashboard-canvas {
     background:
-      radial-gradient(ellipse 90% 60% at 0% 0%, rgb(247 183 24 / 0.28) 0%, rgb(247 183 24 / 0.12) 55%),
-      radial-gradient(ellipse 80% 50% at 100% 100%, rgb(247 183 24 / 0.22) 0%, rgb(247 183 24 / 0.1) 50%),
-      linear-gradient(145deg, var(--spectra-yellow-surface) 0%, var(--spectra-yellow-tint-soft) 52%, var(--spectra-yellow-light) 100%);
+      radial-gradient(ellipse 80% 50% at 0% 0%, rgb(91 122 157 / 0.06) 0%, transparent 55%),
+      radial-gradient(ellipse 70% 40% at 100% 100%, rgb(91 122 157 / 0.04) 0%, transparent 50%),
+      linear-gradient(180deg, var(--cctv-bg-base) 0%, var(--cctv-bg-surface) 100%);
   }
 
-  .dark .dashboard-canvas {
+  [data-console-theme='sala-control'] .dashboard-canvas {
     background:
-      radial-gradient(ellipse 80% 50% at 10% 0%, rgb(247 183 24 / 0.14) 0%, rgb(247 183 24 / 0.06) 50%),
-      radial-gradient(ellipse 70% 40% at 90% 100%, rgb(217 144 15 / 0.1) 0%, rgb(217 144 15 / 0.04) 50%),
-      linear-gradient(145deg, #141210 0%, #1A1816 50%, #141210 100%);
+      radial-gradient(ellipse 70% 45% at 0% 0%, rgb(91 122 157 / 0.04) 0%, transparent 50%),
+      linear-gradient(180deg, var(--cctv-bg-base) 0%, #0c0c0c 100%);
   }
 
-  /* Tipografia — Crextio / Plus Jakarta Sans */
+  [data-console-theme='alto-contraste'] .dashboard-canvas {
+    background:
+      radial-gradient(ellipse 80% 50% at 0% 0%, rgb(91 122 157 / 0.1) 0%, transparent 55%),
+      linear-gradient(180deg, var(--cctv-bg-base) 0%, var(--cctv-bg-surface) 100%);
+  }
+
+  [data-console-theme='admin-claro'] .dashboard-canvas {
+    background:
+      radial-gradient(ellipse 80% 50% at 0% 0%, rgb(91 122 157 / 0.08) 0%, transparent 55%),
+      linear-gradient(180deg, #f4f4f5 0%, #ffffff 100%);
+  }
+
+  [data-console-theme='admin-claro'] .text-display,
+  [data-console-theme='admin-claro'] .text-section,
+  [data-console-theme='admin-claro'] .text-numeral {
+    @apply text-foreground;
+  }
+
+  [data-console-theme='admin-claro'] .text-body {
+    @apply text-foreground;
+  }
+
+  [data-console-theme='admin-claro'] .text-body-secondary,
+  [data-console-theme='admin-claro'] .text-caption {
+    @apply text-muted-foreground;
+  }
+
+  [data-console-theme='admin-claro'] .soft-panel {
+    border: 1px solid var(--cctv-border);
+    box-shadow: var(--shadow-card-md);
+  }
+
+  .tns-brand-logo {
+    @apply brightness-0 invert;
+  }
+
+  [data-console-theme='admin-claro'] .tns-brand-logo {
+    @apply brightness-100 invert-0;
+  }
+
+  /* Overlays sobre feeds de video — legibilidad absoluta (feeds claros u oscuros) */
+  .video-overlay {
+    @apply bg-zinc-950/60 backdrop-blur-sm;
+  }
+
+  .video-chrome {
+    @apply rounded-md bg-zinc-950/60 px-2 py-1 text-[11px] font-semibold text-zinc-100 antialiased backdrop-blur-sm;
+    text-shadow: 0 1px 3px rgb(0 0 0 / 0.85);
+  }
+
+  .video-chrome-mono {
+    @apply rounded-md bg-zinc-950/60 px-2 py-1 font-mono text-[11px] font-semibold tabular-nums text-zinc-100 antialiased backdrop-blur-sm;
+    text-shadow: 0 1px 3px rgb(0 0 0 / 0.85);
+  }
+
+  .video-chrome-sub {
+    @apply text-zinc-400 font-medium antialiased;
+  }
+
+  /* Alias legacy */
+  .video-label {
+    @apply rounded-md bg-zinc-950/60 px-2 py-1 text-[11px] font-semibold text-zinc-100 antialiased backdrop-blur-sm;
+    text-shadow: 0 1px 3px rgb(0 0 0 / 0.85);
+  }
+
+  /* Datos en vivo — relojes, contadores, timestamps (anti-parpadeo en móvil) */
+  .text-live-data {
+    @apply font-mono tabular-nums antialiased;
+  }
+
+  /* Tipografía CCTV — Geist Sans */
   .text-display {
+    @apply text-zinc-100 font-bold antialiased;
     font-size: 1.75rem;
-    font-weight: 700;
     letter-spacing: -0.02em;
     line-height: 1.2;
-    color: var(--foreground);
   }
 
   .text-section {
+    @apply text-zinc-100 font-semibold antialiased;
     font-size: 1rem;
-    font-weight: 600;
     letter-spacing: -0.02em;
     line-height: 1.4;
-    color: var(--foreground);
   }
 
   .text-body {
+    @apply text-zinc-200 font-medium antialiased;
     font-size: 0.875rem;
-    font-weight: 500;
     line-height: 1.5;
-    color: var(--foreground);
   }
 
   .text-body-secondary {
+    @apply text-zinc-400 font-medium antialiased;
     font-size: 0.875rem;
-    font-weight: 400;
     line-height: 1.5;
-    color: var(--muted-foreground);
   }
 
   .text-caption {
+    @apply text-zinc-400 font-medium antialiased;
     font-size: 0.75rem;
-    font-weight: 400;
     line-height: 1.4;
-    color: var(--muted-foreground);
   }
 
   .text-numeral {
-    font-weight: 700;
+    @apply font-mono font-bold tabular-nums antialiased text-zinc-100;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
+  }
+
+  .text-ui-label {
+    @apply text-sm font-semibold text-zinc-200 antialiased;
   }
 
   /* Icon boxes — fondo 10% del color del icono */
@@ -399,18 +608,18 @@
   }
 
   .icon-box-primary {
-    background: rgb(10 8 7 / 0.08);
-    color: var(--crextio-charcoal);
+    background: rgb(238 238 238 / 0.08);
+    color: var(--cctv-text-primary);
   }
 
   .icon-box-accent {
-    background: rgb(247 183 24 / 0.38);
-    color: var(--spectra-yellow-dark);
+    background: rgb(91 122 157 / 0.18);
+    color: var(--cctv-accent-blue);
   }
 
   .icon-box-neutral {
     background: var(--stat-review-bg);
-    color: var(--crextio-brown);
+    color: var(--cctv-text-secondary);
   }
 
   .icon-box-success {
@@ -557,6 +766,46 @@
     @apply grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4 lg:gap-4;
   }
 
+  .incoming-alerts-stat-group {
+    @apply flex flex-col gap-2 sm:gap-3 rounded-xl sm:rounded-2xl border p-3 sm:p-4;
+    border-color: color-mix(in srgb, var(--urgency-pending) 28%, var(--border) 72%);
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--urgency-critical-bg) 55%, var(--card) 45%) 0%,
+      var(--card) 42%,
+      color-mix(in srgb, var(--urgency-pending-bg) 50%, var(--card) 50%) 100%
+    );
+    box-shadow: var(--shadow-card, 0 1px 2px rgb(0 0 0 / 0.04));
+  }
+
+  .incoming-alerts-stat-group--active {
+    @apply ring-2 ring-[var(--ring)]/25;
+  }
+
+  .incoming-alerts-stat-group__header {
+    @apply flex items-start justify-between gap-2 sm:gap-3 pb-0.5 sm:pb-1;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  }
+
+  .incoming-alerts-stat-group__title {
+    @apply text-[11px] sm:text-xs font-bold uppercase tracking-wide text-foreground;
+  }
+
+  .incoming-alerts-stat-group__subtitle {
+    @apply mt-0.5 text-[10px] sm:text-xs leading-snug text-muted-foreground;
+  }
+
+  .incoming-alerts-stat-group__total {
+    @apply shrink-0 rounded-lg px-2 py-1 text-[10px] sm:text-xs font-semibold tabular-nums;
+    background: color-mix(in srgb, var(--urgency-pending-bg) 70%, var(--card) 30%);
+    color: var(--urgency-pending);
+    border: 1px solid color-mix(in srgb, var(--urgency-pending) 35%, transparent);
+  }
+
+  .incoming-alerts-stat-group__cards {
+    @apply grid grid-cols-2 gap-2 sm:gap-3;
+  }
+
   .mobile-scroll-x {
     @apply -mx-3 px-3 overflow-x-auto sm:mx-0 sm:px-0 sm:overflow-visible;
     -ms-overflow-style: none;
@@ -669,23 +918,23 @@
   animation: sheet-up 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Scrollbar personalizado para dark mode - subtle */
-.dark ::-webkit-scrollbar {
+/* Scrollbar — sutil, acorde a consola CCTV */
+::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-.dark ::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: oklch(0.3 0.01 260);
+::-webkit-scrollbar-thumb {
+  background: var(--cctv-accent-neutral);
   border-radius: 3px;
 }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.4 0.01 260);
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cctv-text-muted);
 }
 
 /* Safe area for mobile devices */
@@ -695,4 +944,9 @@
 
 .safe-top {
   padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Reduce layout shift when Radix locks body scroll (react-remove-scroll) */
+html {
+  scrollbar-gutter: stable;
 }
