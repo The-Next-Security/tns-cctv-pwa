@@ -4,6 +4,7 @@ import { useState, useEffect, ReactNode, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthContext, getDefaultRoute } from '@/lib/auth'
 import { persistDemoUser, restoreDemoUserFromStorage } from '@/lib/demo-users'
+import { DEMO_ALERT_POPUP_KEY } from '@/lib/reset-demo'
 import type { User } from '@/lib/types'
 
 interface AuthProviderProps {
@@ -56,7 +57,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     localStorage.removeItem('tns_user_role')
     localStorage.removeItem('tns_user_id')
     localStorage.removeItem('tns_user_name')
-    sessionStorage.removeItem('tns_demo_alert_popup')
+    sessionStorage.removeItem(DEMO_ALERT_POPUP_KEY)
     setUser(null)
     router.push('/login')
   }, [router])
