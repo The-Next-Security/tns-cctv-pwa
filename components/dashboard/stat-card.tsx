@@ -60,7 +60,7 @@ export function StatCard({
           </p>
           <p
             className={cn(
-              'mt-0.5 sm:mt-1 text-2xl sm:text-display text-numeral tabular-nums transition-transform duration-200 sm:group-hover:scale-[1.02] origin-left',
+              'mt-0.5 sm:mt-1 text-2xl sm:text-display text-numeral tabular-nums antialiased transition-transform duration-200 sm:group-hover:scale-[1.02] origin-left',
               styles.text
             )}
           >

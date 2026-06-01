@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { CRITICALITY_LABELS, getCriticalityBadgeClass } from '@/lib/constants'
 import { countAlertsToday, groupAlertsByHourSlot } from '@/lib/alert-stats'
 import type { Alert } from '@/lib/types'
+import { getEventLabel } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface OperacionContextPanelProps {
@@ -53,10 +54,10 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
           {recentActivity.map(alert => (
             <li key={alert.id} className="py-3 first:pt-0 last:pb-0">
               <p className="text-body font-medium line-clamp-1">
-                {alert.description ?? alert.event_code}
+                {alert.description ?? getEventLabel(alert.event_code)}
               </p>
               <div className="flex items-center justify-between mt-1 gap-2">
-                <span className="text-caption">
+                <span className="text-caption text-live-data">
                   {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true, locale: es })}
                 </span>
                 <span
@@ -92,7 +93,7 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
                     style={{ width: `${Math.min(100, (count / alerts.length) * 100)}%` }}
                   />
                 </div>
-                <span className="text-caption font-semibold tabular-nums w-4 text-right">{count}</span>
+                <span className="text-caption text-live-data font-semibold w-4 text-right">{count}</span>
               </div>
             </li>
           ))}
@@ -141,7 +142,7 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
             </div>
             <h3 className="text-section text-sm sm:text-base truncate">Alertas hoy</h3>
           </div>
-          <span className="text-caption font-semibold tabular-nums text-[var(--crextio-gold-strong)] shrink-0">
+          <span className="text-live-data text-caption font-semibold text-[var(--cctv-accent-blue)] shrink-0">
             {alertsToday}
           </span>
         </div>
@@ -157,8 +158,8 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
               >
                 <span
                   className={cn(
-                    'text-[10px] font-semibold tabular-nums leading-none transition-opacity',
-                    bar.value > 0 ? 'text-[var(--crextio-gold-strong)] opacity-100' : 'text-transparent'
+                    'text-live-data text-[10px] font-semibold leading-none transition-opacity',
+                    bar.value > 0 ? 'text-[var(--cctv-accent-blue)] opacity-100' : 'text-transparent'
                   )}
                 >
                   {bar.value}
@@ -177,7 +178,7 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
                     }}
                   />
                 </div>
-                <span className="text-[9px] text-muted-foreground tabular-nums">{bar.label}</span>
+                <span className="text-[9px] text-zinc-400 text-live-data font-medium">{bar.label}</span>
               </div>
             )
           })}
