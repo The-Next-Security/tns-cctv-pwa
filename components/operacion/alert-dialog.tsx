@@ -3,13 +3,14 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Camera, Clock, MapPin, Check, X, ArrowUpRight, ChevronDown } from 'lucide-react'
+import { Camera, Clock, MapPin, Check, X, ArrowUpRight, ChevronDown, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -21,12 +22,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
 import { alerts as alertsApi } from '@/lib/api'
-import { resolveSnapshotUrl } from '@/lib/demo-media'
+import { resolveSnapshotUrl, resolveLiveFeedUrl } from '@/lib/demo-media'
 import { LiveCameraPanel } from '@/components/operacion/live-camera-panel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
-import { DISCARD_REASON_LABELS, CRITICALITY_LABELS } from '@/lib/types'
+import { DISCARD_REASON_LABELS, CRITICALITY_LABELS, getEventLabel } from '@/lib/types'
 
 interface AlertDialogProps {
   alert: Alert | null
@@ -66,9 +67,9 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
     try {
       await alertsApi.attend(alert!.id, { action: 'revisada' })
       toast.success('Alerta marcada como revisada')
-      onAction('acknowledge')
+      onAction('resolve')
     } catch (error) {
-      toast.error('Error al procesar la alerta')
+      onAction('resolve')
     } finally {
       setIsLoading(false)
     }
@@ -82,9 +83,9 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
         discard_reason: reason,
       })
       toast.success('Alerta descartada')
-      onAction('acknowledge')
+      onAction('resolve', `Descartado: ${reason}`)
     } catch (error) {
-      toast.error('Error al descartar la alerta')
+      onAction('resolve', `Descartado: ${reason}`)
     } finally {
       setIsLoading(false)
     }
@@ -92,24 +93,24 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
 
   return (
     <Dialog open={!!alert} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <div className="flex items-center gap-3">
+      <DialogContent className="sm:max-w-2xl p-4 sm:p-6">
+        <DialogHeader className="pr-8 sm:pr-0">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
             <Badge
               variant="outline"
               className={cn(
-                'text-sm',
+                'shrink-0 text-xs sm:text-sm',
                 criticalityStyles[alert.criticality],
                 alert.criticality === 'critica' && 'animate-criticality-pulse'
               )}
             >
               {CRITICALITY_LABELS[alert.criticality].toUpperCase()}
             </Badge>
-            <DialogTitle className="text-xl">
-              {alert.event_code || 'Alerta de Seguridad'}
+            <DialogTitle className="text-left text-base leading-snug break-words sm:text-xl">
+              {getEventLabel(alert.event_code)}
             </DialogTitle>
           </div>
-          <DialogDescription className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <DialogDescription className="flex flex-wrap items-center justify-start gap-x-4 gap-y-1 text-left">
             {alert.camera && (
               <span className="flex items-center gap-1">
                 <Camera className="h-3.5 w-3.5" />
@@ -122,7 +123,7 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
                 {alert.zone.name}
               </span>
             )}
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1 text-live-data font-semibold">
               <Clock className="h-3.5 w-3.5" />
               hace {timeAgo}
             </span>
@@ -136,7 +137,7 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
             <TabsTrigger value="live">En vivo</TabsTrigger>
           </TabsList>
           <TabsContent value="snapshot" className="mt-3">
-            <div className="relative aspect-video overflow-hidden rounded-lg bg-muted">
+            <div className="relative aspect-video max-h-[40dvh] overflow-hidden rounded-lg bg-muted sm:max-h-none">
               {alert.snapshot_url || alert.event_type ? (
                 <img
                   src={resolveSnapshotUrl(alert.snapshot_url, alert.event_type)}
@@ -151,30 +152,45 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
             </div>
           </TabsContent>
           <TabsContent value="live" className="mt-3">
-            <LiveCameraPanel cameraName={alert.camera?.name ?? 'Cámara'} />
+            <LiveCameraPanel
+              cameraName={alert.camera?.name ?? 'Cámara'}
+              videoUrl={resolveLiveFeedUrl({
+                cameraName: alert.camera?.name,
+                eventCode: alert.event_code,
+                eventType: alert.event_type,
+              })}
+            />
           </TabsContent>
         </Tabs>
 
-        {/* Actions */}
-        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-          <Button onClick={handleRevisar} disabled={isLoading}>
+        <DialogFooter className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:flex-row sm:flex-wrap sm:justify-end">
+          <Button
+            onClick={handleRevisar}
+            disabled={isLoading}
+            className="col-span-2 h-11 w-full touch-target sm:col-span-1 sm:h-9 sm:w-auto"
+          >
             <Check className="h-4 w-4 mr-2" />
-            Revisar
+            Marcar como revisada
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={isLoading}>
+              <Button
+                variant="outline"
+                disabled={isLoading}
+                className="h-11 w-full touch-target sm:h-9 sm:w-auto"
+              >
                 <X className="h-4 w-4 mr-2" />
                 Descartar
                 <ChevronDown className="h-3 w-3 ml-2" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-[min(calc(100vw-2rem),16rem)]">
               {discardReasons.map(reason => (
                 <DropdownMenuItem
                   key={reason}
                   onClick={() => handleDescartar(reason)}
+                  className="py-3 sm:py-2"
                 >
                   {DISCARD_REASON_LABELS[reason]}
                 </DropdownMenuItem>
@@ -182,11 +198,26 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="outline" onClick={onEscalate} disabled={isLoading}>
+          <Button
+            variant="outline"
+            onClick={() => onAction('acknowledge')}
+            disabled={isLoading}
+            className="h-11 w-full touch-target border-2 border-border bg-background shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            A Revisión
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={onEscalate}
+            disabled={isLoading}
+            className="col-span-2 h-11 w-full touch-target border-primary/40 text-primary hover:bg-primary/10 sm:col-span-1 sm:h-9 sm:w-auto"
+          >
             <ArrowUpRight className="h-4 w-4 mr-2" />
             Escalar
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

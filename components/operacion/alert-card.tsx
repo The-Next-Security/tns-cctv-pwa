@@ -26,7 +26,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
-import { DISCARD_REASON_LABELS } from '@/lib/types'
+import { DISCARD_REASON_LABELS, getEventLabel, getAlertClass } from '@/lib/types'
 import { CRITICALITY_STYLES, CRITICALITY_LABELS } from '@/lib/constants'
 import { UrgencyBadge } from '@/components/ui/urgency-badge'
 
@@ -129,6 +129,8 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
 
   const isPending = alert.status === 'pendiente'
   const isInReview = alert.status === 'en_revision'
+  const alertClass = getAlertClass(alert.criticality)
+  const isCriticalClass = alertClass === 'critica'
 
   return (
     <>
@@ -141,21 +143,32 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
       >
         <CardContent className="p-3 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
-            {/* Criticality indicator */}
+            {/* Class indicator */}
             <div className={cn(
-              'flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-lg sm:rounded-xl text-[10px] font-bold uppercase tracking-wide',
-              CRITICALITY_STYLES[alert.criticality].bgSubtle,
-              CRITICALITY_STYLES[alert.criticality].text,
-              alert.criticality === 'critica' && isPending && 'badge-urgency-critical-pulse ring-1 ring-[var(--urgency-critical-border)]'
+              'flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 flex-col items-center justify-center rounded-lg sm:rounded-xl text-[9px] font-bold uppercase tracking-wide leading-tight gap-0.5',
+              isCriticalClass
+                ? CRITICALITY_STYLES[alert.criticality].bgSubtle
+                : 'bg-muted/60',
+              isCriticalClass
+                ? CRITICALITY_STYLES[alert.criticality].text
+                : 'text-muted-foreground',
+              isCriticalClass && isPending && 'badge-urgency-critical-pulse ring-1 ring-[var(--urgency-critical-border)]'
             )}>
-              {alert.criticality === 'critica' ? 'CRÍ' : CRITICALITY_LABELS[alert.criticality].slice(0, 3)}
+              {isCriticalClass ? (
+                <span>{alert.criticality === 'critica' ? 'CRÍ' : 'ALT'}</span>
+              ) : (
+                <>
+                  <span>BP</span>
+                  <span className="text-[7px] opacity-70">{CRITICALITY_LABELS[alert.criticality].slice(0, 3)}</span>
+                </>
+              )}
             </div>
 
             {/* Content */}
             <div className="flex-1 min-w-0 space-y-1.5 sm:space-y-2">
               <div>
                 <h3 className="font-medium text-sm sm:text-base leading-snug line-clamp-2">
-                  {alert.description || alert.event_code || 'Evento de seguridad'}
+                  {alert.description || getEventLabel(alert.event_code)}
                 </h3>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs sm:text-sm text-muted-foreground mt-1">
                   {alert.camera && (
@@ -170,7 +183,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
                       {alert.zone.name}
                     </span>
                   )}
-                  <span className="flex items-center gap-1 font-mono text-xs">
+                  <span className="flex items-center gap-1 text-live-data text-xs">
                     <Clock className="h-3.5 w-3.5" />
                     <span className={cn(
                       isPending && alert.criticality === 'critica' && 'text-[var(--urgency-critical)] font-semibold',
@@ -184,7 +197,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
 
               {/* Plate if available */}
               {alert.plate && (
-                <Badge variant="secondary" className="font-mono">
+                <Badge variant="secondary" className="font-mono tabular-nums antialiased font-semibold">
                   Patente: {alert.plate}
                 </Badge>
               )}
@@ -205,8 +218,8 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
               )}
 
               {isPending && (
-                <UrgencyBadge level="pending" className="text-xs">
-                  Pendiente de atención
+                <UrgencyBadge level={isCriticalClass ? 'critical' : 'pending'} className="text-xs" pulse={isCriticalClass}>
+                  {isCriticalClass ? 'Crítica — atención inmediata' : 'Baja prioridad — pendiente'}
                 </UrgencyBadge>
               )}
             </div>
@@ -260,7 +273,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
                       className="h-10 sm:h-9 bg-primary hover:bg-primary/90 text-primary-foreground touch-target rounded-xl shadow-soft-sm"
                     >
                       <Check className="h-4 w-4 mr-1" />
-                      Resolver
+                      Resuelta
                     </Button>
 
                     <Button

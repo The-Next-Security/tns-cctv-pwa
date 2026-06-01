@@ -21,9 +21,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { LiveCameraPanel } from '@/components/operacion/live-camera-panel'
-import { resolveSnapshotUrl } from '@/lib/demo-media'
+import { resolveSnapshotUrl, resolveLiveFeedUrl } from '@/lib/demo-media'
 import { cn } from '@/lib/utils'
 import type { Alert } from '@/lib/types'
+import { getEventLabel } from '@/lib/types'
 import { CRITICALITY_STYLES, DISCARD_REASONS } from '@/lib/constants'
 
 interface AlertPopupProps {
@@ -53,13 +54,13 @@ export function AlertPopup({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
+          <DialogTitle className="flex items-center gap-2 pr-8">
             <Badge
               variant="outline"
               className={cn(
-                'font-semibold uppercase tracking-wide',
+                'shrink-0 font-semibold uppercase tracking-wide text-xs',
                 styles.bgSubtle,
                 styles.text,
                 alert.criticality === 'critica' && 'animate-pulse'
@@ -67,19 +68,23 @@ export function AlertPopup({
             >
               {alert.criticality}
             </Badge>
-            <span className="flex-1">{alert.description || 'Alerta de seguridad'}</span>
+            <span className="flex-1 leading-snug text-sm sm:text-base">
+              {alert.description || getEventLabel(alert.event_code)}
+            </span>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2 space-y-3">
+        {/* Layout: columna única en móvil, 2 col en sm+ */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
+          {/* Columna principal: imagen + metadatos */}
+          <div className="flex-1 min-w-0 space-y-3">
             <Tabs defaultValue="snapshot">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
                 <TabsTrigger value="live">En vivo</TabsTrigger>
               </TabsList>
               <TabsContent value="snapshot" className="mt-3">
-                <div className="aspect-video overflow-hidden rounded-lg border border-border bg-muted">
+                <div className="aspect-video max-h-[40dvh] overflow-hidden rounded-lg border border-border bg-muted sm:max-h-none">
                   {!imageError ? (
                     <img
                       src={snapshotSrc}
@@ -96,33 +101,41 @@ export function AlertPopup({
                 </div>
               </TabsContent>
               <TabsContent value="live" className="mt-3">
-                <LiveCameraPanel cameraName={alert.camera?.name ?? 'Cámara'} />
+                <LiveCameraPanel
+                  cameraName={alert.camera?.name ?? 'Cámara'}
+                  videoUrl={resolveLiveFeedUrl({
+                    cameraName: alert.camera?.name,
+                    eventCode: alert.event_code,
+                    eventType: alert.event_type,
+                  })}
+                />
               </TabsContent>
             </Tabs>
 
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <p className="text-muted-foreground">Zona</p>
+                <p className="text-muted-foreground text-xs">Zona</p>
                 <p className="font-medium">{alert.zone?.name || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Cámara</p>
+                <p className="text-muted-foreground text-xs">Cámara</p>
                 <p className="font-medium">{alert.camera?.name || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Hora</p>
-                <p className="font-medium font-mono">
+                <p className="text-muted-foreground text-xs">Hora</p>
+                <p className="text-live-data font-semibold text-zinc-200">
                   {format(new Date(alert.timestamp), 'HH:mm:ss', { locale: es })}
                 </p>
               </div>
               <div>
-                <p className="text-muted-foreground">Regla</p>
-                <p className="font-medium text-xs truncate">{alert.observation || alert.event_code || 'N/A'}</p>
+                <p className="text-muted-foreground text-xs">Regla</p>
+                <p className="font-medium text-xs truncate">{alert.observation || getEventLabel(alert.event_code)}</p>
               </div>
             </div>
           </div>
 
-          <div className="space-y-4">
+          {/* Panel lateral: oculto en móvil, visible desde sm */}
+          <div className="hidden sm:flex sm:w-52 sm:shrink-0 sm:flex-col sm:gap-4">
             <div className="space-y-2 rounded-lg border border-border p-3">
               <h4 className="text-sm font-medium">Alertas recientes (cámara)</h4>
               {recentSameCamera.length > 0 ? (
@@ -170,11 +183,11 @@ export function AlertPopup({
           </div>
         </div>
 
-        <DialogFooter className="flex-col gap-2 sm:flex-col">
+        <DialogFooter className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:flex-row sm:justify-end">
           <Button
-            className="w-full"
+            className="col-span-2 h-11 w-full touch-target sm:col-span-1 sm:h-9 sm:w-auto"
             onClick={() => {
-              onAction(alert.id, 'acknowledge')
+              onAction(alert.id, 'resolve')
               onOpenChange(false)
             }}
           >
@@ -183,11 +196,11 @@ export function AlertPopup({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="h-11 w-full touch-target sm:h-9 sm:w-auto">
                 ✕ Descartar ▼
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[320px]">
+            <DropdownMenuContent align="end" className="w-[min(calc(100vw-2rem),20rem)]">
               {DISCARD_REASONS.map(reason => (
                 <DropdownMenuItem
                   key={reason.value}
@@ -195,9 +208,9 @@ export function AlertPopup({
                     onAction(alert.id, 'discard', reason.value)
                     onOpenChange(false)
                   }}
-                  className="cursor-pointer"
+                  className="cursor-pointer py-3 sm:py-2"
                 >
-                  <AlertTriangle className="mr-2 h-4 w-4" />
+                  <AlertTriangle className="mr-2 h-4 w-4 shrink-0" />
                   <span>{reason.label}</span>
                 </DropdownMenuItem>
               ))}
@@ -205,14 +218,14 @@ export function AlertPopup({
           </DropdownMenu>
 
           <Button
-            variant="secondary"
-            className="w-full"
+            variant="outline"
+            className="h-11 w-full touch-target border-2 border-border bg-background shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
             onClick={() => {
-              onAction(alert.id, 'escalate')
+              onAction(alert.id, 'acknowledge')
               onOpenChange(false)
             }}
           >
-            ⚠ Escalar a Responsable
+            A Revisión
           </Button>
         </DialogFooter>
       </DialogContent>

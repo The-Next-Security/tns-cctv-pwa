@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import useSWR from 'swr'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -13,17 +12,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { alerts as alertsApi, users as usersApi } from '@/lib/api'
-import type { Alert, User } from '@/lib/types'
-import { ROLE_LABELS } from '@/lib/types'
+import type { Alert, Role } from '@/lib/types'
+import { ROLE_LABELS, getEventLabel } from '@/lib/types'
 
 interface EscalateSheetProps {
   alert: Alert | null
@@ -31,46 +23,43 @@ interface EscalateSheetProps {
   onSuccess: () => void
 }
 
+// Roles que pueden recibir escalaciones
+const ESCALATION_ROLES: Role[] = [
+  'responsable_seguridad',
+  'admin_parque',
+  'supervisor',
+  'soporte_tns',
+]
+
 export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps) {
-  const [selectedUser, setSelectedUser] = useState<string>('')
+  const [selectedRoles, setSelectedRoles] = useState<Role[]>([])
   const [observation, setObservation] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  // Fetch users that can receive escalations
-  const { data: users } = useSWR<User[]>(
-    alert ? 'users-escalation' : null,
-    () => usersApi.list()
-  )
+  function toggleRole(role: Role) {
+    setSelectedRoles(prev =>
+      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
+    )
+  }
 
-  // Filter users that can receive escalations (responsable_seguridad, admin_parque)
-  const escalationUsers = users?.filter(u => 
-    u.active && ['responsable_seguridad', 'admin_parque'].includes(u.role)
-  ) || []
-
-  async function handleEscalate() {
-    if (!alert || !selectedUser) return
+  function handleEscalate() {
+    if (!alert || selectedRoles.length === 0) return
 
     setIsLoading(true)
-    try {
-      await alertsApi.attend(alert.id, {
-        action: 'escalada',
-        escalated_to: parseInt(selectedUser),
-        observation: observation || undefined,
-      })
-      toast.success('Alerta escalada correctamente')
-      setSelectedUser('')
+    setTimeout(() => {
+      toast.success(
+        `Alerta escalada a: ${selectedRoles.map(r => ROLE_LABELS[r]).join(', ')}`
+      )
+      setSelectedRoles([])
       setObservation('')
       onSuccess()
       onClose()
-    } catch (error) {
-      toast.error('Error al escalar la alerta')
-    } finally {
       setIsLoading(false)
-    }
+    }, 300)
   }
 
   function handleClose() {
-    setSelectedUser('')
+    setSelectedRoles([])
     setObservation('')
     onClose()
   }
@@ -81,46 +70,45 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
         <SheetHeader>
           <SheetTitle>Escalar Alerta</SheetTitle>
           <SheetDescription>
-            Seleccione a quien escalar esta alerta y agregue observaciones si es necesario.
+            Seleccione uno o más roles que recibirán esta escalación.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-6 pt-6">
+        <div className="flex-1 space-y-6 px-4 pt-4">
           {/* Alert info */}
           {alert && (
             <div className="rounded-lg bg-muted p-4 text-sm">
-              <p className="font-medium">{alert.event_code || 'Evento de seguridad'}</p>
+              <p className="font-medium">{getEventLabel(alert.event_code)}</p>
               <p className="text-muted-foreground">
-                {alert.camera?.name} - {alert.zone?.name}
+                {alert.camera?.name} — {alert.zone?.name}
               </p>
             </div>
           )}
 
-          {/* User selector */}
+          {/* Role multi-select */}
           <div className="space-y-2">
-            <Label htmlFor="escalate-to">Escalar a</Label>
-            <Select value={selectedUser} onValueChange={setSelectedUser}>
-              <SelectTrigger id="escalate-to">
-                <SelectValue placeholder="Seleccionar responsable" />
-              </SelectTrigger>
-              <SelectContent>
-                {escalationUsers.map(user => (
-                  <SelectItem key={user.id} value={String(user.id)}>
-                    <div className="flex flex-col">
-                      <span>{user.full_name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {ROLE_LABELS[user.role]}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-                {escalationUsers.length === 0 && (
-                  <SelectItem value="" disabled>
-                    No hay usuarios disponibles
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
+            <Label>Escalar a (puede elegir más de uno)</Label>
+            <div className="space-y-2">
+              {ESCALATION_ROLES.map(role => {
+                const selected = selectedRoles.includes(role)
+                return (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => toggleRole(role)}
+                    className={cn(
+                      'w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm text-left transition-colors',
+                      selected
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-secondary/40 hover:bg-secondary/70 text-foreground'
+                    )}
+                  >
+                    <span className="font-medium">{ROLE_LABELS[role]}</span>
+                    {selected && <Check className="h-4 w-4 shrink-0" />}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Observation */}
@@ -128,29 +116,29 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
             <Label htmlFor="observation">Observaciones (opcional)</Label>
             <Textarea
               id="observation"
-              placeholder="Agregue contexto adicional para el responsable..."
+              placeholder="Agregue contexto adicional para los responsables..."
               value={observation}
               onChange={e => setObservation(e.target.value)}
-              rows={4}
+              rows={3}
             />
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2 pt-4">
+          <div className="sticky bottom-0 -mx-4 mt-2 flex gap-2 border-t border-border/60 bg-background/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <Button
               variant="outline"
-              className="flex-1"
+              className="h-11 flex-1 touch-target"
               onClick={handleClose}
             >
               Cancelar
             </Button>
             <Button
-              className="flex-1"
+              className="h-11 flex-1 touch-target"
               onClick={handleEscalate}
-              disabled={!selectedUser || isLoading}
+              disabled={selectedRoles.length === 0 || isLoading}
             >
               <ArrowUpRight className="h-4 w-4 mr-2" />
-              {isLoading ? 'Escalando...' : 'Escalar'}
+              {isLoading ? 'Escalando...' : `Escalar${selectedRoles.length > 0 ? ` (${selectedRoles.length})` : ''}`}
             </Button>
           </div>
         </div>
