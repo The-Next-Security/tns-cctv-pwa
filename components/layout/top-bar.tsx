@@ -1,9 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { LogOut, User, Sun, Moon, Monitor } from 'lucide-react'
+import { LogOut, User, Monitor, Moon, Contrast, Sun, RotateCcw, Check } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { setConsoleThemeManual } from '@/components/layout/console-theme-applier'
+import {
+  CONSOLE_THEME_IDS,
+  CONSOLE_THEMES,
+  DEFAULT_CONSOLE_THEME,
+  isConsoleThemeId,
+  type ConsoleThemeId,
+} from '@/lib/console-themes'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -23,6 +31,8 @@ import { SystemHealthIndicator } from './system-health-indicator'
 import { BrandLogo } from '@/components/brand/brand-logo'
 import { SidebarTrigger } from './app-sidebar'
 import { cn } from '@/lib/utils'
+import { resetDemoState } from '@/lib/reset-demo'
+import { toast } from 'sonner'
 
 interface TopBarProps {
   onMobileMenuClick: () => void
@@ -55,6 +65,23 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
     router.push('/login')
   }
 
+  function handleResetDemo() {
+    toast.success('Demo reiniciada', {
+      description: 'Alertas, zonas, cámaras y expedientes vuelven a los datos de ejemplo.',
+    })
+    window.setTimeout(() => resetDemoState(), 120)
+  }
+
+  const activeTheme: ConsoleThemeId =
+    mounted && isConsoleThemeId(theme ?? '') ? theme : DEFAULT_CONSOLE_THEME
+
+  const themeIcons: Record<ConsoleThemeId, ReactNode> = {
+    consola: <Monitor className="h-5 w-5" />,
+    'sala-control': <Moon className="h-5 w-5" />,
+    'alto-contraste': <Contrast className="h-5 w-5" />,
+    'admin-claro': <Sun className="h-5 w-5" />,
+  }
+
   return (
     <header
         className={cn(
@@ -80,34 +107,39 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        {/* Theme toggle — desktop/tablet */}
+        {/* Presets de consola — desktop/tablet */}
         {mounted && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="hidden sm:inline-flex rounded-xl touch-target h-9 w-9">
-                {theme === 'dark' ? (
-                  <Moon className="h-5 w-5" />
-                ) : theme === 'light' ? (
-                  <Sun className="h-5 w-5" />
-                ) : (
-                  <Monitor className="h-5 w-5" />
-                )}
-                <span className="sr-only">Cambiar tema</span>
+                {themeIcons[activeTheme]}
+                <span className="sr-only">Cambiar apariencia de consola</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="glass-strong">
-              <DropdownMenuItem onClick={() => setTheme('light')} className="rounded-lg">
-                <Sun className="mr-2 h-4 w-4" />
-                Claro
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme('dark')} className="rounded-lg">
-                <Moon className="mr-2 h-4 w-4" />
-                Oscuro
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme('system')} className="rounded-lg">
-                <Monitor className="mr-2 h-4 w-4" />
-                Sistema
-              </DropdownMenuItem>
+            <DropdownMenuContent align="end" className="glass-strong w-64">
+              <DropdownMenuLabel className="text-xs text-muted-foreground font-medium">
+                Apariencia de consola
+              </DropdownMenuLabel>
+              {CONSOLE_THEME_IDS.map(themeId => {
+                const preset = CONSOLE_THEMES[themeId]
+                const isActive = activeTheme === themeId
+                return (
+                  <DropdownMenuItem
+                    key={themeId}
+                    onClick={() => setConsoleThemeManual(themeId, setTheme)}
+                    className="rounded-lg flex flex-col items-start gap-0.5 py-2.5"
+                  >
+                    <span className="flex w-full items-center gap-2 font-medium">
+                      {themeIcons[themeId]}
+                      <span className="flex-1">{preset.label}</span>
+                      {isActive && <Check className="h-4 w-4 text-[var(--cctv-accent-blue)]" />}
+                    </span>
+                    <span className="pl-7 text-xs text-muted-foreground font-normal leading-snug">
+                      {preset.description}
+                    </span>
+                  </DropdownMenuItem>
+                )
+              })}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -123,8 +155,8 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden flex-col items-start text-left md:flex">
-                  <span className="text-sm font-medium">{user.full_name}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-sm font-medium text-zinc-200 antialiased">{user.full_name}</span>
+                  <span className="text-xs text-zinc-400 font-medium antialiased">
                     {ROLE_LABELS[user.role]}
                   </span>
                 </div>
@@ -139,6 +171,11 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
                   </span>
                 </div>
               </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleResetDemo} className="rounded-lg">
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reiniciar demo
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="rounded-lg text-destructive focus:text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />

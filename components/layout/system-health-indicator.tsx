@@ -85,7 +85,7 @@ export function SystemHealthIndicator() {
                 getStatusColor(status)
               )}
             />
-            <span className="text-sm text-muted-foreground hidden sm:inline">
+            <span className="text-sm font-medium text-zinc-400 hidden sm:inline antialiased">
               {getStatusLabel(status)}
             </span>
           </button>
@@ -97,7 +97,7 @@ export function SystemHealthIndicator() {
               <div className="space-y-1">
                 <p>Base de datos: <span className={cn(systemHealth.db === 'ok' ? 'text-status-ok' : 'text-status-down')}>{systemHealth.db}</span></p>
                 <p>Redis: <span className={cn(systemHealth.redis === 'ok' ? 'text-status-ok' : 'text-status-down')}>{systemHealth.redis}</span></p>
-                <p>Cola: {systemHealth.queue_depth} eventos</p>
+                <p>Cola: <span className="text-live-data font-semibold text-zinc-200">{systemHealth.queue_depth}</span> eventos</p>
               </div>
             )}
             {nvrHealth.length > 0 && (
@@ -107,6 +107,7 @@ export function SystemHealthIndicator() {
                   <p key={nvr.id} className="flex justify-between">
                     <span>{nvr.code}</span>
                     <span className={cn(
+                      'text-live-data font-semibold',
                       nvr.status === 'ok' ? 'text-status-ok' : 
                       nvr.status === 'degraded' ? 'text-status-degraded' : 
                       'text-status-down'

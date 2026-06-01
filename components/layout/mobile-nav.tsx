@@ -78,8 +78,8 @@ export function MobileNav() {
                 'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 transition-all duration-200',
                 'min-h-[44px] active:scale-95',
                 active
-                  ? 'text-primary bg-primary/10'
-                  : 'text-muted-foreground hover:text-foreground'
+                  ? 'text-zinc-100 bg-primary/10'
+                  : 'text-zinc-400 hover:text-zinc-200'
               )}
             >
               <item.icon
@@ -88,7 +88,7 @@ export function MobileNav() {
                   active && 'scale-105'
                 )}
               />
-              <span className="max-w-full truncate px-0.5 text-[10px] font-semibold leading-tight">
+              <span className="max-w-full truncate px-0.5 text-[10px] font-semibold leading-tight antialiased">
                 {item.label}
               </span>
             </Link>
