@@ -181,19 +181,19 @@ export default function ExpedientesPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-auto">
+            <div className="overflow-x-auto -mx-1 px-1">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Caso</TableHead>
                     <TableHead>Estado</TableHead>
-                    <TableHead>Tipo Match</TableHead>
+                    <TableHead className="hidden md:table-cell">Tipo Match</TableHead>
                     <TableHead>Patente</TableHead>
-                    <TableHead>Empresa</TableHead>
-                    <TableHead>Velocidad</TableHead>
-                    <TableHead>Detectado</TableHead>
-                    <TableHead>Resolucion</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
+                    <TableHead className="hidden lg:table-cell">Empresa</TableHead>
+                    <TableHead className="hidden sm:table-cell">Velocidad</TableHead>
+                    <TableHead className="hidden md:table-cell">Detectado</TableHead>
+                    <TableHead className="hidden lg:table-cell">Resolucion</TableHead>
+                    <TableHead className="w-[44px] sm:w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -207,7 +207,7 @@ export default function ExpedientesPage() {
                           {resolutionLabels[caseFile.resolution]}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <Badge
                           variant="outline"
                           className={cn(matchStatusStyles[caseFile.match_status])}
@@ -220,10 +220,10 @@ export default function ExpedientesPage() {
                           {caseFile.infraction?.plate_read || '-'}
                         </span>
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
+                      <TableCell className="hidden lg:table-cell max-w-[150px] truncate">
                         {caseFile.tenant?.legal_name || '-'}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         {caseFile.infraction?.speed_kmh ? (
                           <span className={cn(
                             'font-medium',
@@ -235,12 +235,12 @@ export default function ExpedientesPage() {
                           </span>
                         ) : '-'}
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="hidden md:table-cell text-sm">
                         {caseFile.infraction?.detected_at
                           ? format(new Date(caseFile.infraction.detected_at), 'dd/MM HH:mm', { locale: es })
                           : '-'}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden lg:table-cell">
                         <Badge variant="outline">
                           {resolutionLabels[caseFile.resolution]}
                         </Badge>

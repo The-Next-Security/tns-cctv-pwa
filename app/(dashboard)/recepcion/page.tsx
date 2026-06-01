@@ -272,7 +272,7 @@ export default function RecepcionPage() {
                 <Car className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl sm:text-2xl font-bold tabular-nums">{activeEntries.length}</p>
+                <p className="text-xl sm:text-2xl font-bold text-numeral tabular-nums antialiased">{activeEntries.length}</p>
                 <p className="text-[11px] sm:text-sm text-muted-foreground truncate">En el parque</p>
               </div>
             </div>
@@ -285,7 +285,7 @@ export default function RecepcionPage() {
                 <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl sm:text-2xl font-bold tabular-nums">{entries.filter(e => e.exit_at).length}</p>
+                <p className="text-xl sm:text-2xl font-bold text-numeral tabular-nums antialiased">{entries.filter(e => e.exit_at).length}</p>
                 <p className="text-[11px] sm:text-sm text-muted-foreground truncate">Salidas hoy</p>
               </div>
             </div>
@@ -298,7 +298,7 @@ export default function RecepcionPage() {
                 <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-[var(--crextio-brown)]" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl sm:text-2xl font-bold tabular-nums">{MOCK_TENANTS.length}</p>
+                <p className="text-xl sm:text-2xl font-bold text-numeral tabular-nums antialiased">{MOCK_TENANTS.length}</p>
                 <p className="text-[11px] sm:text-sm text-muted-foreground truncate">Empresas</p>
               </div>
             </div>
@@ -311,7 +311,7 @@ export default function RecepcionPage() {
                 <ScanLine className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl sm:text-2xl font-bold tabular-nums">{pendingDetections.length}</p>
+                <p className="text-xl sm:text-2xl font-bold text-numeral tabular-nums antialiased">{pendingDetections.length}</p>
                 <p className="text-[11px] sm:text-sm text-muted-foreground truncate">Pend. ANPR</p>
               </div>
             </div>
@@ -349,7 +349,7 @@ export default function RecepcionPage() {
             {anprReading && (
               <p className="text-sm text-muted-foreground">
                 Lectura activa:{' '}
-                <span className="font-mono font-semibold text-foreground">{anprReading}</span>
+                <span className="text-live-data font-semibold text-zinc-200">{anprReading}</span>
                 {anprConfidence != null && (
                   <span className="ml-2 text-xs">({anprConfidence}% confianza)</span>
                 )}
@@ -359,7 +359,7 @@ export default function RecepcionPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-section text-base">En espera de registro</h3>
-              <Badge variant="secondary" className="tabular-nums">
+              <Badge variant="secondary" className="text-live-data font-semibold">
                 {pendingDetections.length}
               </Badge>
             </div>

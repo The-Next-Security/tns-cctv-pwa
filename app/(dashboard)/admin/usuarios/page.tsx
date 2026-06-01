@@ -195,41 +195,41 @@ export default function UsuariosPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
                 <Users className="h-5 w-5 text-primary" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.total}</p>
+              <div className="min-w-0">
+                <p className="text-xl sm:text-2xl font-bold tabular-nums">{stats.total}</p>
                 <p className="text-sm text-muted-foreground">Total</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl bg-green-500/10 flex items-center justify-center">
                 <UserCheck className="h-5 w-5 text-green-500" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.activos}</p>
+              <div className="min-w-0">
+                <p className="text-xl sm:text-2xl font-bold tabular-nums">{stats.activos}</p>
                 <p className="text-sm text-muted-foreground">Activos</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl bg-red-500/10 flex items-center justify-center">
                 <UserX className="h-5 w-5 text-red-500" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.inactivos}</p>
+              <div className="min-w-0">
+                <p className="text-xl sm:text-2xl font-bold tabular-nums">{stats.inactivos}</p>
                 <p className="text-sm text-muted-foreground">Inactivos</p>
               </div>
             </div>
@@ -259,18 +259,21 @@ export default function UsuariosPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead className="hidden md:table-cell">Email</TableHead>
                   <TableHead>Rol</TableHead>
                   <TableHead>Estado</TableHead>
-                  <TableHead>Ultima Conexion</TableHead>
+                  <TableHead className="hidden lg:table-cell">Ultima Conexion</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredUsuarios.map((usuario) => (
                   <TableRow key={usuario.id} className="animate-fade-in">
-                    <TableCell className="font-medium">{usuario.nombre}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{usuario.email}</TableCell>
+                    <TableCell className="font-medium">
+                      {usuario.nombre}
+                      <span className="block text-xs text-muted-foreground md:hidden">{usuario.email}</span>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{usuario.email}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn(getRoleColor(usuario.role))}>
                         {ROLE_LABELS[usuario.role]}
@@ -281,7 +284,7 @@ export default function UsuariosPage() {
                         {usuario.activo ? 'Activo' : 'Inactivo'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                       {formatDistanceToNow(new Date(usuario.ultimaConexion), { addSuffix: true, locale: es })}
                     </TableCell>
                     <TableCell className="text-right">

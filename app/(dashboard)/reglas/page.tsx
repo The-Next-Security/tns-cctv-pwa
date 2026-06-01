@@ -1,12 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { 
-  Cog, 
-  Plus, 
+import {
+  Cog,
+  Plus,
   Pencil,
   Trash2,
   Copy,
+  Radar,
+  Info,
+  Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,11 +48,22 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { MOCK_RULES, MOCK_ZONES } from '@/lib/mock-data'
-import type { Rule, Criticality } from '@/lib/types'
-import { CRITICALITY_LABELS } from '@/lib/types'
+import type { Rule, Criticality, EventCategory } from '@/lib/types'
+import {
+  CRITICALITY_LABELS,
+  EVENT_CODES_BY_CATEGORY,
+  EVENT_CATEGORY_LABELS,
+  getEventLabel,
+  requiresDedicatedHardware,
+} from '@/lib/types'
 
 const criticalityStyles: Record<Criticality, string> = {
   baja: 'bg-criticality-baja/20 text-criticality-baja border-criticality-baja/30',
@@ -63,24 +77,34 @@ const criticalities: Criticality[] = ['baja', 'media', 'alta', 'critica']
 interface RuleFormData {
   name: string
   description: string
-  event_code_pattern: string
+  event_codes: string[]
   criticality: Criticality
   zone_id: number | null
   time_from: string
   time_to: string
+  priority_popup: boolean
+  notify_admin: boolean
+  notify_tenant: boolean
+  record_evidence: boolean
   enabled: boolean
 }
 
 const defaultFormData: RuleFormData = {
   name: '',
   description: '',
-  event_code_pattern: '*',
+  event_codes: [],
   criticality: 'media',
   zone_id: null,
   time_from: '00:00',
   time_to: '23:59',
+  priority_popup: true,
+  notify_admin: false,
+  notify_tenant: false,
+  record_evidence: false,
   enabled: true,
 }
+
+const eventCategories: EventCategory[] = ['perimetro', 'trafico', 'salud']
 
 export default function ReglasPage() {
   const [rules, setRules] = useState<Rule[]>(MOCK_RULES)
@@ -96,34 +120,46 @@ export default function ReglasPage() {
     setEditSheet(true)
   }
 
-  function handleEditRule(rule: Rule) {
-    setEditingRule(rule)
-    setFormData({
+  function ruleToFormData(rule: Rule): RuleFormData {
+    return {
       name: rule.name,
       description: rule.description || '',
-      event_code_pattern: rule.event_code_pattern,
+      event_codes: rule.event_codes ?? (rule.event_code_pattern ? [rule.event_code_pattern] : []),
       criticality: rule.criticality,
       zone_id: rule.zone_id || null,
       time_from: rule.time_from || '00:00',
       time_to: rule.time_to || '23:59',
+      priority_popup: rule.priority_popup ?? false,
+      notify_admin: rule.notify_admin ?? false,
+      notify_tenant: rule.notify_tenant ?? false,
+      record_evidence: rule.record_evidence ?? false,
       enabled: rule.enabled,
-    })
+    }
+  }
+
+  function handleEditRule(rule: Rule) {
+    setEditingRule(rule)
+    setFormData(ruleToFormData(rule))
     setEditSheet(true)
   }
 
   function handleCloneRule(rule: Rule) {
     setEditingRule(null)
     setFormData({
+      ...ruleToFormData(rule),
       name: `${rule.name} (copia)`,
-      description: rule.description || '',
-      event_code_pattern: rule.event_code_pattern,
-      criticality: rule.criticality,
-      zone_id: rule.zone_id || null,
-      time_from: rule.time_from || '00:00',
-      time_to: rule.time_to || '23:59',
       enabled: false,
     })
     setEditSheet(true)
+  }
+
+  function toggleEventCode(code: string) {
+    setFormData(prev => ({
+      ...prev,
+      event_codes: prev.event_codes.includes(code)
+        ? prev.event_codes.filter(c => c !== code)
+        : [...prev.event_codes, code],
+    }))
   }
 
   function handleToggleRule(rule: Rule) {
@@ -138,21 +174,29 @@ export default function ReglasPage() {
       toast.error('El nombre es requerido')
       return
     }
+    if (formData.event_codes.length === 0) {
+      toast.error('Seleccione al menos un evento')
+      return
+    }
+
+    const rulePayload = {
+      ...formData,
+      // event_code_pattern se mantiene por compatibilidad (primer codigo)
+      event_code_pattern: formData.event_codes[0],
+      zone: MOCK_ZONES.find(z => z.id === formData.zone_id),
+    }
 
     setIsSubmitting(true)
     setTimeout(() => {
       if (editingRule) {
-        setRules(prev => prev.map(r => 
-          r.id === editingRule.id 
-            ? { ...r, ...formData, zone: MOCK_ZONES.find(z => z.id === formData.zone_id) }
-            : r
+        setRules(prev => prev.map(r =>
+          r.id === editingRule.id ? { ...r, ...rulePayload } : r
         ))
         toast.success('Regla actualizada')
       } else {
         const newRule: Rule = {
           id: rules.length + 1,
-          ...formData,
-          zone: MOCK_ZONES.find(z => z.id === formData.zone_id),
+          ...rulePayload,
           tenant_id: 1,
         }
         setRules(prev => [...prev, newRule])
@@ -220,7 +264,7 @@ export default function ReglasPage() {
                   <TableRow>
                     <TableHead className="w-[50px]">Estado</TableHead>
                     <TableHead>Nombre</TableHead>
-                    <TableHead>Patron</TableHead>
+                    <TableHead>Eventos</TableHead>
                     <TableHead>Criticidad</TableHead>
                     <TableHead>Zona</TableHead>
                     <TableHead>Horario</TableHead>
@@ -247,9 +291,26 @@ export default function ReglasPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                          {rule.event_code_pattern}
-                        </code>
+                        <div className="flex max-w-[260px] flex-col gap-1.5">
+                          <div className="flex flex-wrap gap-1">
+                            {(rule.event_codes ?? [rule.event_code_pattern]).map(code => (
+                              <Badge key={code} variant="secondary" className="text-[11px] font-normal">
+                                {getEventLabel(code)}
+                              </Badge>
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {requiresDedicatedHardware(rule.event_codes) && (
+                              <span className="inline-flex items-center gap-1 rounded bg-[var(--warning-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--warning)]">
+                                <Radar className="h-3 w-3" /> ITC/LPR
+                              </span>
+                            )}
+                            {rule.priority_popup && <span className="text-[10px] text-muted-foreground">Popup</span>}
+                            {rule.notify_admin && <span className="text-[10px] text-muted-foreground">· Admin</span>}
+                            {rule.notify_tenant && <span className="text-[10px] text-muted-foreground">· Correo</span>}
+                            {rule.record_evidence && <span className="text-[10px] text-muted-foreground">· Evidencia</span>}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={cn(criticalityStyles[rule.criticality])}>
@@ -302,9 +363,9 @@ export default function ReglasPage() {
         </CardContent>
       </Card>
 
-      {/* Edit/Create Sheet - IMPROVED SPACING */}
+      {/* Edit/Create Sheet - layout amplio para desktop */}
       <Sheet open={editSheet} onOpenChange={setEditSheet}>
-        <SheetContent className="sm:max-w-xl overflow-y-auto">
+        <SheetContent className="w-full overflow-y-auto sm:!w-[min(94vw,60rem)] sm:!max-w-none">
           <SheetHeader className="pb-6">
             <SheetTitle className="text-xl">
               {editingRule ? 'Editar Regla' : 'Nueva Regla'}
@@ -317,123 +378,219 @@ export default function ReglasPage() {
             </SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-6 px-1">
-            {/* Name */}
-            <div className="space-y-3">
-              <Label htmlFor="name" className="text-sm font-medium">
-                Nombre <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Intrusion nocturna zona perimetral"
-                className="h-11"
-              />
+          <div className="space-y-8 px-1">
+            {/* Identidad: Nombre + Criticidad en 2 columnas */}
+            <div className="grid gap-x-8 gap-y-6 lg:grid-cols-3">
+              <div className="space-y-3 lg:col-span-2">
+                <Label htmlFor="name" className="text-sm font-medium">
+                  Nombre <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Intrusion nocturna zona perimetral"
+                  className="h-11"
+                />
+              </div>
+              <div className="space-y-3">
+                <Label htmlFor="criticality" className="text-sm font-medium">Criticidad</Label>
+                <Select
+                  value={formData.criticality}
+                  onValueChange={val => setFormData({ ...formData, criticality: val as Criticality })}
+                >
+                  <SelectTrigger className="h-11 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {criticalities.map(crit => (
+                      <SelectItem key={crit} value={crit} className="py-3">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={cn(criticalityStyles[crit])}>
+                            {CRITICALITY_LABELS[crit]}
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-3 lg:col-span-3">
+                <Label htmlFor="description" className="text-sm font-medium">Descripcion</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Detecta movimientos en la zona perimetral durante horario nocturno"
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
             </div>
 
-            {/* Description */}
+            {/* Event codes (catalogo Dahua) */}
             <div className="space-y-3">
-              <Label htmlFor="description" className="text-sm font-medium">Descripcion</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={e => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Detecta movimientos en la zona perimetral durante horario nocturno"
-                rows={3}
-                className="resize-none"
-              />
-            </div>
-
-            {/* Event pattern */}
-            <div className="space-y-3">
-              <Label htmlFor="pattern" className="text-sm font-medium">
-                Patron de evento <span className="text-destructive">*</span>
+              <Label className="text-sm font-medium">
+                Eventos Dahua <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="pattern"
-                value={formData.event_code_pattern}
-                onChange={e => setFormData({ ...formData, event_code_pattern: e.target.value })}
-                placeholder="INTRUSION_*"
-                className="font-mono h-11"
-              />
               <p className="text-xs text-muted-foreground">
-                Use * como comodin. Ej: INTRUSION_*, VELOCIDAD_*, *
+                Seleccione uno o mas eventos del catalogo soportado por la API Dahua.
+                Use la <Info className="inline h-3 w-3 align-[-1px]" /> para ver que hace cada uno.
               </p>
-            </div>
-
-            {/* Criticality */}
-            <div className="space-y-3">
-              <Label htmlFor="criticality" className="text-sm font-medium">Criticidad</Label>
-              <Select
-                value={formData.criticality}
-                onValueChange={val => setFormData({ ...formData, criticality: val as Criticality })}
-              >
-                <SelectTrigger className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {criticalities.map(crit => (
-                    <SelectItem key={crit} value={crit} className="py-3">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className={cn(criticalityStyles[crit])}>
-                          {CRITICALITY_LABELS[crit]}
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Zone */}
-            <div className="space-y-3">
-              <Label htmlFor="zone" className="text-sm font-medium">Zona (opcional)</Label>
-              <Select
-                value={formData.zone_id ? String(formData.zone_id) : 'all'}
-                onValueChange={val => setFormData({
-                  ...formData,
-                  zone_id: val === 'all' ? null : parseInt(val)
-                })}
-              >
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Todas las zonas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="py-3">Todas las zonas</SelectItem>
-                  {MOCK_ZONES.map(zone => (
-                    <SelectItem key={zone.id} value={String(zone.id)} className="py-3">
-                      {zone.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Time range */}
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Rango horario</Label>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="time_from" className="text-xs text-muted-foreground">Desde</Label>
-                  <Input
-                    id="time_from"
-                    type="time"
-                    value={formData.time_from}
-                    onChange={e => setFormData({ ...formData, time_from: e.target.value })}
-                    className="h-11"
-                  />
+              <div className="grid gap-x-8 gap-y-5 md:grid-cols-3">
+                {eventCategories.map(category => (
+                  <div key={category} className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {EVENT_CATEGORY_LABELS[category]}
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {EVENT_CODES_BY_CATEGORY[category].map(event => {
+                        const selected = formData.event_codes.includes(event.value)
+                        return (
+                          <div
+                            key={event.value}
+                            className={cn(
+                              'flex items-center gap-1 rounded-lg border transition-colors',
+                              selected
+                                ? 'border-primary bg-primary/10'
+                                : 'border-border bg-card hover:bg-muted'
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => toggleEventCode(event.value)}
+                              className="flex flex-1 items-center gap-1.5 px-2.5 py-2 text-left text-xs"
+                            >
+                              <span
+                                className={cn(
+                                  'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                                  selected
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'border-border'
+                                )}
+                              >
+                                {selected && <Check className="h-3 w-3" />}
+                              </span>
+                              {event.requiresDedicatedHardware && (
+                                <Radar className="h-3 w-3 shrink-0 text-[var(--warning)]" />
+                              )}
+                              <span className="leading-tight">{event.label}</span>
+                            </button>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label={`Que es ${event.label}`}
+                                  className="mr-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                >
+                                  <Info className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent side="top" align="end" className="w-72 text-xs leading-relaxed">
+                                <p className="mb-1 font-semibold">{event.label}</p>
+                                <p className="text-muted-foreground">{event.description}</p>
+                                {event.requiresDedicatedHardware && (
+                                  <p className="mt-2 flex items-start gap-1.5 text-[var(--warning)]">
+                                    <Radar className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    Requiere camara dedicada ITC/LPR/ANPR.
+                                  </p>
+                                )}
+                                <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                                  {event.value}
+                                </p>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {requiresDedicatedHardware(formData.event_codes) && (
+                <div className="flex items-start gap-2 rounded-lg bg-[var(--warning-bg)] p-3 text-xs text-[var(--warning)]">
+                  <Radar className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    Esta regla incluye eventos de trafico que requieren una camara dedicada
+                    ITC/LPR/ANPR (no se obtienen de camaras estandar). Ej: control de velocidad en
+                    Camino El Olivo.
+                  </span>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="time_to" className="text-xs text-muted-foreground">Hasta</Label>
-                  <Input
-                    id="time_to"
-                    type="time"
-                    value={formData.time_to}
-                    onChange={e => setFormData({ ...formData, time_to: e.target.value })}
-                    className="h-11"
-                  />
+              )}
+            </div>
+
+            {/* Alcance: Zona + Rango horario */}
+            <div className="grid gap-x-8 gap-y-6 lg:grid-cols-2">
+              <div className="space-y-3">
+                <Label htmlFor="zone" className="text-sm font-medium">Zona (opcional)</Label>
+                <Select
+                  value={formData.zone_id ? String(formData.zone_id) : 'all'}
+                  onValueChange={val => setFormData({
+                    ...formData,
+                    zone_id: val === 'all' ? null : parseInt(val)
+                  })}
+                >
+                  <SelectTrigger className="h-11 w-full">
+                    <SelectValue placeholder="Todas las zonas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="py-3">Todas las zonas</SelectItem>
+                    {MOCK_ZONES.map(zone => (
+                      <SelectItem key={zone.id} value={String(zone.id)} className="py-3">
+                        {zone.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Rango horario</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="time_from" className="text-xs text-muted-foreground">Desde</Label>
+                    <Input
+                      id="time_from"
+                      type="time"
+                      value={formData.time_from}
+                      onChange={e => setFormData({ ...formData, time_from: e.target.value })}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="time_to" className="text-xs text-muted-foreground">Hasta</Label>
+                    <Input
+                      id="time_to"
+                      type="time"
+                      value={formData.time_to}
+                      onChange={e => setFormData({ ...formData, time_to: e.target.value })}
+                      className="h-11"
+                    />
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Acciones — 2 columnas */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Acciones al activarse</Label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {([
+                  { key: 'priority_popup', title: 'Popup al vigilante', desc: 'Muestra la camara automaticamente en el puesto de guardia' },
+                  { key: 'notify_admin', title: 'Notificar administracion', desc: 'Envia alerta a responsables de seguridad / administracion' },
+                  { key: 'notify_tenant', title: 'Correo al arrendatario', desc: 'Notifica por correo a la empresa de destino (requiere patente)' },
+                  { key: 'record_evidence', title: 'Guardar evidencia', desc: 'Asocia snapshot / clip al evento para historial' },
+                ] as const).map(action => (
+                  <div key={action.key} className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium">{action.title}</Label>
+                      <p className="text-xs text-muted-foreground">{action.desc}</p>
+                    </div>
+                    <Switch
+                      checked={formData[action.key]}
+                      onCheckedChange={val => setFormData({ ...formData, [action.key]: val })}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -451,17 +608,17 @@ export default function ReglasPage() {
               />
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 pt-6 pb-4">
+            {/* Form actions */}
+            <div className="flex justify-end gap-3 pt-2 pb-4">
               <Button
                 variant="outline"
-                className="flex-1 h-11"
+                className="h-11 sm:w-40"
                 onClick={() => setEditSheet(false)}
               >
                 Cancelar
               </Button>
               <Button
-                className="flex-1 h-11"
+                className="h-11 sm:w-48"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
               >

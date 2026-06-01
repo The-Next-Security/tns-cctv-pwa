@@ -40,7 +40,7 @@ import { toast } from 'sonner'
 import { alerts as alertsApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
-import { DISCARD_REASON_LABELS, CRITICALITY_LABELS, ALERT_STATUS_LABELS } from '@/lib/types'
+import { DISCARD_REASON_LABELS, CRITICALITY_LABELS, ALERT_STATUS_LABELS, getEventLabel } from '@/lib/types'
 import { EscalateSheet } from '@/components/operacion/escalate-sheet'
 
 const criticalityStyles: Record<Criticality, string> = {
@@ -177,7 +177,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
           {CRITICALITY_LABELS[alert.criticality].toUpperCase()}
         </Badge>
         <h1 className="text-2xl font-bold tracking-tight">
-          {alert.event_code || 'Alerta de Seguridad'}
+          {getEventLabel(alert.event_code)}
         </h1>
         {!isPending && (
           <Badge variant="secondary">
