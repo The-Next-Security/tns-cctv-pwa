@@ -169,6 +169,11 @@ function buildInitialCases(): CaseFile[] {
 
 let casesStore: CaseFile[] = buildInitialCases()
 
+/** Vuelve expedientes mock al estado inicial (p. ej. reiniciar demo). */
+export function resetMockCaseFilesStore(): void {
+  casesStore = buildInitialCases()
+}
+
 function filterCases(params?: {
   status?: string
   match_status?: string

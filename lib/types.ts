@@ -15,6 +15,19 @@ export type UserRole = Role
 
 export type Criticality = 'baja' | 'media' | 'alta' | 'critica'
 
+/** Clasificación operativa binaria: agrupa la escala de 4 niveles en dos categorías de flujo */
+export type AlertClass = 'critica' | 'baja_prioridad'
+
+export const ALERT_CLASS_LABELS: Record<AlertClass, string> = {
+  critica: 'Crítica',
+  baja_prioridad: 'Baja Prioridad',
+}
+
+/** Solo 'critica' → 'critica'; alta + media + baja → 'baja_prioridad' */
+export function getAlertClass(criticality: Criticality): AlertClass {
+  return criticality === 'critica' ? 'critica' : 'baja_prioridad'
+}
+
 export type AlertStatus = 'pendiente' | 'revisada' | 'descartada' | 'escalada' | 'en_revision' | 'resuelta'
 
 export type MatchStatus = 
@@ -97,8 +110,12 @@ export interface Camera {
   zone_id?: number | null
   name: string
   ip?: string
+  model?: string | null
+  resolution?: string | null
+  fps?: number | null
   description?: string | null
   active: boolean
+  health_status?: 'online' | 'offline' | 'degraded'
   zone?: Zone
   nvr?: Nvr
 }
@@ -141,6 +158,7 @@ export interface Alert {
   snapshot_url?: string | null
   resolved_at?: string | null
   resolution_notes?: string | null
+  alert_class?: AlertClass
   // Relaciones expandidas
   camera?: Camera
   zone?: Zone
@@ -166,6 +184,10 @@ export interface Rule {
   criticality: Criticality
   generate_alert?: boolean
   priority_popup?: boolean
+  // Acciones operativas (flujos CCTV.md)
+  notify_admin?: boolean
+  notify_tenant?: boolean
+  record_evidence?: boolean
   active?: boolean
   enabled: boolean
   created_by?: number | null
@@ -352,16 +374,181 @@ export const DAYS_OF_WEEK = [
   { value: 7, label: 'D' },
 ]
 
-export const EVENT_CODES = [
-  { value: 'CrossLineDetection', label: 'Cruzamiento de linea' },
-  { value: 'CrossRegionDetection', label: 'Entrada/salida de region' },
-  { value: 'LeftDetection', label: 'Objeto abandonado' },
-  { value: 'TakenAwayDetection', label: 'Objeto removido' },
-  { value: 'PersonAbandoned', label: 'Persona en zona prohibida' },
-  { value: 'TrafficJunction', label: 'Vehiculo en interseccion' },
-  { value: 'TrafficGate', label: 'Vehiculo en barrera' },
-  { value: 'VideoMotion', label: 'Deteccion de movimiento' },
-  { value: 'VideoBlind', label: 'Camara cubierta/sabotaje' },
-  { value: 'LossDetection', label: 'Perdida de senal' },
-  { value: 'TrafficSpeedOver', label: 'Exceso de velocidad' },
+// Categorias del catalogo de eventos Dahua
+export type EventCategory = 'perimetro' | 'trafico' | 'salud'
+
+export const EVENT_CATEGORY_LABELS: Record<EventCategory, string> = {
+  perimetro: 'Perimetro / IA',
+  trafico: 'Trafico / vehicular',
+  salud: 'Sabotaje / salud tecnica',
+}
+
+export interface EventCodeDef {
+  value: string
+  label: string
+  category: EventCategory
+  // Explicacion breve del evento para la ayuda contextual (icono "i")
+  description: string
+  // Requiere camara dedicada ITC/LPR/ANPR (no aplica a camaras estandar)
+  requiresDedicatedHardware?: boolean
+}
+
+// Catalogo de eventos realmente suscribibles via API HTTP Dahua
+// (eventManager.cgi?action=attach, snapManager attachFileProc, eventos de trafico 10.1)
+export const EVENT_CODES: EventCodeDef[] = [
+  // Perimetro / IA
+  {
+    value: 'CrossLineDetection',
+    label: 'Cruce de linea (tripwire)',
+    category: 'perimetro',
+    description:
+      'Tripwire: se dispara cuando un objeto cruza una linea virtual definida en la escena, en la direccion configurada (entrar, salir o ambas).',
+  },
+  {
+    value: 'CrossRegionDetection',
+    label: 'Intrusion / entrada-salida de zona',
+    category: 'perimetro',
+    description:
+      'Intrusion: se dispara cuando un objeto entra, sale o permanece dentro de una region poligonal vigilada.',
+  },
+  {
+    value: 'WanderDetection',
+    label: 'Merodeo (loitering)',
+    category: 'perimetro',
+    description:
+      'Merodeo: una persona permanece o deambula dentro de una zona durante mas tiempo del permitido.',
+  },
+  {
+    value: 'LeftDetection',
+    label: 'Objeto abandonado',
+    category: 'perimetro',
+    description:
+      'Objeto abandonado: detecta un objeto que aparece y permanece inmovil en la escena por sobre el tiempo tolerado.',
+  },
+  {
+    value: 'TakenAwayDetection',
+    label: 'Objeto retirado',
+    category: 'perimetro',
+    description:
+      'Objeto retirado: detecta cuando un objeto vigilado desaparece de su posicion original.',
+  },
+  {
+    value: 'SmartMotionHuman',
+    label: 'Movimiento humano (IA)',
+    category: 'perimetro',
+    description:
+      'Movimiento humano con IA: movimiento filtrado por la deteccion de personas; reduce falsas alarmas por animales, vegetacion o luces.',
+  },
+  {
+    value: 'SmartMotionVehicle',
+    label: 'Movimiento de vehiculo (IA)',
+    category: 'perimetro',
+    description:
+      'Movimiento de vehiculo con IA: movimiento filtrado por la deteccion de vehiculos.',
+  },
+  {
+    value: 'VideoMotion',
+    label: 'Movimiento general',
+    category: 'perimetro',
+    description:
+      'Movimiento general: cualquier cambio de pixeles en la zona, sin clasificar el objeto. Es el mas sensible y el que mas falsos positivos genera.',
+  },
+  // Trafico / vehicular (requiere hardware ITC/LPR/ANPR)
+  {
+    value: 'TrafficJunction',
+    label: 'Paso de vehiculo / ANPR',
+    category: 'trafico',
+    requiresDedicatedHardware: true,
+    description:
+      'Paso de vehiculo / ANPR: captura la patente y datos del vehiculo cuando pasa por el punto de control. Requiere camara ITC/LPR dedicada.',
+  },
+  {
+    value: 'TrafficOverSpeed',
+    label: 'Exceso de velocidad',
+    category: 'trafico',
+    requiresDedicatedHardware: true,
+    description:
+      'Exceso de velocidad: el vehiculo supera el limite configurado; entrega velocidad medida y patente. Requiere camara ITC/LPR dedicada.',
+  },
+  {
+    value: 'TrafficParking',
+    label: 'Estacionamiento indebido',
+    category: 'trafico',
+    requiresDedicatedHardware: true,
+    description:
+      'Estacionamiento indebido: vehiculo detenido en una zona no permitida por sobre el tiempo tolerado.',
+  },
+  {
+    value: 'TrafficPedestrain',
+    label: 'Peaton en via vehicular',
+    category: 'trafico',
+    requiresDedicatedHardware: true,
+    description:
+      'Peaton en via: persona caminando sobre una via destinada a vehiculos.',
+  },
+  {
+    value: 'TrafficRetrograde',
+    label: 'Sentido contrario',
+    category: 'trafico',
+    requiresDedicatedHardware: true,
+    description:
+      'Sentido contrario: vehiculo circulando en una direccion prohibida (contramano).',
+  },
+  // Sabotaje / salud tecnica
+  {
+    value: 'VideoBlind',
+    label: 'Camara cubierta / sabotaje',
+    category: 'salud',
+    description:
+      'Camara cubierta / sabotaje: el lente fue tapado, desenfocado o manipulado y la escena dejo de ser visible.',
+  },
+  {
+    value: 'VideoLoss',
+    label: 'Perdida de senal de video',
+    category: 'salud',
+    description:
+      'Perdida de senal: la camara dejo de entregar video al grabador (cable, energia o equipo caido).',
+  },
+  {
+    value: 'StorageFailure',
+    label: 'Falla de almacenamiento',
+    category: 'salud',
+    description:
+      'Falla de almacenamiento: el disco del grabador presenta errores de lectura o escritura y puede no estar grabando.',
+  },
+  {
+    value: 'StorageLowSpace',
+    label: 'Espacio bajo en disco',
+    category: 'salud',
+    description:
+      'Espacio bajo: la capacidad de grabacion esta por agotarse; el historial mas antiguo podria sobrescribirse.',
+  },
 ]
+
+const EVENT_CODE_MAP: Record<string, EventCodeDef> = Object.fromEntries(
+  EVENT_CODES.map(e => [e.value, e])
+)
+
+// Nombre legible para un event_code Dahua (fallback al codigo crudo)
+export function getEventLabel(code?: string | null): string {
+  if (!code) return 'Evento de seguridad'
+  return EVENT_CODE_MAP[code]?.label ?? code
+}
+
+export function getEventCategory(code?: string | null): EventCategory | undefined {
+  if (!code) return undefined
+  return EVENT_CODE_MAP[code]?.category
+}
+
+// True si alguno de los codigos depende de camara dedicada ITC/LPR
+export function requiresDedicatedHardware(codes?: string[] | null): boolean {
+  if (!codes?.length) return false
+  return codes.some(c => EVENT_CODE_MAP[c]?.requiresDedicatedHardware)
+}
+
+// Codigos agrupados por categoria (para selectores)
+export const EVENT_CODES_BY_CATEGORY: Record<EventCategory, EventCodeDef[]> = {
+  perimetro: EVENT_CODES.filter(e => e.category === 'perimetro'),
+  trafico: EVENT_CODES.filter(e => e.category === 'trafico'),
+  salud: EVENT_CODES.filter(e => e.category === 'salud'),
+}
