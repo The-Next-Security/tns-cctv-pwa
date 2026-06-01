@@ -51,7 +51,7 @@ function HorizontalLogo({
       width={width}
       height={height}
       priority={priority}
-      className={cn('block shrink-0 dark:brightness-0 dark:invert', imageClassName)}
+      className={cn('block shrink-0 tns-brand-logo', imageClassName)}
       style={imageClassName?.includes('!h-') ? { width: 'auto', maxWidth: '100%' } : undefined}
     />
   )
@@ -73,7 +73,7 @@ export function BrandLogo({
       <div
         className={cn(
           'relative mx-auto shrink-0 overflow-hidden rounded-xl',
-          'bg-accent/30 ring-1 ring-[var(--crextio-gold-strong)]/20'
+          'bg-[var(--cctv-bg-muted)] ring-1 ring-[var(--cctv-border)]'
         )}
         style={{ width: markHeight, height: markHeight }}
       >
@@ -84,7 +84,7 @@ export function BrandLogo({
           height={markFull.height}
           priority={priority}
           className={cn(
-            'absolute left-0 top-0 block dark:brightness-0 dark:invert',
+            'absolute left-0 top-0 block tns-brand-logo',
             imageClassName
           )}
         />
