@@ -159,3 +159,4 @@ node_modules
 # Static assets in public/ are required for the app (brand, demo media).
 # Do not ignore the whole public folder.
 public/.DS_Store
+public/
