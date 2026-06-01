@@ -160,3 +160,4 @@ node_modules
 # Do not ignore the whole public folder.
 public/.DS_Store
 public/
+.DS_Store
