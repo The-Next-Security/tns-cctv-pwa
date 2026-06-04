@@ -1,442 +1,408 @@
-# Data Model — MySQL 8 (MVP CCTV)
+# DATA-MODEL.md
 
-Motor: MySQL 8.0+
-Charset/collation: utf8mb4 / utf8mb4_unicode_ci
-Zona horaria de persistencia: UTC (convertir a America/Santiago en presentación)
+<!-- ARC_TASK:t_57457627 -->
 
-## 1) Diagrama lógico (resumen)
+## 1. Objetivo
+Esquema MySQL 8 para soportar M1..M14 con multi-tenant estricto, auditoría y correlación velocidad↔admissions.
 
-- tenant -> site -> zone -> camera
-- nvr_device pertenece a site
-- security_event referencia camera/zone/rule opcional
-- event_evidence cuelga de security_event
-- admission_record representa ingreso ANPR/manual/híbrido
-- speed_case referencia speed_event + correlación a admission_record
-- notification_log referencia event o speed_case
-- device_health_status + health_incident para M8
-- event_state_history + audit_log para trazabilidad
-
-## 2) DDL completo
-
+## 2. DDL completo (MySQL 8)
 ```sql
-CREATE DATABASE IF NOT EXISTS tns_cctv_mvp
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE tns_cctv_mvp;
+SET NAMES utf8mb4;
+SET time_zone = '+00:00';
 
 CREATE TABLE tenants (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_key VARCHAR(64) NOT NULL UNIQUE,
-  name VARCHAR(120) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CHECK (status IN ('ACTIVE','INACTIVE'))
+  id CHAR(26) PRIMARY KEY,
+  code VARCHAR(64) NOT NULL UNIQUE,
+  name VARCHAR(160) NOT NULL,
+  status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB;
 
 CREATE TABLE sites (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_key VARCHAR(64) NOT NULL,
-  name VARCHAR(120) NOT NULL,
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  code VARCHAR(64) NOT NULL,
+  name VARCHAR(160) NOT NULL,
   timezone VARCHAR(64) NOT NULL DEFAULT 'America/Santiago',
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_site (tenant_id, site_key),
-  KEY idx_sites_tenant (tenant_id),
+  status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_sites_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CHECK (status IN ('ACTIVE','INACTIVE'))
-) ENGINE=InnoDB;
-
-CREATE TABLE zones (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  zone_code VARCHAR(64) NOT NULL,
-  zone_name VARCHAR(120) NOT NULL,
-  criticality VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_zone (tenant_id, site_id, zone_code),
-  KEY idx_zones_site (site_id),
-  CONSTRAINT fk_zones_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_zones_site FOREIGN KEY (site_id) REFERENCES sites(id),
-  CHECK (criticality IN ('LOW','MEDIUM','HIGH','CRITICAL'))
-) ENGINE=InnoDB;
-
-CREATE TABLE nvr_devices (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  nvr_key VARCHAR(64) NOT NULL,
-  name VARCHAR(120) NOT NULL,
-  vendor VARCHAR(40) NOT NULL DEFAULT 'DAHUA',
-  model VARCHAR(80) NULL,
-  firmware_version VARCHAR(80) NULL,
-  ip_local VARCHAR(64) NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-  last_seen_at DATETIME NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_nvr (tenant_id, site_id, nvr_key),
-  KEY idx_nvr_site (site_id),
-  KEY idx_nvr_last_seen (last_seen_at),
-  CONSTRAINT fk_nvr_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_nvr_site FOREIGN KEY (site_id) REFERENCES sites(id),
-  CHECK (status IN ('ACTIVE','INACTIVE','DEGRADED','OFFLINE'))
-) ENGINE=InnoDB;
-
-CREATE TABLE cameras (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  zone_id BIGINT UNSIGNED NULL,
-  nvr_id BIGINT UNSIGNED NULL,
-  camera_key VARCHAR(64) NOT NULL,
-  name VARCHAR(120) NOT NULL,
-  stream_rtsp_url VARCHAR(512) NULL,
-  role_type VARCHAR(30) NOT NULL DEFAULT 'SECURITY',
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-  last_seen_at DATETIME NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_camera (tenant_id, site_id, camera_key),
-  KEY idx_camera_site_zone (site_id, zone_id),
-  KEY idx_camera_nvr (nvr_id),
-  KEY idx_camera_last_seen (last_seen_at),
-  CONSTRAINT fk_camera_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_camera_site FOREIGN KEY (site_id) REFERENCES sites(id),
-  CONSTRAINT fk_camera_zone FOREIGN KEY (zone_id) REFERENCES zones(id),
-  CONSTRAINT fk_camera_nvr FOREIGN KEY (nvr_id) REFERENCES nvr_devices(id),
-  CHECK (role_type IN ('SECURITY','ANPR','SPEED')),
-  CHECK (status IN ('ACTIVE','INACTIVE','DEGRADED','OFFLINE'))
+  CONSTRAINT uq_sites_tenant_code UNIQUE (tenant_id, code),
+  INDEX idx_sites_tenant_status (tenant_id, status)
 ) ENGINE=InnoDB;
 
 CREATE TABLE users (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  user_key VARCHAR(64) NOT NULL,
-  full_name VARCHAR(120) NOT NULL,
-  email VARCHAR(180) NOT NULL,
-  role VARCHAR(30) NOT NULL,
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  email VARCHAR(190) NOT NULL,
+  full_name VARCHAR(160) NOT NULL,
+  role ENUM('GUARD','ADMIN','OPS','SUPERADMIN_TNS') NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_user (tenant_id, user_key),
-  UNIQUE KEY uk_user_email (tenant_id, email),
-  KEY idx_users_tenant_role (tenant_id, role),
+  status ENUM('ACTIVE','INACTIVE','LOCKED') NOT NULL DEFAULT 'ACTIVE',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_users_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CHECK (role IN ('GUARD','ADMIN','OPS','SUPERADMIN_TNS')),
-  CHECK (status IN ('ACTIVE','INACTIVE','LOCKED'))
+  CONSTRAINT uq_users_tenant_email UNIQUE (tenant_id, email),
+  INDEX idx_users_tenant_role_status (tenant_id, role, status)
 ) ENGINE=InnoDB;
 
-CREATE TABLE event_rules (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  rule_key VARCHAR(64) NOT NULL,
-  name VARCHAR(120) NOT NULL,
+CREATE TABLE user_site_access (
+  user_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NOT NULL,
+  granted_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (user_id, site_id),
+  CONSTRAINT fk_usa_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_usa_site FOREIGN KEY (site_id) REFERENCES sites(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE auth_sessions (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  user_id CHAR(26) NOT NULL,
+  refresh_token_hash VARCHAR(255) NOT NULL,
+  issued_at DATETIME(3) NOT NULL,
+  expires_at DATETIME(3) NOT NULL,
+  revoked_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_auth_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_auth_user FOREIGN KEY (user_id) REFERENCES users(id),
+  UNIQUE KEY uq_refresh_hash (refresh_token_hash),
+  INDEX idx_auth_user_expires (user_id, expires_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE sources (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NOT NULL,
+  source_code VARCHAR(64) NOT NULL,
+  source_type ENUM('NVR','CAMERA','ANPR','SPEED_SENSOR','EDGE_CONNECTOR') NOT NULL,
+  display_name VARCHAR(160) NOT NULL,
+  status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+  metadata_json JSON NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_sources_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_sources_site FOREIGN KEY (site_id) REFERENCES sites(id),
+  CONSTRAINT uq_sources_tenant_code UNIQUE (tenant_id, source_code),
+  INDEX idx_sources_site_type (site_id, source_type, status)
+) ENGINE=InnoDB;
+
+CREATE TABLE ingress_idempotency (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  endpoint_key VARCHAR(64) NOT NULL,
+  idempotency_key VARCHAR(128) NOT NULL,
+  payload_hash CHAR(64) NOT NULL,
+  resource_type ENUM('EVENT','SPEED_EVENT') NOT NULL,
+  resource_id CHAR(26) NOT NULL,
+  first_seen_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  expires_at DATETIME(3) NOT NULL,
+  CONSTRAINT fk_idemp_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT uq_idemp_scope UNIQUE (tenant_id, endpoint_key, idempotency_key),
+  INDEX idx_idemp_expires (expires_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE rules (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NULL,
+  name VARCHAR(160) NOT NULL,
   enabled TINYINT(1) NOT NULL DEFAULT 1,
-  priority INT NOT NULL DEFAULT 50,
-  severity_threshold VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
-  schedule_tz VARCHAR(64) NOT NULL DEFAULT 'America/Santiago',
-  schedule_from TIME NULL,
-  schedule_to TIME NULL,
-  actions_json JSON NOT NULL,
+  priority_order INT NOT NULL DEFAULT 100,
   conditions_json JSON NOT NULL,
-  created_by BIGINT UNSIGNED NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_rule (tenant_id, site_id, rule_key),
-  KEY idx_rule_tenant_site_enabled (tenant_id, site_id, enabled),
-  KEY idx_rule_priority (priority),
-  CONSTRAINT fk_rule_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_rule_site FOREIGN KEY (site_id) REFERENCES sites(id),
-  CONSTRAINT fk_rule_user FOREIGN KEY (created_by) REFERENCES users(id),
-  CHECK (severity_threshold IN ('LOW','MEDIUM','HIGH','CRITICAL'))
+  actions_json JSON NOT NULL,
+  timezone VARCHAR(64) NOT NULL DEFAULT 'America/Santiago',
+  created_by_user_id CHAR(26) NOT NULL,
+  updated_by_user_id CHAR(26) NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_rules_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_rules_site FOREIGN KEY (site_id) REFERENCES sites(id),
+  CONSTRAINT fk_rules_created_by FOREIGN KEY (created_by_user_id) REFERENCES users(id),
+  CONSTRAINT fk_rules_updated_by FOREIGN KEY (updated_by_user_id) REFERENCES users(id),
+  INDEX idx_rules_tenant_enabled (tenant_id, enabled, priority_order)
 ) ENGINE=InnoDB;
 
-CREATE TABLE security_events (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  event_key VARCHAR(64) NOT NULL,
+CREATE TABLE events (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,
   external_event_id VARCHAR(128) NULL,
-  camera_id BIGINT UNSIGNED NULL,
-  zone_id BIGINT UNSIGNED NULL,
-  rule_id BIGINT UNSIGNED NULL,
-  event_type VARCHAR(40) NOT NULL,
-  severity VARCHAR(20) NOT NULL,
-  is_critical TINYINT(1) NOT NULL DEFAULT 0,
-  state VARCHAR(20) NOT NULL DEFAULT 'NEW',
-  occurred_at DATETIME NOT NULL,
-  received_at DATETIME NOT NULL,
-  acknowledged_at DATETIME NULL,
-  closed_at DATETIME NULL,
-  dedup_fingerprint VARCHAR(128) NULL,
-  raw_payload_json JSON NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_event_key (tenant_id, event_key),
-  KEY idx_event_occurred (tenant_id, site_id, occurred_at),
-  KEY idx_event_filters (tenant_id, state, event_type, severity, is_critical),
-  KEY idx_event_plate_hint (external_event_id),
-  KEY idx_event_dedup (tenant_id, dedup_fingerprint),
-  CONSTRAINT fk_event_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_event_site FOREIGN KEY (site_id) REFERENCES sites(id),
-  CONSTRAINT fk_event_camera FOREIGN KEY (camera_id) REFERENCES cameras(id),
-  CONSTRAINT fk_event_zone FOREIGN KEY (zone_id) REFERENCES zones(id),
-  CONSTRAINT fk_event_rule FOREIGN KEY (rule_id) REFERENCES event_rules(id),
-  CHECK (severity IN ('LOW','MEDIUM','HIGH','CRITICAL')),
-  CHECK (state IN ('NEW','IN_REVIEW','CLOSED'))
-) ENGINE=InnoDB;
-
-CREATE TABLE event_evidences (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  event_id BIGINT UNSIGNED NOT NULL,
-  evidence_type VARCHAR(20) NOT NULL,
-  object_url VARCHAR(1024) NOT NULL,
-  checksum_sha256 CHAR(64) NULL,
-  captured_at DATETIME NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_evidence_event (event_id),
-  KEY idx_evidence_type (tenant_id, evidence_type),
-  CONSTRAINT fk_evidence_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_evidence_event FOREIGN KEY (event_id) REFERENCES security_events(id),
-  CHECK (evidence_type IN ('SNAPSHOT','CLIP','THUMBNAIL'))
-) ENGINE=InnoDB;
-
-CREATE TABLE event_state_history (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  event_id BIGINT UNSIGNED NOT NULL,
-  from_state VARCHAR(20) NULL,
-  to_state VARCHAR(20) NOT NULL,
-  decision_code VARCHAR(50) NULL,
-  comment_text VARCHAR(500) NULL,
-  changed_by BIGINT UNSIGNED NULL,
-  changed_at DATETIME NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_state_event_time (event_id, changed_at),
-  KEY idx_state_tenant_to (tenant_id, to_state),
-  CONSTRAINT fk_state_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_state_event FOREIGN KEY (event_id) REFERENCES security_events(id),
-  CONSTRAINT fk_state_user FOREIGN KEY (changed_by) REFERENCES users(id),
-  CHECK (to_state IN ('NEW','IN_REVIEW','CLOSED'))
-) ENGINE=InnoDB;
-
-CREATE TABLE admission_records (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  admission_key VARCHAR(64) NOT NULL,
+  event_type VARCHAR(64) NOT NULL,
+  severity TINYINT NOT NULL,
+  zone_code VARCHAR(64) NULL,
   plate VARCHAR(16) NULL,
-  plate_normalized VARCHAR(16) NULL,
-  anpr_confidence DECIMAL(5,4) NULL,
-  source_type VARCHAR(20) NOT NULL,
+  occurred_at DATETIME(3) NOT NULL,
+  ingested_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  state ENUM('NEW','IN_REVIEW','CLOSED') NOT NULL DEFAULT 'NEW',
+  critical TINYINT(1) NOT NULL DEFAULT 0,
+  priority INT NOT NULL DEFAULT 0,
+  payload_version VARCHAR(16) NOT NULL DEFAULT '1.0',
+  raw_payload_json JSON NOT NULL,
+  matched_rule_ids_json JSON NULL,
+  decision_reason VARCHAR(255) NULL,
+  request_id VARCHAR(64) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_events_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_events_site FOREIGN KEY (site_id) REFERENCES sites(id),
+  CONSTRAINT fk_events_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  INDEX idx_events_tenant_state_priority (tenant_id, state, priority DESC, occurred_at DESC),
+  INDEX idx_events_tenant_filters (tenant_id, site_id, zone_code, event_type, severity, occurred_at DESC),
+  INDEX idx_events_plate_time (tenant_id, plate, occurred_at DESC),
+  INDEX idx_events_request (request_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE event_evidence (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  event_id CHAR(26) NOT NULL,
+  kind ENUM('SNAPSHOT','CLIP','IMAGE','VIDEO','OTHER') NOT NULL,
+  storage_uri VARCHAR(1024) NOT NULL,
+  mime_type VARCHAR(128) NULL,
+  sha256 CHAR(64) NULL,
+  captured_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_event_evidence_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_event_evidence_event FOREIGN KEY (event_id) REFERENCES events(id),
+  INDEX idx_event_evidence_event (event_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE event_timeline (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  event_id CHAR(26) NOT NULL,
+  action_type VARCHAR(64) NOT NULL,
+  from_state ENUM('NEW','IN_REVIEW','CLOSED') NULL,
+  to_state ENUM('NEW','IN_REVIEW','CLOSED') NULL,
+  decision VARCHAR(128) NULL,
+  comment_text TEXT NULL,
+  actor_type ENUM('USER','SYSTEM','CONNECTOR') NOT NULL,
+  actor_user_id CHAR(26) NULL,
+  metadata_json JSON NULL,
+  occurred_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  request_id VARCHAR(64) NULL,
+  CONSTRAINT fk_event_timeline_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_event_timeline_event FOREIGN KEY (event_id) REFERENCES events(id),
+  CONSTRAINT fk_event_timeline_actor_user FOREIGN KEY (actor_user_id) REFERENCES users(id),
+  INDEX idx_event_timeline_event_time (event_id, occurred_at ASC),
+  INDEX idx_event_timeline_tenant_time (tenant_id, occurred_at DESC)
+) ENGINE=InnoDB;
+
+CREATE TABLE admissions (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NOT NULL,
+  plate VARCHAR(16) NULL,
+  visitor_id VARCHAR(64) NULL,
+  visitor_name VARCHAR(160) NULL,
+  destination_company VARCHAR(160) NOT NULL,
+  source_type ENUM('MANUAL','ANPR','HYBRID') NOT NULL,
+  entry_at DATETIME(3) NOT NULL,
+  notes TEXT NULL,
   review_required TINYINT(1) NOT NULL DEFAULT 0,
-  visitor_identifier VARCHAR(80) NULL,
-  visitor_name VARCHAR(120) NULL,
-  destination_company VARCHAR(160) NULL,
-  entry_at DATETIME NOT NULL,
-  notes VARCHAR(500) NULL,
-  created_by BIGINT UNSIGNED NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_admission_key (tenant_id, admission_key),
-  KEY idx_admission_plate_time (tenant_id, plate_normalized, entry_at),
-  KEY idx_admission_filters (tenant_id, site_id, entry_at, review_required),
+  created_by_user_id CHAR(26) NOT NULL,
+  updated_by_user_id CHAR(26) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_adm_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
   CONSTRAINT fk_adm_site FOREIGN KEY (site_id) REFERENCES sites(id),
-  CONSTRAINT fk_adm_user FOREIGN KEY (created_by) REFERENCES users(id),
-  CHECK (source_type IN ('ANPR','MANUAL','HYBRID'))
+  CONSTRAINT fk_adm_created_by FOREIGN KEY (created_by_user_id) REFERENCES users(id),
+  CONSTRAINT fk_adm_updated_by FOREIGN KEY (updated_by_user_id) REFERENCES users(id),
+  INDEX idx_adm_tenant_entry (tenant_id, entry_at DESC),
+  INDEX idx_adm_tenant_plate_entry (tenant_id, plate, entry_at DESC),
+  INDEX idx_adm_review (tenant_id, review_required, entry_at DESC)
 ) ENGINE=InnoDB;
 
 CREATE TABLE speed_events (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  speed_event_key VARCHAR(64) NOT NULL,
-  camera_id BIGINT UNSIGNED NULL,
-  plate VARCHAR(16) NOT NULL,
-  plate_normalized VARCHAR(16) NOT NULL,
-  speed_kmh DECIMAL(6,2) NOT NULL,
-  speed_limit_kmh DECIMAL(6,2) NOT NULL,
-  occurred_at DATETIME NOT NULL,
-  evidence_url VARCHAR(1024) NULL,
-  raw_payload_json JSON NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_speed_event (tenant_id, speed_event_key),
-  KEY idx_speed_plate_time (tenant_id, plate_normalized, occurred_at),
-  KEY idx_speed_site_time (tenant_id, site_id, occurred_at),
-  CONSTRAINT fk_speed_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_speed_site FOREIGN KEY (site_id) REFERENCES sites(id),
-  CONSTRAINT fk_speed_camera FOREIGN KEY (camera_id) REFERENCES cameras(id)
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,
+  external_event_id VARCHAR(128) NULL,
+  plate VARCHAR(16) NULL,
+  speed_kph DECIMAL(6,2) NOT NULL,
+  speed_limit_kph DECIMAL(6,2) NOT NULL,
+  occurred_at DATETIME(3) NOT NULL,
+  payload_version VARCHAR(16) NOT NULL DEFAULT '1.0',
+  raw_payload_json JSON NOT NULL,
+  request_id VARCHAR(64) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_spd_evt_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_spd_evt_site FOREIGN KEY (site_id) REFERENCES sites(id),
+  CONSTRAINT fk_spd_evt_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  INDEX idx_spd_evt_tenant_time (tenant_id, occurred_at DESC),
+  INDEX idx_spd_evt_tenant_plate (tenant_id, plate, occurred_at DESC)
+) ENGINE=InnoDB;
+
+CREATE TABLE speed_event_evidence (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  speed_event_id CHAR(26) NOT NULL,
+  kind ENUM('SNAPSHOT','CLIP','IMAGE','VIDEO','OTHER') NOT NULL,
+  storage_uri VARCHAR(1024) NOT NULL,
+  mime_type VARCHAR(128) NULL,
+  sha256 CHAR(64) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_spd_ev_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_spd_ev_event FOREIGN KEY (speed_event_id) REFERENCES speed_events(id),
+  INDEX idx_spd_ev_event (speed_event_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE speed_cases (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  case_key VARCHAR(64) NOT NULL,
-  speed_event_id BIGINT UNSIGNED NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
-  correlation_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-  correlation_confidence DECIMAL(5,4) NULL,
-  correlated_admission_id BIGINT UNSIGNED NULL,
-  correlated_by VARCHAR(20) NULL,
-  opened_at DATETIME NOT NULL,
-  closed_at DATETIME NULL,
-  notes VARCHAR(500) NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_speed_case (tenant_id, case_key),
-  KEY idx_speed_case_filters (tenant_id, site_id, status, correlation_status, opened_at),
-  KEY idx_speed_case_plate_time (tenant_id, opened_at),
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NOT NULL,
+  speed_event_id CHAR(26) NOT NULL,
+  state ENUM('OPEN','CORRELATED_AUTO','CORRELATED_MANUAL','CLOSED') NOT NULL DEFAULT 'OPEN',
+  correlation_status ENUM('PENDING','CORRELATED_AUTO','CORRELATED_MANUAL','MANUAL_REVIEW_REQUIRED','NO_MATCH') NOT NULL DEFAULT 'PENDING',
+  confidence_score DECIMAL(5,4) NULL,
+  correlation_window_minutes INT NOT NULL DEFAULT 120,
+  matched_admission_id CHAR(26) NULL,
+  manual_review_required TINYINT(1) NOT NULL DEFAULT 0,
+  correlation_reason VARCHAR(255) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_spd_case_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
   CONSTRAINT fk_spd_case_site FOREIGN KEY (site_id) REFERENCES sites(id),
   CONSTRAINT fk_spd_case_event FOREIGN KEY (speed_event_id) REFERENCES speed_events(id),
-  CONSTRAINT fk_spd_case_adm FOREIGN KEY (correlated_admission_id) REFERENCES admission_records(id),
-  CHECK (status IN ('OPEN','IN_REVIEW','CLOSED')),
-  CHECK (correlation_status IN ('PENDING','MATCHED','AMBIGUOUS','UNMATCHED','MANUAL_MATCHED')),
-  CHECK (correlated_by IN ('AUTO','MANUAL') OR correlated_by IS NULL)
+  CONSTRAINT fk_spd_case_adm FOREIGN KEY (matched_admission_id) REFERENCES admissions(id),
+  INDEX idx_spd_case_tenant_state (tenant_id, state, created_at DESC),
+  INDEX idx_spd_case_tenant_corr (tenant_id, correlation_status, created_at DESC)
 ) ENGINE=InnoDB;
 
-CREATE TABLE notification_logs (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  channel VARCHAR(20) NOT NULL,
-  recipient VARCHAR(180) NOT NULL,
-  event_id BIGINT UNSIGNED NULL,
-  speed_case_id BIGINT UNSIGNED NULL,
-  status VARCHAR(20) NOT NULL,
-  provider_message_id VARCHAR(120) NULL,
-  attempts INT NOT NULL DEFAULT 1,
-  last_error VARCHAR(500) NULL,
-  sent_at DATETIME NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_notif_filters (tenant_id, site_id, channel, status, created_at),
-  KEY idx_notif_event (event_id),
-  KEY idx_notif_case (speed_case_id),
-  CONSTRAINT fk_notif_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_notif_site FOREIGN KEY (site_id) REFERENCES sites(id),
-  CONSTRAINT fk_notif_event FOREIGN KEY (event_id) REFERENCES security_events(id),
-  CONSTRAINT fk_notif_case FOREIGN KEY (speed_case_id) REFERENCES speed_cases(id),
-  CHECK (channel IN ('IN_APP','EMAIL_INTERNAL','WEBHOOK')),
-  CHECK (status IN ('QUEUED','SENT','FAILED','CANCELLED'))
+CREATE TABLE speed_case_correlation_candidates (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  speed_case_id CHAR(26) NOT NULL,
+  admission_id CHAR(26) NOT NULL,
+  score DECIMAL(5,4) NOT NULL,
+  reason VARCHAR(255) NULL,
+  selected TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_spd_cand_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_spd_cand_case FOREIGN KEY (speed_case_id) REFERENCES speed_cases(id),
+  CONSTRAINT fk_spd_cand_adm FOREIGN KEY (admission_id) REFERENCES admissions(id),
+  CONSTRAINT uq_case_adm UNIQUE (speed_case_id, admission_id),
+  INDEX idx_spd_cand_case_score (speed_case_id, score DESC)
 ) ENGINE=InnoDB;
 
-CREATE TABLE edge_connectors (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  connector_key VARCHAR(64) NOT NULL,
-  name VARCHAR(120) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-  last_heartbeat_at DATETIME NULL,
-  version VARCHAR(40) NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_connector (tenant_id, site_id, connector_key),
-  KEY idx_connector_last_heartbeat (tenant_id, site_id, last_heartbeat_at),
-  CONSTRAINT fk_connector_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-  CONSTRAINT fk_connector_site FOREIGN KEY (site_id) REFERENCES sites(id),
-  CHECK (status IN ('ACTIVE','INACTIVE','DEGRADED','OFFLINE'))
+CREATE TABLE notifications (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NOT NULL,
+  event_id CHAR(26) NULL,
+  speed_case_id CHAR(26) NULL,
+  channel ENUM('IN_APP','WS','EMAIL_INTERNAL') NOT NULL,
+  target_type ENUM('USER','ROLE','GROUP') NOT NULL,
+  target_value VARCHAR(160) NOT NULL,
+  message_body TEXT NOT NULL,
+  status ENUM('QUEUED','SENT','FAILED') NOT NULL DEFAULT 'QUEUED',
+  attempts INT NOT NULL DEFAULT 0,
+  last_attempt_at DATETIME(3) NULL,
+  sent_at DATETIME(3) NULL,
+  error_code VARCHAR(64) NULL,
+  error_message VARCHAR(255) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_not_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_not_site FOREIGN KEY (site_id) REFERENCES sites(id),
+  CONSTRAINT fk_not_event FOREIGN KEY (event_id) REFERENCES events(id),
+  CONSTRAINT fk_not_case FOREIGN KEY (speed_case_id) REFERENCES speed_cases(id),
+  INDEX idx_not_tenant_status (tenant_id, status, created_at DESC)
 ) ENGINE=InnoDB;
 
-CREATE TABLE device_health_status (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  source_type VARCHAR(20) NOT NULL,
-  source_ref_id BIGINT UNSIGNED NOT NULL,
-  status VARCHAR(20) NOT NULL,
+CREATE TABLE health_sources_status (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,
+  status ENUM('UP','DEGRADED','DOWN') NOT NULL,
+  last_seen_at DATETIME(3) NULL,
   consecutive_failures INT NOT NULL DEFAULT 0,
-  last_check_at DATETIME NOT NULL,
-  last_ok_at DATETIME NULL,
-  detail_json JSON NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_source_health (tenant_id, site_id, source_type, source_ref_id),
-  KEY idx_health_status (tenant_id, site_id, status, last_check_at),
-  CHECK (source_type IN ('CAMERA','NVR','CONNECTOR')),
-  CHECK (status IN ('HEALTHY','DEGRADED','OFFLINE'))
+  metrics_json JSON NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_hss_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_hss_site FOREIGN KEY (site_id) REFERENCES sites(id),
+  CONSTRAINT fk_hss_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  CONSTRAINT uq_hss_source UNIQUE (tenant_id, source_id),
+  INDEX idx_hss_tenant_status (tenant_id, status, updated_at DESC)
 ) ENGINE=InnoDB;
 
 CREATE TABLE health_incidents (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  site_id BIGINT UNSIGNED NOT NULL,
-  incident_key VARCHAR(64) NOT NULL,
-  source_type VARCHAR(20) NOT NULL,
-  source_ref_id BIGINT UNSIGNED NOT NULL,
-  severity VARCHAR(20) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
-  opened_at DATETIME NOT NULL,
-  resolved_at DATETIME NULL,
-  detail_json JSON NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_health_incident (tenant_id, incident_key),
-  KEY idx_health_incident_filters (tenant_id, site_id, status, severity, opened_at),
-  CHECK (source_type IN ('CAMERA','NVR','CONNECTOR')),
-  CHECK (severity IN ('LOW','MEDIUM','HIGH','CRITICAL')),
-  CHECK (status IN ('OPEN','ACK','RESOLVED'))
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  site_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,
+  status ENUM('OPEN','ACKED','RESOLVED') NOT NULL DEFAULT 'OPEN',
+  opened_at DATETIME(3) NOT NULL,
+  acknowledged_at DATETIME(3) NULL,
+  resolved_at DATETIME(3) NULL,
+  title VARCHAR(180) NOT NULL,
+  details TEXT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_hi_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_hi_site FOREIGN KEY (site_id) REFERENCES sites(id),
+  CONSTRAINT fk_hi_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  INDEX idx_hi_tenant_status_opened (tenant_id, status, opened_at DESC)
 ) ENGINE=InnoDB;
 
-CREATE TABLE audit_logs (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  tenant_id BIGINT UNSIGNED NOT NULL,
-  actor_user_id BIGINT UNSIGNED NULL,
-  actor_type VARCHAR(20) NOT NULL,
-  action VARCHAR(80) NOT NULL,
-  entity_type VARCHAR(40) NOT NULL,
-  entity_id VARCHAR(80) NOT NULL,
-  request_id VARCHAR(80) NULL,
-  ip_address VARCHAR(64) NULL,
-  user_agent VARCHAR(255) NULL,
-  payload_json JSON NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_audit_tenant_time (tenant_id, created_at),
-  KEY idx_audit_entity (tenant_id, entity_type, entity_id),
-  KEY idx_audit_actor (tenant_id, actor_user_id, created_at),
+CREATE TABLE health_check_runs (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  triggered_by_user_id CHAR(26) NULL,
+  trigger_type ENUM('SCHEDULER','MANUAL_OPS') NOT NULL,
+  status ENUM('SCHEDULED','RUNNING','DONE','FAILED') NOT NULL,
+  started_at DATETIME(3) NULL,
+  finished_at DATETIME(3) NULL,
+  summary_json JSON NULL,
+  request_id VARCHAR(64) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_hcr_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_hcr_user FOREIGN KEY (triggered_by_user_id) REFERENCES users(id),
+  INDEX idx_hcr_tenant_status (tenant_id, status, created_at DESC)
+) ENGINE=InnoDB;
+
+CREATE TABLE api_audit_log (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NULL,
+  site_id CHAR(26) NULL,
+  actor_user_id CHAR(26) NULL,
+  actor_role VARCHAR(32) NULL,
+  action VARCHAR(128) NOT NULL,
+  resource_type VARCHAR(64) NOT NULL,
+  resource_id CHAR(26) NULL,
+  request_id VARCHAR(64) NOT NULL,
+  status_code SMALLINT NOT NULL,
+  details_json JSON NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_audit_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_audit_site FOREIGN KEY (site_id) REFERENCES sites(id),
   CONSTRAINT fk_audit_user FOREIGN KEY (actor_user_id) REFERENCES users(id),
-  CHECK (actor_type IN ('USER','SYSTEM','CONNECTOR'))
+  INDEX idx_audit_request (request_id),
+  INDEX idx_audit_tenant_time (tenant_id, created_at DESC)
 ) ENGINE=InnoDB;
 ```
 
-## 3) Índices críticos por caso de uso
+## 3. Relaciones clave
+- `tenant` 1:N con casi todas las entidades de dominio.
+- `events` 1:N `event_evidence` y 1:N `event_timeline`.
+- `speed_events` 1:1 `speed_cases` (MVP).
+- `speed_cases` N:1 `admissions` seleccionado + N:N candidatos.
+- `sources` 1:1 estado salud + 1:N incidentes.
 
-M1/M5 cola e historial:
-- security_events idx_event_occurred
-- security_events idx_event_filters
-- event_state_history idx_state_event_time
+## 4. Índices críticos por caso de uso
+- Cola operativa: `idx_events_tenant_state_priority`.
+- Filtros evento: `idx_events_tenant_filters`.
+- Búsqueda patente: `idx_events_plate_time`, `idx_adm_tenant_plate_entry`, `idx_spd_evt_tenant_plate`.
+- Timeline: `idx_event_timeline_event_time`.
+- Salud: `idx_hss_tenant_status`, `idx_hi_tenant_status_opened`.
 
-M4/M6 correlación patente↔ingreso:
-- admission_records idx_admission_plate_time
-- speed_events idx_speed_plate_time
-- speed_cases idx_speed_case_filters
-
-M8 salud técnica:
-- device_health_status idx_health_status
-- health_incidents idx_health_incident_filters
-
-## 4) Reglas de integridad
-
-- Todo registro funcional lleva tenant_id y site_id (aislamiento).
-- Cambios de estado de evento siempre generan fila en event_state_history.
-- Expediente de velocidad nunca se crea sin speed_event_id.
-- Correlación automática no pisa una correlación manual (requiere transición explícita).
-
-## 5) Política de retención sugerida (MVP)
-
-- audit_logs: 12 meses (mínimo).
-- security_events + event_state_history: 12 meses.
-- evidencias pesadas (objetos): lifecycle 90 días (configurable).
-- health_incidents: 12 meses para análisis de disponibilidad.
+## 5. Reglas de integridad
+1. Toda consulta debe filtrar por `tenant_id`.
+2. Idempotency key repetida con hash distinto => `IDEMPOTENCY_CONFLICT`.
+3. Transiciones de estado se validan contra estado actual.
+4. Correlación manual exige justificación y auditoría.
