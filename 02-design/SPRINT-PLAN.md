@@ -1,198 +1,136 @@
-# Sprint Plan — MVP CCTV (sprints de 1 semana)
+# SPRINT-PLAN.md
 
-Horizonte: 6 sprints (1 semana c/u)
-Objetivo: entregar M1..M8 del PRD con control de riesgo y gate de aprobación por diseño.
+<!-- ARC_TASK:t_57457627 -->
 
-Suposiciones de capacidad por sprint (referencial):
-- dev-back: 25 pts
-- dev-front: 20 pts
-- qa: 15 pts
-- ops: 15 pts
+## 1. Enfoque
+- Sprints de 1 semana.
+- Alcance estricto PRD (M1..M14 + S1..S3 según capacidad).
+- Perfiles: dev-back, dev-front, qa, ops.
 
-Convención de tamaño:
-- S (1-2 pts), M (3-5 pts), L (8 pts)
+Estimación:
+- S: 0.5-1d
+- M: 1-2d
+- L: 2-3d
+- XL: 3-5d
 
-## Sprint 1 — Fundación técnica y M1 base
+## 2. Plan por sprint
 
-Meta:
-- Plataforma mínima operativa: auth, modelo base, ingesta normalizada y cola inicial.
+### Sprint 1: Fundaciones contractuales y seguridad
+Objetivo: M1 + M13 + M14 base.
 
-dev-back:
-- [L-8] Bootstrap API + módulos auth, events, audit.
-- [M-5] Endpoint /ingestion/events con idempotency + persistencia.
-- [M-5] Modelo MySQL inicial (tenants/sites/zones/cameras/events/evidence).
-- [M-5] Logs estructurados + request_id + tenant scoping.
+dev-back
+- Auth login/refresh/logout JWT + sesiones refresh (XL)
+- Middleware RBAC + tenancy guard (L)
+- Error estándar + `X-Request-Id` (M)
+- Tablas base tenant/site/users/sessions/audit (L)
 
-dev-front:
-- [M-5] Shell PWA (login, layout por rol).
-- [M-5] Vista cola eventos básica (tabla + refresh).
-- [S-2] Estado vacío/error/reintento.
+dev-front
+- Login/logout + refresh handling (L)
+- Guardas por rol (M)
+- Manejo global de errores contractuales (S)
 
-qa:
-- [M-5] Plan de pruebas API auth + ingestión.
-- [M-5] Casos de validación esquema y errores 4xx/5xx.
-- [S-2] Smoke e2e login->evento visible.
+qa
+- Matriz auth/RBAC y negativas 401/403 (M)
+- Validación envelope de error/request_id (S)
 
-ops:
-- [M-5] Entorno dev/stage + MySQL + Redis + object storage.
-- [M-5] Pipeline CI básico + variables seguras.
-- [S-2] Observabilidad mínima (logs centralizados).
+ops
+- Entorno base app+mysql+redis+storage (L)
+- Secretos por ambiente y rotación inicial (M)
 
-DoD sprint 1:
-- Evento ingestado aparece en cola y queda auditado.
+### Sprint 2: Ingesta + cola + detalle
+Objetivo: M2, M4, M5.
 
-## Sprint 2 — M2 reglas + M3 popup real-time
+dev-back
+- POST `/ingest/events` idempotente (XL)
+- GET `/events` filtros/paginación (L)
+- GET `/events/{id}` + timeline + evidencia (L)
 
-Meta:
-- Priorización configurable y popup automático al guardia.
+dev-front
+- Cola operativa con filtros (L)
+- Detalle evento + timeline + evidencia (L)
 
-dev-back:
-- [L-8] Rule Engine (zona/horario/tipo/severidad + acciones).
-- [M-5] CRUD reglas (/rules).
-- [M-5] WS /ws/operations (event.created + event.popup).
-- [S-2] Timeline de estado inicial en event_state_history.
+qa
+- Pruebas idempotencia (M)
+- Pruebas filtros/paginación y detalle (M)
 
-dev-front:
-- [L-8] Popup operativo con evidencia/cámara y acciones confirmar/descartar.
-- [M-5] UI de gestión de reglas (admin).
-- [S-2] Notificación visual de eventos críticos.
+ops
+- Métricas ingest->visible y errores ingest (M)
+- Configuración bucket por tenant (S)
 
-qa:
-- [M-5] Matriz reglas (dentro/fuera horario, zona, severidad).
-- [M-5] Pruebas tiempo real WS + reconexión.
-- [S-2] Verificación trazabilidad de acciones guardia.
+### Sprint 3: Estados + reglas + WS
+Objetivo: M6, M7, M12.
 
-ops:
-- [M-5] Despliegue WS escalable (sticky o pub/sub Redis).
-- [M-5] Config TLS y políticas CORS iniciales.
+dev-back
+- PATCH state con state machine (L)
+- CRUD `/rules` + evaluator runtime (XL)
+- WS `/ws/operations` server/client events (XL)
 
-DoD sprint 2:
-- Evento crítico dispara popup automático y acción queda registrada.
+dev-front
+- Popup operativo + ack.popup (L)
+- Actualización realtime de cola (L)
+- UI admin reglas (L)
 
-## Sprint 3 — M4 ingresos ANPR/manual/híbrido
+qa
+- Pruebas transiciones válidas/inválidas (M)
+- Pruebas WS auth+mensajes (L)
 
-Meta:
-- Registro de ingresos usable y auditable, con casos conflictivos.
+ops
+- Redis fanout + monitoreo conexiones WS (M)
+- Alertas de degradación realtime (S)
 
-dev-back:
-- [M-5] CRUD admissions + validaciones.
-- [M-5] Soporte source_type y review_required.
-- [M-5] Endpoint actualización/corrección manual.
+### Sprint 4: Admissions + speed cases
+Objetivo: M3, M8, M9 + S2.
 
-dev-front:
-- [M-5] Form ingreso rápido guardia (ANPR/manual/híbrido).
-- [M-5] Bandeja “requiere revisión manual”.
-- [S-2] UX de corrección de patente parcial.
+dev-back
+- `/admissions` GET/POST/PATCH con auditoría (L)
+- `/ingest/speed-events` + creación speed_case (L)
+- `/speed-cases` + correlación automática (XL)
+- `manual-correlation` con justificación (M)
 
-qa:
-- [M-5] Casos ANPR correcto/parcial/conflictivo.
-- [M-5] Pruebas de permisos (GUARD vs ADMIN).
+dev-front
+- UI admissions (L)
+- UI speed-cases lista/detalle (L)
+- Flujo manual review correlación (M)
 
-ops:
-- [M-5] Hardening de túnel conector->core (si ya disponible en entorno).
-- [S-2] Métricas de latencia ingestión->cola.
+qa
+- Pruebas admissions manual/ANPR/híbrido (M)
+- Pruebas correlación match/no-match/ambiguous (L)
 
-DoD sprint 3:
-- Ingreso queda almacenado con fuente explícita y marca de revisión cuando aplica.
+ops
+- Jobs correlación diferida + retry seguro (M)
+- Métricas éxito/ambigüedad correlación (S)
 
-## Sprint 4 — M5 historial + S2 estados + S3 export
+### Sprint 5: Notificaciones + salud + cierre MVP
+Objetivo: M10, M11, S1, S3.
 
-Meta:
-- Historial consultable robusto con filtros y bitácora.
+dev-back
+- `/notifications` + outbox/reintentos + `/notifications/test` (L)
+- `/health/sources`, `/health/incidents`, `/health/checks/run` (L)
+- `/exports/events.csv` (M)
+- Hardening final seguridad/performance (L)
 
-dev-back:
-- [L-8] /events filtros avanzados (fecha/zona/tipo/patente/estado).
-- [M-5] PATCH estado evento + bitácora obligatoria.
-- [M-5] Export CSV filtrado (/exports/events.csv).
+dev-front
+- Centro de notificaciones (M)
+- Vista OPS salud e incidentes (L)
+- Export CSV desde filtros (S)
 
-dev-front:
-- [L-8] Vista historial con filtros persistentes + detalle.
-- [M-5] Timeline visual de decisiones.
-- [S-2] Descarga CSV.
+qa
+- E2E F1..F5 (XL)
+- Validación consistencia REST/WS (L)
+- Regression + checklist release (M)
 
-qa:
-- [M-5] Pruebas de filtros combinados y paginación.
-- [M-5] Validación export CSV contra resultados UI.
+ops
+- Dashboards KPI y alertas operativas (M)
+- Runbook incidentes + simulacro recuperación (M)
 
-ops:
-- [M-5] Índices DB y tuning consultas p95.
-- [S-2] Dashboards iniciales de KPIs operación.
+## 3. Dependencias críticas
+1. Contrato API/WS freeze por sprint para no romper frontend.
+2. QA de contrato desde Sprint 1, no al final.
+3. Observabilidad base desde Sprint 1.
+4. Correlación speed depende de calidad admissions y fuente velocidad.
 
-DoD sprint 4:
-- Administración puede consultar historial y exportar CSV coherente.
-
-## Sprint 5 — M6 expediente velocidad + correlación S1 + M7 notificación
-
-Meta:
-- Expediente de velocidad completo con correlación y notificación interna.
-
-dev-back:
-- [L-8] Ingesta speed_events + creación speed_cases.
-- [L-8] Correlation Engine (ventana configurable + confidence + ambiguous).
-- [M-5] Notification Service interno (in-app/email interno/webhook opcional).
-
-dev-front:
-- [M-5] Vista expedientes velocidad + estado correlación.
-- [M-5] Flujo de correlación manual asistida.
-- [M-5] Centro de notificaciones internas.
-
-qa:
-- [L-8] Casos de correlación: match único, ambiguo, sin match.
-- [M-5] Pruebas de trazabilidad notificación enviada/fallida.
-
-ops:
-- [M-5] Config proveedor notificación interno + retries.
-- [M-5] Alertas de error rate de notificaciones.
-
-DoD sprint 5:
-- Exceso de velocidad genera expediente y notificación interna en casos configurados.
-
-## Sprint 6 — M8 salud técnica + hardening + UAT
-
-Meta:
-- Monitoreo técnico operativo + cierre de brechas para salida MVP.
-
-dev-back:
-- [L-8] Health monitor scheduler (cámaras/NVR/conector) + incidentes.
-- [M-5] Endpoints /health/sources y /health/incidents.
-- [M-5] Reconexión y manejo estados OFFLINE/DEGRADED.
-
-dev-front:
-- [M-5] Panel salud técnica para OPS.
-- [S-2] Alertas visuales y filtros por severidad.
-
-qa:
-- [L-8] E2E M1..M8 completo + pruebas de regresión.
-- [M-5] Pruebas no funcionales básicas (latencia objetivo, carga moderada).
-- [S-2] UAT checklist con guardia/admin.
-
-ops:
-- [M-5] Backups/restores y runbook incidentes.
-- [M-5] SLOs + alertas definitivas (latencia, disponibilidad, MTTR).
-- [S-2] Preparación go-live controlado.
-
-DoD sprint 6:
-- Salud técnica visible, alertas activas y aceptación operacional MVP.
-
-## Dependencias clave
-
-- Reemplazo NVR3: riesgo externo que puede limitar cobertura total; no bloquea avance parcial en NVR1/NVR2.
-- Fuente confiable de velocidad/patente: necesaria para M6 productivo.
-- Definición temprana de umbrales y destinatarios para M2/M7.
-
-## Riesgos de ejecución y mitigación
-
-- Riesgo: reglas mal calibradas generan ruido.
-  - Mitigación: semana de calibración + tablero de falsas alarmas.
-
-- Riesgo: latencia por red variable.
-  - Mitigación: buffer/retry edge + monitoreo p95 continuo.
-
-- Riesgo: baja adopción cierre de eventos.
-  - Mitigación: UX mínima fricción + capacitación por turno.
-
-## Criterio de salida a implementación
-
-- Gate de diseño aprobado (label approved-design).
-- Evidencia de cumplimiento M1..M8 en staging con UAT base.
-- Observabilidad y seguridad mínima activas (JWT, tenancy, auditoría, CORS controlado).
+## 4. Definition of Done transversal
+- Endpoint/documento contractual actualizado.
+- RBAC + tenant isolation cubiertos con pruebas negativas.
+- request_id trazable en logs.
+- Sin scope creep fuera PRD aprobado.
