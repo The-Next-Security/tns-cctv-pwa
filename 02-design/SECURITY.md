@@ -1,149 +1,83 @@
-# Security Design — MVP CCTV
+# SECURITY.md
+
+<!-- ARC_TASK:t_57457627 -->
 
 ## 1. Objetivo
+Controles de seguridad para MVP CCTV: JWT, RBAC, aislamiento multi-tenant, secretos, CORS y auditoría.
 
-Asegurar confidencialidad, integridad, disponibilidad y aislamiento multi-tenant para eventos de seguridad, evidencias y operaciones del parque.
+## 2. Auth JWT (M1)
+- Access token corto (ej. 15 min).
+- Refresh token persistido como hash en `auth_sessions`.
+- Logout revoca refresh.
+- Claims mínimos: `sub`, `tenant_id`, `role`, `site_ids`, `iat`, `exp`, `jti`.
+- Firma recomendada: RS256/ES256 con `kid` para rotación.
 
-## 2. Autenticación (JWT)
-
-Modelo:
-- Access token JWT (vida corta: 60 min).
-- Refresh token rotatorio (vida 7 días, revocable).
-- Tokens firmados con clave asimétrica (RS256 recomendado).
-
-Claims mínimas:
-- sub: user_id
-- tenant_id
-- site_ids autorizados
-- role
-- jti
-- exp, iat
-
-Flujos:
-- login -> access + refresh
-- refresh -> nuevo access (+ opcional rotación refresh)
-- logout -> invalidación refresh/jti en denylist temporal
-
-Buenas prácticas:
-- password hash con Argon2id o bcrypt cost alto.
-- rate limiting en login y bloqueo progresivo por intentos.
-- sesión con device fingerprint opcional (MVP simple: ip+ua hash).
-
-## 3. Autorización (RBAC + tenancy)
-
-Roles MVP:
+## 3. Autorización RBAC (M13)
+Roles:
 - GUARD
 - ADMIN
 - OPS
 - SUPERADMIN_TNS
 
 Reglas:
-- Toda query incluye tenant_id obligatorio.
-- Acceso por site_id filtrado por permisos del usuario.
-- SUPERADMIN_TNS solo para operaciones cross-tenant explícitas.
+1) Deny-by-default.
+2) Verificar rol + tenant + site scope en cada endpoint.
+3) Endpoints sensibles:
+- `/rules*` solo ADMIN/SUPERADMIN_TNS.
+- `/health/checks/run` solo OPS/SUPERADMIN_TNS.
 
-Aplicación técnica:
-- Policy middleware en backend valida role + scope.
-- Repositorios SQL aplican tenant_id/site_id en cada consulta (sin excepciones).
-- Prohibido usar endpoints sin scoping multi-tenant.
+## 4. Multi-tenant estricto
+- Todas las tablas de dominio incluyen `tenant_id`.
+- Toda query debe filtrar `tenant_id`.
+- Evidencia por prefijo aislado (`/<tenant_id>/...`).
+- WS separado por topics tenant/site.
 
-## 4. Seguridad de conectividad parque-cloud
+## 5. Seguridad de ingesta edge
+- Credencial técnica por conector tenant/site.
+- TLS obligatorio.
+- `X-Idempotency-Key` + hash payload para deduplicación/replay control.
+- Validar `tenant_id/site_id` contra identidad del conector.
 
-- Conector en parque inicia túnel saliente TLS (no inbound público a NVR/cámaras).
-- mTLS recomendado entre edge connector y core API.
-- Credenciales de conector por tenant/site, revocables.
-- Heartbeat firmado para detectar spoofing/desconexión.
+## 6. CORS
+- Allowlist explícita de origins (sin wildcard abierto).
+- Métodos: GET, POST, PATCH, DELETE, OPTIONS.
+- Headers permitidos: Authorization, Content-Type, X-Request-Id, X-Idempotency-Key.
+- No combinar `*` con credenciales.
 
-## 5. Secretos y credenciales
+## 7. Gestión de secretos
+- Secretos solo en vault/env seguros, nunca en repo.
+- Rotación de claves JWT y credenciales técnicas.
+- Mínimo privilegio por servicio.
+- Enmascarar secretos en logs.
 
-Fuentes permitidas:
-- Secret Manager (Vault/SSM/GCP Secret Manager) o variables de entorno cifradas en runtime.
+## 8. Hardening API/WS
+- Rate limit por IP/user/tenant.
+- Protección brute force en login.
+- Límite de tamaño payload.
+- Sanitización de campos texto (`comment`, `notes`).
+- WS heartbeat obligatorio y cierre en token inválido/expirado.
 
-Política:
-- Nunca secretos en repositorio.
-- Rotación trimestral mínima para claves API y credenciales de integraciones.
-- Claves JWT privadas con control de acceso estricto y auditoría.
-- Separación por entorno (dev/stage/prod) y por tenant cuando aplique.
+## 9. Auditoría (M14)
+- Propagar `X-Request-Id` en todo request/response.
+- Registrar acciones críticas en `api_audit_log`.
+- Registrar timeline en cambios de estado y correlaciones manuales.
 
-## 6. CORS y seguridad de APIs
+Eventos a auditar:
+- login fail/success
+- refresh/logout
+- cambios reglas
+- cambios estado evento
+- correlación manual speed case
+- ejecución manual health check
 
-CORS:
-- allowlist explícita de orígenes front (guardia/admin/ops).
-- Métodos permitidos mínimos: GET, POST, PATCH.
-- Credentials habilitadas solo cuando sea necesario.
+## 10. Retención y privacidad
+- Minimizar PII en responses según rol.
+- Audit y timeline: 12 meses.
+- Evidencia pesada: 90 días (ajustable por política).
+- URLs firmadas de evidencia con expiración corta.
 
-Headers de seguridad:
-- Content-Security-Policy (frontend).
-- X-Content-Type-Options: nosniff.
-- X-Frame-Options: DENY.
-- Referrer-Policy: strict-origin-when-cross-origin.
-- HSTS en dominios HTTPS.
-
-Protección API:
-- Validación estricta de payload (schema validation).
-- Rate limits por IP + por user + por conector.
-- Idempotency-key en ingestión para evitar duplicados por retry.
-
-## 7. Seguridad de evidencia y archivos
-
-- Evidencia en object storage privado (bucket no público).
-- Acceso mediante URL firmada con TTL corto.
-- Hash checksum de evidencias críticas (sha256) para trazabilidad.
-- Lifecycle policy para expiración según retención definida.
-
-## 8. Auditoría y trazabilidad
-
-Auditar como mínimo:
-- login/logout/refresh
-- cambios de estado de eventos
-- cambios de reglas
-- correlaciones manuales
-- envíos de notificación
-- acciones de OPS sobre salud técnica
-
-Formato:
-- actor, acción, entidad, antes/después (diff cuando aplique), timestamp, request_id.
-- logs inmutables por 12 meses mínimo.
-
-## 9. Privacidad y minimización de datos
-
-- Guardar solo datos necesarios para operación y trazabilidad del PRD.
-- Evitar almacenar PII extra no requerida.
-- Campos sensibles (identificadores de visitantes) con acceso restringido por rol.
-- Política clara de retención y purga.
-
-## 10. Threat model resumido y mitigaciones
-
-1) Robo de token JWT
-- Mitigación: vida corta, revocación refresh, HTTPS, detección anomalías.
-
-2) Acceso cruzado entre tenants
-- Mitigación: tenancy guard en middleware + constraints en queries + pruebas negativas.
-
-3) Exposición de NVR/cámaras a internet
-- Mitigación: solo túnel saliente; sin NAT/port-forward inbound.
-
-4) Reenvío duplicado de eventos por red inestable
-- Mitigación: idempotency key + fingerprint dedup.
-
-5) Manipulación de evidencia
-- Mitigación: almacenamiento append-only lógico + checksum + auditoría de acceso.
-
-6) Fuerza bruta en login
-- Mitigación: rate limiting + lock temporal + alertas.
-
-## 11. Controles de seguridad en CI/CD y operación
-
-- SAST básico en backend/frontend.
-- Escaneo de dependencias (CVEs críticas bloqueantes).
-- IaC/infra con revisión de secretos y permisos mínimos.
-- Backups cifrados MySQL diarios + pruebas de restore.
-
-## 12. Checklist de aceptación de seguridad MVP
-
-- JWT + refresh implementados y testeados.
-- RBAC y aislamiento tenant/site verificados con pruebas de autorización negativa.
-- CORS en allowlist, sin wildcard en producción.
-- Secretos fuera de repo y rotables.
-- Evidencia accesible solo por URL firmada temporal.
-- Auditoría activa en operaciones críticas.
+## 11. Riesgos y mitigación
+1) Fuga cross-tenant -> guardrails de repositorio + pruebas negativas.
+2) Token comprometido -> expiración corta + revocación refresh + rotación claves.
+3) CORS mal configurado -> checklist de release y validación automática.
+4) Conector comprometido -> credenciales por sitio, revocación inmediata, rotación.
