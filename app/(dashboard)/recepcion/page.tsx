@@ -255,7 +255,7 @@ export default function RecepcionPage() {
         </div>
         <Badge
           variant="outline"
-          className="w-fit shrink-0 gap-1 px-2 py-0.5 text-[10px] sm:text-xs border-emerald-600/30 bg-emerald-500/10 text-emerald-700"
+          className="w-fit shrink-0 gap-1 px-2 py-0.5 text-[10px] sm:text-xs border-ds-accent/30 bg-ds-accent-faded text-ds-accent"
         >
           <ScanLine className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
           <span className="sm:hidden">ANPR OK</span>
@@ -268,12 +268,12 @@ export default function RecepcionPage() {
         <Card className="soft-card-compact">
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <Car className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-ds-accent-faded flex items-center justify-center shrink-0">
+                <Car className="h-4 w-4 sm:h-5 sm:w-5 text-ds-accent" />
               </div>
               <div className="min-w-0">
                 <p className="text-xl sm:text-2xl font-bold text-numeral tabular-nums antialiased">{activeEntries.length}</p>
-                <p className="text-[11px] sm:text-sm text-muted-foreground truncate">En el parque</p>
+                <p className="text-[11px] sm:text-sm text-ds-ink-muted truncate">En el parque</p>
               </div>
             </div>
           </CardContent>
@@ -281,12 +281,12 @@ export default function RecepcionPage() {
         <Card className="soft-card-compact">
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
+              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-ds-accent-faded flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-ds-accent" />
               </div>
               <div className="min-w-0">
                 <p className="text-xl sm:text-2xl font-bold text-numeral tabular-nums antialiased">{entries.filter(e => e.exit_at).length}</p>
-                <p className="text-[11px] sm:text-sm text-muted-foreground truncate">Salidas hoy</p>
+                <p className="text-[11px] sm:text-sm text-ds-ink-muted truncate">Salidas hoy</p>
               </div>
             </div>
           </CardContent>
@@ -294,12 +294,12 @@ export default function RecepcionPage() {
         <Card className="soft-card-compact">
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-accent/50 flex items-center justify-center shrink-0">
-                <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-[var(--crextio-brown)]" />
+              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-ds-muted flex items-center justify-center shrink-0">
+                <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-ds-accent" />
               </div>
               <div className="min-w-0">
                 <p className="text-xl sm:text-2xl font-bold text-numeral tabular-nums antialiased">{MOCK_TENANTS.length}</p>
-                <p className="text-[11px] sm:text-sm text-muted-foreground truncate">Empresas</p>
+                <p className="text-[11px] sm:text-sm text-ds-ink-muted truncate">Empresas</p>
               </div>
             </div>
           </CardContent>
@@ -307,12 +307,13 @@ export default function RecepcionPage() {
         <Card className="soft-card-compact">
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
-                <ScanLine className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
+              <div className="icon-box icon-box-warning h-9 w-9 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl shrink-0">
+                <ScanLine size={16} className="sm:hidden" />
+                <ScanLine size={18} className="hidden sm:block" />
               </div>
               <div className="min-w-0">
                 <p className="text-xl sm:text-2xl font-bold text-numeral tabular-nums antialiased">{pendingDetections.length}</p>
-                <p className="text-[11px] sm:text-sm text-muted-foreground truncate">Pend. ANPR</p>
+                <p className="text-[11px] sm:text-sm text-ds-ink-muted truncate">Pend. ANPR</p>
               </div>
             </div>
           </CardContent>
@@ -325,7 +326,7 @@ export default function RecepcionPage() {
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                <ScanLine className="h-4 w-4 sm:h-5 sm:w-5 text-[var(--crextio-gold-strong)] shrink-0" />
+                <ScanLine className="h-4 w-4 sm:h-5 sm:w-5 text-ds-accent shrink-0" />
                 <span className="truncate">ANPR — Portón recepción</span>
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm mt-1">
@@ -347,9 +348,9 @@ export default function RecepcionPage() {
               manualReview={needsManualReview}
             />
             {anprReading && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-ds-ink-muted">
                 Lectura activa:{' '}
-                <span className="text-live-data font-semibold text-zinc-200">{anprReading}</span>
+                <span className="text-live-data font-semibold text-ds-ink-display">{anprReading}</span>
                 {anprConfidence != null && (
                   <span className="ml-2 text-xs">({anprConfidence}% confianza)</span>
                 )}
@@ -419,7 +420,7 @@ export default function RecepcionPage() {
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--warning)]" />
                   <div className="space-y-1 text-sm">
                     <p className="font-semibold text-[var(--warning)]">Revisión manual requerida</p>
-                    <p className="text-muted-foreground">
+                    <p className="text-ds-ink-muted">
                       La lectura ANPR tiene baja confianza o caracteres inciertos. Confirme la patente
                       con el conductor antes de registrar.
                     </p>
@@ -430,23 +431,28 @@ export default function RecepcionPage() {
               {/* Patente */}
               <div className="space-y-2">
                 <Label htmlFor="plate">
-                  Patente <span className="text-destructive">*</span>
+                  Patente <span className="text-ds-signal">*</span>
                 </Label>
                 <Input
                   id="plate"
                   placeholder="BCDF12"
                   className="uppercase"
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   {...register('plate')}
                 />
                 {errors.plate && (
-                  <p className="text-sm text-destructive">{errors.plate.message}</p>
+                  <p className="text-sm text-ds-signal">{errors.plate.message}</p>
                 )}
               </div>
 
               {/* Conductor */}
               <div className="space-y-2">
                 <Label htmlFor="declared_driver_name">
-                  Conductor declarado <span className="text-destructive">*</span>
+                  Conductor declarado <span className="text-ds-signal">*</span>
                 </Label>
                 <Input
                   id="declared_driver_name"
@@ -454,7 +460,7 @@ export default function RecepcionPage() {
                   {...register('declared_driver_name')}
                 />
                 {errors.declared_driver_name && (
-                  <p className="text-sm text-destructive">{errors.declared_driver_name.message}</p>
+                  <p className="text-sm text-ds-signal">{errors.declared_driver_name.message}</p>
                 )}
               </div>
 
@@ -473,7 +479,7 @@ export default function RecepcionPage() {
               {/* Empresa destino */}
               <div className="space-y-2">
                 <Label>
-                  Empresa de destino <span className="text-destructive">*</span>
+                  Empresa de destino <span className="text-ds-signal">*</span>
                 </Label>
                 <Popover open={tenantOpen} onOpenChange={setTenantOpen}>
                   <PopoverTrigger asChild>
@@ -505,7 +511,7 @@ export default function RecepcionPage() {
                             >
                               <div className="flex flex-col">
                                 <span>{tenant.legal_name}</span>
-                                <span className="text-xs text-muted-foreground">{tenant.rut}</span>
+                                <span className="text-xs text-ds-ink-muted">{tenant.rut}</span>
                               </div>
                             </CommandItem>
                           ))}
@@ -515,7 +521,7 @@ export default function RecepcionPage() {
                   </PopoverContent>
                 </Popover>
                 {errors.tenant_id && (
-                  <p className="text-sm text-destructive">{errors.tenant_id.message}</p>
+                  <p className="text-sm text-ds-signal">{errors.tenant_id.message}</p>
                 )}
               </div>
 
@@ -532,7 +538,7 @@ export default function RecepcionPage() {
               {/* Tipo vehiculo */}
               <div className="space-y-2">
                 <Label htmlFor="vehicle_type">
-                  Tipo de vehiculo <span className="text-destructive">*</span>
+                  Tipo de vehiculo <span className="text-ds-signal">*</span>
                 </Label>
                 <Select
                   value={watch('vehicle_type')}
@@ -550,14 +556,14 @@ export default function RecepcionPage() {
                   </SelectContent>
                 </Select>
                 {errors.vehicle_type && (
-                  <p className="text-sm text-destructive">{errors.vehicle_type.message}</p>
+                  <p className="text-sm text-ds-signal">{errors.vehicle_type.message}</p>
                 )}
               </div>
 
               {/* Hora ingreso */}
               <div className="space-y-2">
                 <Label htmlFor="entry_at">
-                  Hora de ingreso <span className="text-destructive">*</span>
+                  Hora de ingreso <span className="text-ds-signal">*</span>
                 </Label>
                 <Input
                   id="entry_at"
@@ -565,7 +571,7 @@ export default function RecepcionPage() {
                   {...register('entry_at')}
                 />
                 {errors.entry_at && (
-                  <p className="text-sm text-destructive">{errors.entry_at.message}</p>
+                  <p className="text-sm text-ds-signal">{errors.entry_at.message}</p>
                 )}
               </div>
 
@@ -611,8 +617,8 @@ export default function RecepcionPage() {
           <CardContent>
             {entries.length === 0 ? (
               <div className="text-center py-8">
-                <Car className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground">No hay ingresos registrados hoy</p>
+                <Car className="h-12 w-12 mx-auto text-ds-ink-muted/30 mb-4" />
+                <p className="text-ds-ink-muted">No hay ingresos registrados hoy</p>
               </div>
             ) : (
               <div className="overflow-x-auto -mx-1 px-1 max-h-[min(60vh,500px)]">
@@ -634,7 +640,7 @@ export default function RecepcionPage() {
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-medium">{entry.plate}</span>
                             {!entry.exit_at && (
-                              <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-500">
+                              <Badge variant="secondary" className="text-xs bg-ds-accent-faded text-ds-accent">
                                 Activo
                               </Badge>
                             )}
@@ -670,7 +676,7 @@ export default function RecepcionPage() {
                               <span className="hidden sm:inline">Salida</span>
                             </Button>
                           ) : (
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-ds-ink-muted">
                               {format(new Date(entry.exit_at), 'HH:mm')}
                             </span>
                           )}
@@ -695,21 +701,21 @@ export default function RecepcionPage() {
             </DialogDescription>
           </DialogHeader>
           {exitingEntry && (
-            <div className="rounded-xl bg-muted p-4 space-y-3">
+            <div className="rounded-xl bg-ds-muted p-4 space-y-3">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Patente</span>
+                <span className="text-ds-ink-muted">Patente</span>
                 <span className="font-mono font-medium">{exitingEntry.plate}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Conductor</span>
+                <span className="text-ds-ink-muted">Conductor</span>
                 <span>{exitingEntry.declared_driver_name || '-'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Empresa</span>
+                <span className="text-ds-ink-muted">Empresa</span>
                 <span>{exitingEntry.tenant?.commercial_name || '-'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Ingreso</span>
+                <span className="text-ds-ink-muted">Ingreso</span>
                 <span>{format(new Date(exitingEntry.entry_at), 'HH:mm', { locale: es })}</span>
               </div>
             </div>

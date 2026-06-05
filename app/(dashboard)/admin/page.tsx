@@ -25,7 +25,7 @@ const adminSections: AdminSection[] = [
     icon: <Users className="h-6 w-6" />,
     href: '/admin/usuarios',
     count: 24,
-    color: 'bg-[var(--stat-review-bg)] text-[var(--crextio-brown)]',
+    color: 'bg-ds-accent-faded text-ds-accent',
   },
   {
     id: 'zonas',
@@ -43,7 +43,7 @@ const adminSections: AdminSection[] = [
     icon: <Video className="h-6 w-6" />,
     href: '/admin/camaras',
     count: 40,
-    color: 'bg-accent/60 text-foreground',
+    color: 'bg-ds-muted text-ds-ink-display',
   },
   {
     id: 'nvrs',
@@ -52,7 +52,7 @@ const adminSections: AdminSection[] = [
     icon: <Settings className="h-6 w-6" />,
     href: '/admin/nvrs',
     count: 3,
-    color: 'bg-orange-100 text-orange-700',
+    color: 'bg-ds-accent-faded text-ds-accent',
   },
   {
     id: 'tenants',
@@ -61,7 +61,7 @@ const adminSections: AdminSection[] = [
     icon: <Building2 className="h-6 w-6" />,
     href: '/admin/tenants',
     count: 1,
-    color: 'bg-red-100 text-red-700',
+    color: 'bg-ds-signal-faded text-ds-signal',
   },
   {
     id: 'configuracion',
@@ -70,7 +70,7 @@ const adminSections: AdminSection[] = [
     icon: <Settings className="h-6 w-6" />,
     href: '/admin/configuracion',
     count: 1,
-    color: 'bg-gray-100 text-gray-700',
+    color: 'bg-ds-surface text-ds-ink-muted',
   },
 ]
 
@@ -81,7 +81,7 @@ export default function AdminPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Administración</h1>
-          <p className="text-muted-foreground">Panel de control para la gestión del sistema</p>
+          <p className="text-ds-ink-muted">Panel de control para la gestión del sistema</p>
         </div>
       </div>
 
@@ -100,7 +100,7 @@ export default function AdminPage() {
                 <CardTitle className="text-xl mt-3">{section.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">{section.description}</p>
+                <p className="text-sm text-ds-ink-muted">{section.description}</p>
               </CardContent>
             </Card>
           </Link>
@@ -115,24 +115,24 @@ export default function AdminPage() {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="border rounded-lg p-4">
-              <p className="text-sm text-muted-foreground">Usuarios Activos</p>
+              <p className="text-sm text-ds-ink-muted">Usuarios Activos</p>
               <p className="text-2xl font-bold">18</p>
-              <p className="text-xs text-green-600 mt-1">de 24 totales</p>
+              <p className="text-xs text-ds-accent mt-1">de 24 totales</p>
             </div>
             <div className="border rounded-lg p-4">
-              <p className="text-sm text-muted-foreground">Cámaras Conectadas</p>
+              <p className="text-sm text-ds-ink-muted">Cámaras Conectadas</p>
               <p className="text-2xl font-bold">40</p>
-              <p className="text-xs text-green-600 mt-1">100% en línea</p>
+              <p className="text-xs text-ds-accent mt-1">100% en línea</p>
             </div>
             <div className="border rounded-lg p-4">
-              <p className="text-sm text-muted-foreground">Zonas Configuradas</p>
+              <p className="text-sm text-ds-ink-muted">Zonas Configuradas</p>
               <p className="text-2xl font-bold">8</p>
-              <p className="text-xs text-muted-foreground mt-1">todas activas</p>
+              <p className="text-xs text-ds-ink-muted mt-1">todas activas</p>
             </div>
             <div className="border rounded-lg p-4">
-              <p className="text-sm text-muted-foreground">Disponibilidad Sistema</p>
+              <p className="text-sm text-ds-ink-muted">Disponibilidad Sistema</p>
               <p className="text-2xl font-bold">99.8%</p>
-              <p className="text-xs text-green-600 mt-1">últimos 30 días</p>
+              <p className="text-xs text-ds-accent mt-1">últimos 30 días</p>
             </div>
           </div>
         </CardContent>

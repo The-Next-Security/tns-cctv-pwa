@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { AlertTriangle, Filter, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, Filter, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -23,12 +23,13 @@ import type { Alert, Criticality } from '@/lib/types'
 import { getAlertClass } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-type StatusView = 'activas' | 'pendiente' | 'en_revision' | 'resueltas' | 'criticas' | 'baja_prioridad' | 'all'
+type StatusView = 'activas' | 'pendiente' | 'en_revision' | 'escaladas' | 'resueltas' | 'criticas' | 'baja_prioridad' | 'all'
 
 const STATUS_VIEW_LABELS: Record<StatusView, string> = {
   activas: 'Alertas activas',
   pendiente: 'Pendientes de atención',
   en_revision: 'En revisión',
+  escaladas: 'Alertas escaladas',
   resueltas: 'Resueltas hoy',
   criticas: 'Críticas sin atender',
   baja_prioridad: 'Baja prioridad sin atender',
@@ -40,6 +41,7 @@ const STATUS_VIEW_URGENCY: Partial<Record<StatusView, UrgencyLevel>> = {
   baja_prioridad: 'pending',
   pendiente: 'pending',
   en_revision: 'review',
+  escaladas: 'escalated',
   resueltas: 'resolved',
 }
 
@@ -68,8 +70,10 @@ function matchesStatusView(alert: Alert, view: StatusView): boolean {
       return alert.status === 'pendiente'
     case 'en_revision':
       return alert.status === 'en_revision'
+    case 'escaladas':
+      return alert.status === 'escalada'
     case 'resueltas':
-      return alert.status === 'resuelta' || alert.status === 'escalada' || alert.status === 'descartada'
+      return alert.status === 'resuelta' || alert.status === 'descartada'
     case 'criticas':
       return alertClass === 'critica' && alert.status === 'pendiente'
     case 'baja_prioridad':
@@ -158,6 +162,7 @@ export default function OperacionPage() {
     criticalPending:    localAlerts.filter(a => getAlertClass(a.criticality) === 'critica'       && a.status === 'pendiente').length,
     lowPriorityPending: localAlerts.filter(a => getAlertClass(a.criticality) === 'baja_prioridad' && a.status === 'pendiente').length,
     inReview:           localAlerts.filter(a => a.status === 'en_revision').length,
+    escalated:          localAlerts.filter(a => a.status === 'escalada').length,
     resolved:           localAlerts.filter(a => a.status === 'resuelta').length,
   }
 
@@ -187,7 +192,9 @@ export default function OperacionPage() {
 
     if (action === 'acknowledge') {
       setStatusView('en_revision')
-    } else if (action === 'resolve' || action === 'escalate') {
+    } else if (action === 'escalate') {
+      setStatusView('escaladas')
+    } else if (action === 'resolve') {
       setStatusView('resueltas')
     }
   }
@@ -234,7 +241,7 @@ export default function OperacionPage() {
           <UrgencyBadge level={badgeLevel}>
             {label} ({alerts.length})
           </UrgencyBadge>
-          <p className="text-xs sm:text-sm text-muted-foreground">{hint}</p>
+          <p className="text-xs sm:text-sm text-ds-ink-muted">{hint}</p>
         </div>
         {alerts.map((alert, index) => (
           <div
@@ -261,7 +268,7 @@ export default function OperacionPage() {
         {/* Header */}
         <div className="page-header">
           <div className="min-w-0">
-            <p className="text-[10px] sm:text-caption text-primary font-semibold mb-0.5">Consola operativa</p>
+            <p className="text-[10px] sm:text-caption text-ds-accent font-semibold mb-0.5">Consola operativa</p>
             <h1 className="page-title">Monitoreo de alertas</h1>
             <p className="page-subtitle hidden sm:block">
               Gestione incidentes en tiempo real del parque Agrolivo
@@ -290,9 +297,18 @@ export default function OperacionPage() {
             onClick={() => setStatusView('en_revision')}
           />
           <StatCard
+            label="Escaladas"
+            value={stats.escalated}
+            hint="En manos del supervisor"
+            icon={ArrowUpRight}
+            tone="escalated"
+            active={statusView === 'escaladas'}
+            onClick={() => setStatusView('escaladas')}
+          />
+          <StatCard
             label="Resueltas Hoy"
             value={stats.resolved}
-            hint="Cerradas o escaladas"
+            hint="Cerradas"
             icon={CheckCircle2}
             tone="resolved"
             active={statusView === 'resueltas'}
@@ -303,19 +319,19 @@ export default function OperacionPage() {
         {/* Main panel */}
         <div className="soft-panel soft-card-compact overflow-hidden">
           {/* Filters bar */}
-          <div className="border-b border-border/60 panel-compact pb-3 sm:pb-4">
-            <div className="mobile-scroll-x">
+          <div className="border-b border-ds-hairline/60 panel-compact pb-3 sm:pb-4">
+            <div className="mobile-scroll-x scroll-fade-x">
               <div className="filter-scroll-row">
-                <Filter className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
+                <Filter className="h-4 w-4 text-ds-ink-muted shrink-0 hidden sm:block" />
 
                 <Tabs value={statusView} onValueChange={(v) => setStatusView(v as StatusView)} className="w-auto shrink-0">
-                  <TabsList className="h-9 sm:h-10 rounded-xl bg-secondary/80 p-0.5 sm:p-1">
-                    <TabsTrigger value="activas" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md">
+                  <TabsList className="h-9 sm:h-10 rounded-xl bg-ds-muted p-0.5 sm:p-1">
+                    <TabsTrigger value="activas" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md">
                       Activas
                       {(stats.criticalPending + stats.lowPriorityPending + stats.inReview) > 0 && (
                         <Badge
                           variant="secondary"
-                          className="ml-1.5 h-5 px-1.5 border-0 text-[10px] font-semibold tabular-nums bg-violet-500/20 text-violet-300"
+                          className="ml-1.5 h-5 px-1.5 border-0 text-[10px] font-semibold tabular-nums bg-ds-accent-faded text-ds-accent"
                         >
                           {stats.criticalPending + stats.lowPriorityPending + stats.inReview}
                         </Badge>
@@ -334,30 +350,41 @@ export default function OperacionPage() {
                     </TabsTrigger>
                     <TabsTrigger
                       value="baja_prioridad"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
+                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
                     >
                       Baja Prior.
                     </TabsTrigger>
                     <TabsTrigger
                       value="en_revision"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-review)]"
+                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-review)]"
                     >
                       Revisión
                     </TabsTrigger>
                     <TabsTrigger
+                      value="escaladas"
+                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-[var(--urgency-escalated-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-escalated)] text-[var(--urgency-escalated)]"
+                    >
+                      Escal.
+                      {stats.escalated > 0 && (
+                        <UrgencyBadge level="escalated" className="ml-1.5 h-5 px-1.5 py-0 text-[10px]">
+                          {stats.escalated}
+                        </UrgencyBadge>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger
                       value="resueltas"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-resolved)]"
+                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-resolved)]"
                     >
                       Resueltas
                     </TabsTrigger>
-                    <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md">Todas</TabsTrigger>
+                    <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md">Todas</TabsTrigger>
                   </TabsList>
                 </Tabs>
 
                 {/* Filtro rápido por clase */}
                 <Tabs value={criticalityFilter} onValueChange={setCriticalityFilter} className="w-auto shrink-0">
-                  <TabsList className="h-9 sm:h-10 rounded-xl bg-secondary/80 p-0.5 sm:p-1">
-                    <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md">Todas</TabsTrigger>
+                  <TabsList className="h-9 sm:h-10 rounded-xl bg-ds-muted p-0.5 sm:p-1">
+                    <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md">Todas</TabsTrigger>
                     <TabsTrigger
                       value="critica"
                       className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-[var(--urgency-critical-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-critical)] text-[var(--urgency-critical)]"
@@ -366,7 +393,7 @@ export default function OperacionPage() {
                     </TabsTrigger>
                     <TabsTrigger
                       value="baja_prioridad"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-card data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
+                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
                     >
                       Baja Prior.
                     </TabsTrigger>
@@ -374,7 +401,7 @@ export default function OperacionPage() {
                 </Tabs>
 
                 <Select value={zoneFilter} onValueChange={setZoneFilter}>
-                  <SelectTrigger className="w-[130px] sm:w-[180px] h-9 sm:h-10 rounded-xl border-0 bg-secondary/80 shadow-none text-xs sm:text-sm shrink-0">
+                  <SelectTrigger className="w-[130px] sm:w-[180px] h-9 sm:h-10 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm shrink-0">
                     <SelectValue placeholder="Zona" />
                   </SelectTrigger>
                   <SelectContent>
@@ -387,7 +414,7 @@ export default function OperacionPage() {
                   </SelectContent>
                 </Select>
 
-                <Button variant="outline" size="icon" onClick={handleRefresh} className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl border-0 bg-secondary/80 shadow-none hover:bg-secondary shrink-0">
+                <Button variant="outline" size="icon" onClick={handleRefresh} className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl border-0 bg-ds-muted shadow-none hover:bg-ds-muted/70 shrink-0">
                   <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
                   <span className="sr-only">Actualizar</span>
                 </Button>
@@ -402,33 +429,35 @@ export default function OperacionPage() {
                 <h2
                   className={cn(
                     'text-section text-sm sm:text-base font-semibold antialiased transition-colors duration-200',
-                    !listHeadingUrgency && 'text-zinc-100',
+                    !listHeadingUrgency && 'text-ds-ink-display',
                     listHeadingUrgency && URGENCY_STYLES[listHeadingUrgency].text,
                     listHeadingPulse && 'badge-urgency-critical-pulse'
                   )}
                 >
                   {STATUS_VIEW_LABELS[statusView]}
                 </h2>
-                <p className="text-xs sm:text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-ds-ink-muted">
                   {filteredAlerts.length} alerta{filteredAlerts.length === 1 ? '' : 's'} en esta vista
                 </p>
               </div>
               {statusView !== 'activas' && (
-                <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="h-8 sm:h-9 shrink-0 rounded-xl border-0 bg-secondary/80 shadow-none text-xs sm:text-sm">
+                <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="h-8 sm:h-9 shrink-0 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm">
                   Volver
                 </Button>
               )}
             </div>
 
-            <p className="hidden sm:block text-caption rounded-xl bg-accent/40 px-4 py-3 border border-[var(--crextio-gold-strong)]/20">
-              <span className="font-medium text-foreground">Flujo: </span>
+            <p className="hidden sm:block text-caption rounded-xl bg-ds-accent-faded px-4 py-3 border border-ds-accent/20">
+              <span className="font-medium text-ds-ink-display">Flujo: </span>
               <UrgencyText level="critical">Crítica</UrgencyText>
               {' / '}
               <UrgencyText level="pending">Baja Prioridad</UrgencyText>
               {' → Atender → '}
               <UrgencyText level="review">En Revisión</UrgencyText>
-              {' → Resuelta / Escalar → '}
+              {' → Resuelta → '}
               <UrgencyText level="resolved">Resueltas Hoy</UrgencyText>
+              {' · Escalar → '}
+              <UrgencyText level="escalated">Escaladas</UrgencyText>
             </p>
 
             {isLoading ? (
@@ -436,25 +465,26 @@ export default function OperacionPage() {
                 {[1, 2, 3].map(i => (
                   <div key={i} className="soft-card animate-pulse p-5">
                     <div className="flex items-start gap-4">
-                      <div className="h-6 w-20 bg-muted rounded-lg" />
+                      <div className="h-6 w-20 bg-ds-muted rounded-lg" />
                       <div className="flex-1 space-y-2">
-                        <div className="h-5 w-48 bg-muted rounded-lg" />
-                        <div className="h-4 w-32 bg-muted rounded-lg" />
+                        <div className="h-5 w-48 bg-ds-muted rounded-lg" />
+                        <div className="h-4 w-32 bg-ds-muted rounded-lg" />
                       </div>
-                      <div className="h-9 w-24 bg-muted rounded-lg" />
+                      <div className="h-9 w-24 bg-ds-muted rounded-lg" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : filteredAlerts.length === 0 ? (
               <div className="soft-card flex flex-col items-center justify-center py-10 sm:py-16 text-center px-4 sm:px-6">
-                <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center mb-4">
-                  <CheckCircle2 className="h-8 w-8 text-muted-foreground" />
+                <div className="h-16 w-16 rounded-2xl bg-ds-muted flex items-center justify-center mb-4">
+                  <CheckCircle2 className="h-8 w-8 text-ds-ink-muted" />
                 </div>
                 <p className="text-lg font-medium">Sin alertas en esta vista</p>
-                <p className="text-muted-foreground max-w-md mt-1">
+                <p className="text-ds-ink-muted max-w-md mt-1">
                   {statusView === 'pendiente'       && 'No hay alertas esperando atención.'}
                   {statusView === 'en_revision'      && 'Ninguna alerta está siendo revisada.'}
+                  {statusView === 'escaladas'        && 'No hay alertas escaladas en este momento.'}
                   {statusView === 'resueltas'        && 'Aún no hay alertas cerradas en esta sesión.'}
                   {statusView === 'criticas'         && 'No hay alertas críticas sin atender en este momento.'}
                   {statusView === 'baja_prioridad'   && 'No hay alertas de baja prioridad pendientes.'}
@@ -463,17 +493,17 @@ export default function OperacionPage() {
                 </p>
                 <div className="flex flex-wrap gap-2 mt-4 justify-center">
                   {statusView !== 'activas' && (
-                    <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="rounded-xl border-0 bg-secondary/80">
+                    <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="rounded-xl border-0 bg-ds-muted">
                       Ver activas
                     </Button>
                   )}
                   {stats.inReview > 0 && statusView !== 'en_revision' && (
-                    <Button variant="outline" size="sm" onClick={() => setStatusView('en_revision')} className="rounded-xl border-0 bg-secondary/80">
+                    <Button variant="outline" size="sm" onClick={() => setStatusView('en_revision')} className="rounded-xl border-0 bg-ds-muted">
                       Ver en revisión ({stats.inReview})
                     </Button>
                   )}
                   {stats.criticalPending > 0 && statusView !== 'criticas' && (
-                    <Button variant="outline" size="sm" onClick={() => setStatusView('criticas')} className="rounded-xl border-0 bg-secondary/80">
+                    <Button variant="outline" size="sm" onClick={() => setStatusView('criticas')} className="rounded-xl border-0 bg-ds-muted">
                       Ver críticas ({stats.criticalPending})
                     </Button>
                   )}
@@ -545,6 +575,9 @@ export default function OperacionPage() {
         open={showPopup}
         onOpenChange={setShowPopup}
         onAction={handlePopupAction}
+        onEscalate={() => {
+          if (selectedAlert) setEscalateAlert(selectedAlert)
+        }}
         recentAlerts={selectedAlert ? localAlerts.filter(a => a.camera?.id === selectedAlert.camera?.id) : []}
       />
 

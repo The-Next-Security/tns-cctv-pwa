@@ -40,7 +40,7 @@ import { MATCH_STATUS_LABELS } from '@/lib/types'
 const matchStatusStyles: Record<MatchStatus, string> = {
   match_confiable: 'bg-status-ok/20 text-status-ok border-status-ok/30',
   revision_manual: 'bg-status-degraded/20 text-status-degraded border-status-degraded/30',
-  fuera_ventana: 'bg-muted text-muted-foreground',
+  fuera_ventana: 'bg-ds-muted text-ds-ink-muted',
   sin_coincidencia: 'bg-status-down/20 text-status-down border-status-down/30',
 }
 
@@ -92,7 +92,7 @@ export default function ExpedientesPage() {
         <CardContent className="p-3 sm:p-4">
           <div className="mobile-scroll-x">
           <div className="filter-scroll-row">
-            <Filter className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
+            <Filter className="h-4 w-4 text-ds-ink-muted shrink-0 hidden sm:block" />
             
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[150px]">
@@ -135,7 +135,7 @@ export default function ExpedientesPage() {
             </Select>
 
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-ds-ink-muted" />
               <Input
                 placeholder="Buscar patente..."
                 value={plateFilter}
@@ -168,15 +168,15 @@ export default function ExpedientesPage() {
             </div>
           ) : error ? (
             <div className="text-center py-12">
-              <AlertTriangle className="h-12 w-12 mx-auto text-destructive mb-4" />
+              <AlertTriangle className="h-12 w-12 mx-auto text-ds-signal mb-4" />
               <p className="text-lg font-medium">Error al cargar expedientes</p>
-              <p className="text-muted-foreground">No se pudo conectar con el servidor</p>
+              <p className="text-ds-ink-muted">No se pudo conectar con el servidor</p>
             </div>
           ) : cases.length === 0 ? (
             <div className="text-center py-12">
-              <FileText className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
+              <FileText className="h-12 w-12 mx-auto text-ds-ink-muted/30 mb-4" />
               <p className="text-lg font-medium">Sin expedientes</p>
-              <p className="text-muted-foreground">
+              <p className="text-ds-ink-muted">
                 No hay expedientes que coincidan con los filtros seleccionados
               </p>
             </div>
@@ -228,7 +228,7 @@ export default function ExpedientesPage() {
                           <span className={cn(
                             'font-medium',
                             caseFile.infraction.speed_kmh > (caseFile.infraction.speed_limit_kmh || 0)
-                              ? 'text-destructive'
+                              ? 'text-ds-signal'
                               : ''
                           )}>
                             {caseFile.infraction.speed_kmh} km/h
