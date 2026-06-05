@@ -87,7 +87,7 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
             <li key={zone} className="flex items-center justify-between gap-3">
               <span className="text-body truncate">{zone}</span>
               <div className="flex items-center gap-2 shrink-0">
-                <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
+                <div className="h-1.5 w-16 rounded-full bg-ds-muted overflow-hidden">
                   <div
                     className="h-full rounded-full bg-[var(--crextio-gold-strong)] transition-all"
                     style={{ width: `${Math.min(100, (count / alerts.length) * 100)}%` }}
@@ -113,13 +113,13 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
             <li key={person.name} className="flex items-center gap-3">
               <div className="relative">
                 <Avatar className="h-9 w-9">
-                  <AvatarFallback className="bg-accent/60 text-foreground text-xs font-semibold">
+                  <AvatarFallback className="bg-accent/60 text-ds-ink-display text-xs font-semibold">
                     {person.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                   </AvatarFallback>
                 </Avatar>
                 <span
                   className={cn(
-                    'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-card',
+                    'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-ds-surface',
                     person.status === 'online' ? 'bg-[var(--success)]' : 'bg-[var(--warning)]'
                   )}
                 />
@@ -178,7 +178,7 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
                     }}
                   />
                 </div>
-                <span className="text-[9px] text-zinc-400 text-live-data font-medium">{bar.label}</span>
+                <span className="text-[9px] text-ds-ink-muted text-live-data font-medium">{bar.label}</span>
               </div>
             )
           })}

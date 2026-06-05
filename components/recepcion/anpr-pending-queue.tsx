@@ -16,9 +16,9 @@ interface AnprPendingQueueProps {
 export function AnprPendingQueue({ detections, activeId, onSelect }: AnprPendingQueueProps) {
   if (detections.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center">
-        <CarFront className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">Sin vehículos pendientes de registro</p>
+      <div className="rounded-xl border border-dashed border-ds-hairline bg-ds-muted/30 p-6 text-center">
+        <CarFront className="mx-auto mb-2 h-8 w-8 text-ds-ink-muted/40" />
+        <p className="text-sm text-ds-ink-muted">Sin vehículos pendientes de registro</p>
       </div>
     )
   }
@@ -39,16 +39,16 @@ export function AnprPendingQueue({ detections, activeId, onSelect }: AnprPending
                 'hover:border-[var(--crextio-gold-strong)]/40 hover:bg-accent/20',
                 isActive
                   ? 'border-[var(--crextio-gold-strong)]/50 bg-[var(--warning-bg)]/40 ring-1 ring-[var(--crextio-gold-strong)]/25'
-                  : 'border-border bg-card'
+                  : 'border-ds-hairline bg-ds-surface'
               )}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-mono text-base font-bold tracking-wide">{detection.plateDisplay}</p>
                   {detection.vehicleHint && (
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{detection.vehicleHint}</p>
+                    <p className="mt-0.5 truncate text-xs text-ds-ink-muted">{detection.vehicleHint}</p>
                   )}
-                  <p className="mt-1 text-[10px] text-muted-foreground">
+                  <p className="mt-1 text-[10px] text-ds-ink-muted">
                     Detectado{' '}
                     {formatDistanceToNow(new Date(detection.detectedAt), { addSuffix: true, locale: es })}
                   </p>
@@ -65,7 +65,7 @@ export function AnprPendingQueue({ detections, activeId, onSelect }: AnprPending
                   ) : (
                     <Badge
                       variant="outline"
-                      className="border-emerald-600/30 bg-emerald-500/10 text-emerald-700 text-[10px]"
+                      className="border-ds-accent/30 bg-ds-accent-faded text-ds-accent text-[10px]"
                     >
                       Listo
                     </Badge>
@@ -73,7 +73,7 @@ export function AnprPendingQueue({ detections, activeId, onSelect }: AnprPending
                   <span
                     className={cn(
                       'text-[10px] font-semibold tabular-nums',
-                      needsReview ? 'text-[var(--warning)]' : 'text-emerald-600'
+                      needsReview ? 'text-[var(--warning)]' : 'text-ds-accent'
                     )}
                   >
                     {detection.confidence}%

@@ -21,6 +21,8 @@ const HOVER_BY_TONE: Record<UrgencyLevel, string> = {
     'hover:bg-[var(--urgency-pending-bg)]/75 hover:border-[var(--urgency-pending)]/45 hover:shadow-[0_16px_40px_rgb(212_146_10/0.14)]',
   review:
     'hover:bg-[var(--urgency-review-bg)]/75 hover:border-[var(--urgency-review)]/45 hover:shadow-[0_16px_40px_rgb(154_115_68/0.14)]',
+  escalated:
+    'hover:bg-[var(--urgency-escalated-bg)]/75 hover:border-[var(--urgency-escalated)]/45 hover:shadow-[0_16px_40px_rgb(217_119_6/0.15)]',
   resolved:
     'hover:bg-[var(--urgency-resolved-bg)]/80 hover:border-[var(--urgency-resolved)]/50 hover:shadow-[0_16px_40px_rgb(104_75_61/0.12)]',
 }
@@ -66,7 +68,7 @@ export function StatCard({
           >
             {value}
           </p>
-          <p className="mt-0.5 hidden sm:block text-body-secondary transition-colors group-hover:text-foreground/80">
+          <p className="mt-0.5 hidden sm:block text-body-secondary transition-colors group-hover:text-ds-ink-display/80">
             {hint}
           </p>
         </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { health } from '@/lib/api'
 import type { SystemHealth, NvrHealth } from '@/lib/types'
@@ -55,7 +56,7 @@ export function SystemHealthIndicator() {
       case 'error':
         return 'bg-status-down animate-criticality-pulse'
       case 'loading':
-        return 'bg-muted-foreground/50'
+        return 'bg-ds-ink-muted/50'
     }
   }
 
@@ -78,17 +79,22 @@ export function SystemHealthIndicator() {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent transition-colors">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Estado del sistema: ${getStatusLabel(status)}`}
+            className="flex items-center gap-2 rounded-md px-2 py-1 h-auto"
+          >
             <span
               className={cn(
                 'h-2.5 w-2.5 rounded-full',
                 getStatusColor(status)
               )}
             />
-            <span className="text-sm font-medium text-zinc-400 hidden sm:inline antialiased">
+            <span className="text-sm font-medium text-ds-ink-muted hidden sm:inline antialiased">
               {getStatusLabel(status)}
             </span>
-          </button>
+          </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
           <div className="space-y-2 text-xs">
@@ -97,11 +103,11 @@ export function SystemHealthIndicator() {
               <div className="space-y-1">
                 <p>Base de datos: <span className={cn(systemHealth.db === 'ok' ? 'text-status-ok' : 'text-status-down')}>{systemHealth.db}</span></p>
                 <p>Redis: <span className={cn(systemHealth.redis === 'ok' ? 'text-status-ok' : 'text-status-down')}>{systemHealth.redis}</span></p>
-                <p>Cola: <span className="text-live-data font-semibold text-zinc-200">{systemHealth.queue_depth}</span> eventos</p>
+                <p>Cola: <span className="text-live-data font-semibold text-ds-ink-display">{systemHealth.queue_depth}</span> eventos</p>
               </div>
             )}
             {nvrHealth.length > 0 && (
-              <div className="border-t border-border pt-2">
+              <div className="border-t border-ds-hairline pt-2">
                 <p className="font-medium mb-1">NVRs:</p>
                 {nvrHealth.map(nvr => (
                   <p key={nvr.id} className="flex justify-between">

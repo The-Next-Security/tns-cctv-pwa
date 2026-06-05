@@ -42,7 +42,7 @@ export function AnprGatePanel({
   return (
     <div
       className={cn(
-        'relative aspect-[16/9] overflow-hidden rounded-xl border border-border bg-zinc-950',
+        'relative aspect-[16/9] overflow-hidden rounded-xl border border-ds-hairline video-feed',
         className
       )}
     >
@@ -76,13 +76,13 @@ export function AnprGatePanel({
         <div className="absolute bottom-16 left-1/2 -translate-x-1/2">
           <div
             className={cn(
-              'rounded-md border-2 px-4 py-2 shadow-lg backdrop-blur-sm',
+              'rounded-md border-2 px-4 py-2 shadow-lg video-overlay',
               manualReview
-                ? 'border-[var(--alert-warning)] bg-zinc-950/80'
-                : 'border-[var(--cctv-accent-blue)] bg-zinc-950/80'
+                ? 'border-[var(--alert-warning)]'
+                : 'border-[var(--cctv-accent-blue)]'
             )}
           >
-            <p className="text-center font-mono text-xl font-bold tabular-nums antialiased tracking-wider text-zinc-100 [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]">
+            <p className="text-center font-mono text-xl font-bold tabular-nums antialiased tracking-wider text-ds-ink-display [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]">
               {plateDisplay}
             </p>
             {confidence != null && (

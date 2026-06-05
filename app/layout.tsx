@@ -1,9 +1,8 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Geist, Geist_Mono, Inter, DM_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/components/providers/auth-provider'
-import { DEFAULT_CONSOLE_THEME } from '@/lib/console-themes'
 import './globals.css'
 
 const geistSans = Geist({
@@ -15,6 +14,20 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   subsets: ['latin'],
   variable: '--font-geist-mono',
+  display: 'swap',
+})
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-inter',
+  display: 'swap',
+})
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-dm-sans',
   display: 'swap',
 })
 
@@ -51,11 +64,22 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      data-console-theme={DEFAULT_CONSOLE_THEME}
       suppressHydrationWarning
-      data-scroll-behavior="smooth"
     >
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground`}>
+      <head>
+        {/* bm-design-system:start — blocking theme boot before paint */}
+        <script
+          id="bm-ds-theme-boot"
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('bm-ds-theme');var t=s==='light'||s==='dark'||s==='system'?s:'system';var r=t==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):t;if(r==='dark')document.documentElement.classList.add('dark')}catch(e){}})()`,
+          }}
+        />
+        {/* bm-design-system:end */}
+      </head>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${dmSans.variable} font-ds-body antialiased bg-ds-page text-ds-ink-body`}
+        suppressHydrationWarning
+      >
         <ThemeProvider>
           <AuthProvider>
             {children}

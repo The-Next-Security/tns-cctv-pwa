@@ -12,9 +12,9 @@ export default function TenantsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Tenants</h1>
-          <p className="text-muted-foreground">Administra organizaciones y clientes</p>
+          <p className="text-ds-ink-muted">Administra organizaciones y clientes</p>
         </div>
-        <Button gap-2>
+        <Button className="gap-2">
           <Plus className="h-4 w-4" />
           Nuevo Tenant
         </Button>
@@ -28,19 +28,19 @@ export default function TenantsPage() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-sm text-muted-foreground">Plan</p>
+              <p className="text-sm text-ds-ink-muted">Plan</p>
               <p className="font-medium">Enterprise</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Usuarios</p>
+              <p className="text-sm text-ds-ink-muted">Usuarios</p>
               <p className="font-medium">24</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Cámaras</p>
+              <p className="text-sm text-ds-ink-muted">Cámaras</p>
               <p className="font-medium">40</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Estado</p>
+              <p className="text-sm text-ds-ink-muted">Estado</p>
               <Badge>Activo</Badge>
             </div>
           </div>

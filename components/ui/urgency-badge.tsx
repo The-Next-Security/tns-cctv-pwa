@@ -2,17 +2,19 @@ import { cn } from '@/lib/utils'
 import type { UrgencyLevel } from '@/lib/constants'
 
 const BADGE_CLASS: Record<UrgencyLevel, string> = {
-  critical: 'badge-urgency badge-urgency-critical',
-  pending: 'badge-urgency badge-urgency-pending',
-  review: 'badge-urgency badge-urgency-review',
-  resolved: 'badge-urgency badge-urgency-resolved',
+  critical:  'badge-urgency badge-urgency-critical',
+  pending:   'badge-urgency badge-urgency-pending',
+  review:    'badge-urgency badge-urgency-review',
+  escalated: 'badge-urgency badge-urgency-escalated',
+  resolved:  'badge-urgency badge-urgency-resolved',
 }
 
 const TEXT_CLASS: Record<UrgencyLevel, string> = {
-  critical: 'text-urgency-critical',
-  pending: 'text-urgency-pending',
-  review: 'text-urgency-review',
-  resolved: 'text-urgency-resolved',
+  critical:  'text-urgency-critical',
+  pending:   'text-urgency-pending',
+  review:    'text-urgency-review',
+  escalated: 'text-urgency-escalated',
+  resolved:  'text-urgency-resolved',
 }
 
 interface UrgencyBadgeProps {
@@ -59,6 +61,6 @@ export function UrgencyText({ level, children, pulse, className, as: Tag = 'span
 }
 
 export function urgencyTabClass(level: UrgencyLevel, active: boolean) {
-  if (!active) return 'text-muted-foreground'
+  if (!active) return 'text-ds-ink-muted'
   return TEXT_CLASS[level]
 }

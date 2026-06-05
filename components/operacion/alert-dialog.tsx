@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Camera, Clock, MapPin, Check, X, ArrowUpRight, ChevronDown, Eye } from 'lucide-react'
+import { Camera, Clock, MapPin, Check, X, ArrowUpRight, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -134,10 +134,10 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
         <Tabs defaultValue="snapshot">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
-            <TabsTrigger value="live">En vivo</TabsTrigger>
+            <TabsTrigger value="live">Video</TabsTrigger>
           </TabsList>
           <TabsContent value="snapshot" className="mt-3">
-            <div className="relative aspect-video max-h-[40dvh] overflow-hidden rounded-lg bg-muted sm:max-h-none">
+            <div className="relative aspect-video max-h-[40dvh] overflow-hidden rounded-lg bg-ds-muted sm:max-h-none">
               {alert.snapshot_url || alert.event_type ? (
                 <img
                   src={resolveSnapshotUrl(alert.snapshot_url, alert.event_type)}
@@ -146,7 +146,7 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Camera className="h-16 w-16 text-muted-foreground/30" />
+                  <Camera className="h-16 w-16 text-ds-ink-muted/30" />
                 </div>
               )}
             </div>
@@ -200,19 +200,9 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
 
           <Button
             variant="outline"
-            onClick={() => onAction('acknowledge')}
-            disabled={isLoading}
-            className="h-11 w-full touch-target border-2 border-border bg-background shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
-          >
-            <Eye className="h-4 w-4 mr-2" />
-            A Revisión
-          </Button>
-
-          <Button
-            variant="outline"
             onClick={onEscalate}
             disabled={isLoading}
-            className="col-span-2 h-11 w-full touch-target border-primary/40 text-primary hover:bg-primary/10 sm:col-span-1 sm:h-9 sm:w-auto"
+            className="h-11 w-full touch-target border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
           >
             <ArrowUpRight className="h-4 w-4 mr-2" />
             Escalar
