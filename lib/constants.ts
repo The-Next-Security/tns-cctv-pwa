@@ -2,7 +2,7 @@
 // Estilos de criticidad para alertas y reglas operativas
 
 /** Escala operativa: Crítico → Pendiente → En revisión → Resuelta (mayor → menor urgencia) */
-export type UrgencyLevel = 'critical' | 'pending' | 'review' | 'resolved'
+export type UrgencyLevel = 'critical' | 'pending' | 'review' | 'escalated' | 'resolved'
 
 export const URGENCY_STYLES = {
   critical: {
@@ -32,6 +32,15 @@ export const URGENCY_STYLES = {
     iconBox: 'icon-box-urgency-review',
     label: 'En revisión',
   },
+  escalated: {
+    text: 'text-[var(--urgency-escalated)]',
+    bgSubtle: 'bg-[var(--urgency-escalated-bg)]',
+    border: 'border-[var(--urgency-escalated)]/30',
+    borderSubtle: 'border-[var(--urgency-escalated-border)]',
+    ring: 'ring-[var(--urgency-escalated)]/25',
+    iconBox: 'icon-box-urgency-escalated',
+    label: 'Escalada',
+  },
   resolved: {
     text: 'text-[var(--urgency-resolved)]',
     bgSubtle: 'bg-[var(--urgency-resolved-bg)]',
@@ -44,16 +53,17 @@ export const URGENCY_STYLES = {
 } as const
 
 export const URGENCY_BADGE_CLASS: Record<UrgencyLevel, string> = {
-  critical: 'badge-urgency badge-urgency-critical',
-  pending: 'badge-urgency badge-urgency-pending',
-  review: 'badge-urgency badge-urgency-review',
-  resolved: 'badge-urgency badge-urgency-resolved',
+  critical:  'badge-urgency badge-urgency-critical',
+  pending:   'badge-urgency badge-urgency-pending',
+  review:    'badge-urgency badge-urgency-review',
+  escalated: 'badge-urgency badge-urgency-escalated',
+  resolved:  'badge-urgency badge-urgency-resolved',
 }
 
 export const CRITICALITY_STYLES = {
   baja: {
     bg: "bg-[var(--criticality-baja)]",
-    bgSubtle: "bg-muted",
+    bgSubtle: "bg-ds-muted",
     text: "text-[var(--criticality-baja)]",
     border: "border-[var(--criticality-baja)]",
     borderSubtle: "border-[var(--criticality-baja)]/30",
@@ -122,10 +132,10 @@ export const STATUS_STYLES = {
     border: "border-[var(--urgency-resolved)]",
   },
   escalada: {
-    bg: "bg-[var(--urgency-review)]",
-    bgSubtle: "bg-[var(--urgency-review-bg)]",
-    text: "text-[var(--urgency-review)]",
-    border: "border-[var(--urgency-review)]",
+    bg: "bg-[var(--urgency-escalated)]",
+    bgSubtle: "bg-[var(--urgency-escalated-bg)]",
+    text: "text-[var(--urgency-escalated)]",
+    border: "border-[var(--urgency-escalated)]",
   },
   revisada: {
     bg: "bg-[var(--urgency-resolved)]",
@@ -143,7 +153,7 @@ export const ALERT_STATUS_URGENCY: Partial<Record<AlertStatusType, UrgencyLevel>
   en_revision: 'review',
   resuelta: 'resolved',
   descartada: 'resolved',
-  escalada: 'review',
+  escalada: 'escalated',
   revisada: 'resolved',
 }
 

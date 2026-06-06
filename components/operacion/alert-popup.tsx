@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Image, AlertTriangle } from 'lucide-react'
+import { ArrowUpRight, Image, AlertTriangle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,7 @@ interface AlertPopupProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAction: (id: number, action: string, reason?: string) => void
+  onEscalate?: () => void
   recentAlerts?: Alert[]
 }
 
@@ -40,6 +41,7 @@ export function AlertPopup({
   open,
   onOpenChange,
   onAction,
+  onEscalate,
   recentAlerts = [],
 }: AlertPopupProps) {
   const [imageError, setImageError] = useState(false)
@@ -81,10 +83,10 @@ export function AlertPopup({
             <Tabs defaultValue="snapshot">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
-                <TabsTrigger value="live">En vivo</TabsTrigger>
+                <TabsTrigger value="live">Video</TabsTrigger>
               </TabsList>
               <TabsContent value="snapshot" className="mt-3">
-                <div className="aspect-video max-h-[40dvh] overflow-hidden rounded-lg border border-border bg-muted sm:max-h-none">
+                <div className="aspect-video max-h-[40dvh] overflow-hidden rounded-lg border border-ds-hairline bg-ds-muted sm:max-h-none">
                   {!imageError ? (
                     <img
                       src={snapshotSrc}
@@ -93,7 +95,7 @@ export function AlertPopup({
                       onError={() => setImageError(true)}
                     />
                   ) : (
-                    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <div className="flex h-full flex-col items-center justify-center gap-2 text-ds-ink-muted">
                       <Image className="h-12 w-12 opacity-50" />
                       <p className="text-sm">Error al cargar imagen</p>
                     </div>
@@ -114,21 +116,21 @@ export function AlertPopup({
 
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <p className="text-muted-foreground text-xs">Zona</p>
+                <p className="text-ds-ink-muted text-xs">Zona</p>
                 <p className="font-medium">{alert.zone?.name || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Cámara</p>
+                <p className="text-ds-ink-muted text-xs">Cámara</p>
                 <p className="font-medium">{alert.camera?.name || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Hora</p>
-                <p className="text-live-data font-semibold text-zinc-200">
+                <p className="text-ds-ink-muted text-xs">Hora</p>
+                <p className="text-live-data font-semibold text-ds-ink-display">
                   {format(new Date(alert.timestamp), 'HH:mm:ss', { locale: es })}
                 </p>
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Regla</p>
+                <p className="text-ds-ink-muted text-xs">Regla</p>
                 <p className="font-medium text-xs truncate">{alert.observation || getEventLabel(alert.event_code)}</p>
               </div>
             </div>
@@ -136,7 +138,7 @@ export function AlertPopup({
 
           {/* Panel lateral: oculto en móvil, visible desde sm */}
           <div className="hidden sm:flex sm:w-52 sm:shrink-0 sm:flex-col sm:gap-4">
-            <div className="space-y-2 rounded-lg border border-border p-3">
+            <div className="space-y-2 rounded-lg border border-ds-hairline p-3">
               <h4 className="text-sm font-medium">Alertas recientes (cámara)</h4>
               {recentSameCamera.length > 0 ? (
                 <div className="max-h-32 space-y-2 overflow-y-auto">
@@ -150,28 +152,28 @@ export function AlertPopup({
                       )}
                     >
                       <p className="truncate font-medium">{a.description}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-ds-ink-muted">
                         {format(new Date(a.timestamp), 'HH:mm', { locale: es })}
                       </p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-ds-ink-muted">
                   No hay alertas previas en las últimas 4h
                 </p>
               )}
             </div>
 
-            <div className="space-y-1 rounded-lg border border-border p-3 text-xs">
+            <div className="space-y-1 rounded-lg border border-ds-hairline p-3 text-xs">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Estado:</span>
+                <span className="text-ds-ink-muted">Estado:</span>
                 <Badge variant="outline" className="capitalize">
                   {alert.status}
                 </Badge>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Tiempo:</span>
+                <span className="text-ds-ink-muted">Tiempo:</span>
                 <span className="font-mono">
                   {Math.round(
                     (new Date().getTime() - new Date(alert.timestamp).getTime()) / 1000
@@ -219,13 +221,14 @@ export function AlertPopup({
 
           <Button
             variant="outline"
-            className="h-11 w-full touch-target border-2 border-border bg-background shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
+            className="h-11 w-full touch-target border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
             onClick={() => {
-              onAction(alert.id, 'acknowledge')
+              onEscalate?.()
               onOpenChange(false)
             }}
           >
-            A Revisión
+            <ArrowUpRight className="h-4 w-4 mr-2" />
+            Escalar
           </Button>
         </DialogFooter>
       </DialogContent>

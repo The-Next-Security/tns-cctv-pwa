@@ -1,7 +1,3 @@
-import {
-  CONSOLE_THEME_MANUAL_KEY,
-  CONSOLE_THEME_ROUTE_BACKUP_KEY,
-} from '@/lib/console-themes'
 import { resetMockCaseFilesStore } from '@/lib/mock-case-files-api'
 
 /** sessionStorage: popup de alerta intrusión en /operacion */
@@ -9,8 +5,6 @@ export const DEMO_ALERT_POPUP_KEY = 'tns_demo_alert_popup'
 
 const DEMO_SESSION_KEYS = [
   DEMO_ALERT_POPUP_KEY,
-  CONSOLE_THEME_MANUAL_KEY,
-  CONSOLE_THEME_ROUTE_BACKUP_KEY,
 ] as const
 
 const DEMO_LOCAL_STORAGE_PREFIX = 'tns_demo_'

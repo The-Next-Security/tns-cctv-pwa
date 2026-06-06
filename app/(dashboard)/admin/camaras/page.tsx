@@ -212,7 +212,7 @@ export default function CamarasPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Cámaras</h1>
-          <p className="text-muted-foreground">Gestiona cámaras Dahua y sus parámetros</p>
+          <p className="text-ds-ink-muted">Gestiona cámaras Dahua y sus parámetros</p>
         </div>
         <Button className="gap-2 touch-target" disabled title="Próximamente">
           <Plus className="h-4 w-4" />
@@ -233,10 +233,10 @@ export default function CamarasPage() {
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-3 min-w-0">
-                  <Video className="h-5 w-5 text-muted-foreground mt-1 shrink-0" />
+                  <Video className="h-5 w-5 text-ds-ink-muted mt-1 shrink-0" />
                   <div className="min-w-0">
                     <CardTitle className="text-lg truncate">{camara.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1 truncate">{camara.model}</p>
+                    <p className="text-xs text-ds-ink-muted mt-1 truncate">{camara.model}</p>
                   </div>
                 </div>
                 <Badge variant="outline" className={cn('shrink-0', getStatusColor(camara.health_status))}>
@@ -247,19 +247,19 @@ export default function CamarasPage() {
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-muted-foreground">Zona</p>
+                  <p className="text-ds-ink-muted">Zona</p>
                   <p className="font-medium">{getZoneName(camara.zone_id, zonas)}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">IP</p>
+                  <p className="text-ds-ink-muted">IP</p>
                   <p className="font-mono text-xs tabular-nums antialiased">{camara.ip}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Resolución</p>
+                  <p className="text-ds-ink-muted">Resolución</p>
                   <p className="font-medium">{camara.resolution}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">FPS</p>
+                  <p className="text-ds-ink-muted">FPS</p>
                   <p className="font-medium tabular-nums">{camara.fps}</p>
                 </div>
               </div>
@@ -276,7 +276,7 @@ export default function CamarasPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="flex-1 text-destructive touch-target"
+                  className="flex-1 text-ds-signal touch-target"
                   onClick={() => setDeleteDialog(camara)}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
@@ -289,7 +289,7 @@ export default function CamarasPage() {
       </div>
 
       {filteredCamaras.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-12 text-ds-ink-muted">
           No se encontraron cámaras con ese criterio de búsqueda.
         </div>
       )}
@@ -306,7 +306,7 @@ export default function CamarasPage() {
           <div className="space-y-6 px-1">
             <div className="space-y-3">
               <Label className="text-sm font-medium">Nombre</Label>
-              <Input value={formData.name} disabled className="h-11 bg-muted/50" />
+              <Input value={formData.name} disabled className="h-11 bg-ds-muted/50" />
             </div>
 
             <div className="space-y-3">
@@ -321,7 +321,7 @@ export default function CamarasPage() {
 
             <div className="space-y-3">
               <Label htmlFor="zone_id" className="text-sm font-medium">
-                Zona <span className="text-destructive">*</span>
+                Zona <span className="text-ds-signal">*</span>
               </Label>
               <Select
                 value={formData.zone_id}
@@ -338,14 +338,14 @@ export default function CamarasPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-ds-ink-muted">
                 Zonas configuradas en Administración → Zonas
               </p>
             </div>
 
             <div className="space-y-3">
               <Label htmlFor="ip" className="text-sm font-medium">
-                Dirección IP <span className="text-destructive">*</span>
+                Dirección IP <span className="text-ds-signal">*</span>
               </Label>
               <Input
                 id="ip"
@@ -360,7 +360,7 @@ export default function CamarasPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-3">
                 <Label htmlFor="resolution" className="text-sm font-medium">
-                  Resolución <span className="text-destructive">*</span>
+                  Resolución <span className="text-ds-signal">*</span>
                 </Label>
                 <Select
                   value={formData.resolution}
@@ -381,7 +381,7 @@ export default function CamarasPage() {
 
               <div className="space-y-3">
                 <Label htmlFor="fps" className="text-sm font-medium">
-                  FPS <span className="text-destructive">*</span>
+                  FPS <span className="text-ds-signal">*</span>
                 </Label>
                 <Select
                   value={formData.fps}

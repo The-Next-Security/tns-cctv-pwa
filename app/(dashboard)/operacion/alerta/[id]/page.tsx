@@ -122,9 +122,9 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
         </Link>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+            <AlertTriangle className="h-12 w-12 text-ds-signal mb-4" />
             <p className="text-lg font-medium">Error al cargar la alerta</p>
-            <p className="text-muted-foreground">No se encontro la alerta solicitada</p>
+            <p className="text-ds-ink-muted">No se encontro la alerta solicitada</p>
           </CardContent>
         </Card>
       </div>
@@ -187,7 +187,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* Info bar */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-ds-ink-muted">
         {alert.camera && (
           <span className="flex items-center gap-1.5">
             <Camera className="h-4 w-4" />
@@ -218,7 +218,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
               <CardTitle className="text-base">Evidencia</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+              <div className="relative aspect-video bg-ds-muted rounded-lg overflow-hidden">
                 {alert.snapshot_url ? (
                   <Image
                     src={alert.snapshot_url}
@@ -228,7 +228,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <Camera className="h-16 w-16 text-muted-foreground/30" />
+                    <Camera className="h-16 w-16 text-ds-ink-muted/30" />
                     <span className="sr-only">Sin imagen disponible</span>
                   </div>
                 )}
@@ -272,7 +272,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
           <Collapsible open={metadataOpen} onOpenChange={setMetadataOpen}>
             <Card>
               <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors pb-2">
+                <CardHeader className="cursor-pointer hover:bg-ds-muted transition-colors pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Info className="h-4 w-4" />
@@ -289,25 +289,25 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                 <CardContent className="pt-0">
                   <dl className="grid gap-2 text-sm">
                     <div className="flex justify-between">
-                      <dt className="text-muted-foreground">ID Alerta</dt>
+                      <dt className="text-ds-ink-muted">ID Alerta</dt>
                       <dd className="font-mono">{alert.id}</dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-muted-foreground">ID Evento</dt>
+                      <dt className="text-ds-ink-muted">ID Evento</dt>
                       <dd className="font-mono">{alert.event_raw_id}</dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-muted-foreground">Codigo Evento</dt>
+                      <dt className="text-ds-ink-muted">Codigo Evento</dt>
                       <dd className="font-mono">{alert.event_code || '-'}</dd>
                     </div>
                     {alert.rule && (
                       <div className="flex justify-between">
-                        <dt className="text-muted-foreground">Regla aplicada</dt>
+                        <dt className="text-ds-ink-muted">Regla aplicada</dt>
                         <dd>{alert.rule.name}</dd>
                       </div>
                     )}
                     <div className="flex justify-between">
-                      <dt className="text-muted-foreground">PTS Timestamp</dt>
+                      <dt className="text-ds-ink-muted">PTS Timestamp</dt>
                       <dd className="font-mono text-xs">
                         {format(new Date(alert.pts_timestamp || new Date()), 'yyyy-MM-dd HH:mm:ss.SSS')}
                       </dd>
@@ -379,30 +379,30 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
               <CardContent>
                 <dl className="space-y-2 text-sm">
                   <div>
-                    <dt className="text-muted-foreground">Estado</dt>
+                    <dt className="text-ds-ink-muted">Estado</dt>
                     <dd className="font-medium">{ALERT_STATUS_LABELS[alert.status]}</dd>
                   </div>
                   {alert.discard_reason && (
                     <div>
-                      <dt className="text-muted-foreground">Motivo de descarte</dt>
+                      <dt className="text-ds-ink-muted">Motivo de descarte</dt>
                       <dd>{DISCARD_REASON_LABELS[alert.discard_reason]}</dd>
                     </div>
                   )}
                   {alert.attended_by_user && (
                     <div>
-                      <dt className="text-muted-foreground">Atendida por</dt>
+                      <dt className="text-ds-ink-muted">Atendida por</dt>
                       <dd>{alert.attended_by_user.full_name}</dd>
                     </div>
                   )}
                   {alert.attended_at && (
                     <div>
-                      <dt className="text-muted-foreground">Fecha atencion</dt>
+                      <dt className="text-ds-ink-muted">Fecha atencion</dt>
                       <dd>{format(new Date(alert.attended_at), 'dd/MM/yyyy HH:mm', { locale: es })}</dd>
                     </div>
                   )}
                   {alert.response_time_seconds && (
                     <div>
-                      <dt className="text-muted-foreground">Tiempo de respuesta</dt>
+                      <dt className="text-ds-ink-muted">Tiempo de respuesta</dt>
                       <dd>{Math.floor(alert.response_time_seconds / 60)}m {alert.response_time_seconds % 60}s</dd>
                     </div>
                   )}
@@ -418,7 +418,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
               <CardDescription>Alertas previas en las ultimas 4 horas</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground text-center py-4">
+              <p className="text-sm text-ds-ink-muted text-center py-4">
                 No hay alertas previas recientes
               </p>
             </CardContent>

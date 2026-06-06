@@ -33,7 +33,7 @@ const mobileNavItems: NavItem[] = [
     permission: 'vehicle_entries.create',
   },
   {
-    label: 'Expedientes',
+    label: 'Infracciones Vel.',
     href: '/expedientes',
     icon: FileText,
     permission: 'case_files.view',
@@ -66,7 +66,7 @@ export function MobileNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-border/60 bg-card/95 backdrop-blur-md safe-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-ds-hairline/60 bg-ds-surface/95 backdrop-blur-md safe-bottom">
       <div className="flex h-[var(--mobile-nav-height)] items-stretch justify-around px-1">
         {filteredItems.map(item => {
           const active = isActive(item.href)
@@ -78,13 +78,14 @@ export function MobileNav() {
                 'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 transition-all duration-200',
                 'min-h-[44px] active:scale-95',
                 active
-                  ? 'text-zinc-100 bg-primary/10'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'text-ds-accent bg-ds-accent-faded'
+                  : 'text-ds-ink-muted hover:text-ds-ink-display'
               )}
             >
               <item.icon
+                size={18}
                 className={cn(
-                  'h-[22px] w-[22px] shrink-0 transition-transform duration-200',
+                  'shrink-0 transition-transform duration-200',
                   active && 'scale-105'
                 )}
               />

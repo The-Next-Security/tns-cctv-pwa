@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Geist, Geist_Mono, Inter, DM_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/components/providers/auth-provider'
-import { DEFAULT_CONSOLE_THEME } from '@/lib/console-themes'
+import { ServiceWorkerRegister } from '@/components/pwa/service-worker-register'
 import './globals.css'
 
 const geistSans = Geist({
@@ -18,6 +18,20 @@ const geistMono = Geist_Mono({
   display: 'swap',
 })
 
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-inter',
+  display: 'swap',
+})
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-dm-sans',
+  display: 'swap',
+})
+
 export const metadata: Metadata = {
   title: {
     default: 'TNS Track - Sistema de Monitoreo de Seguridad',
@@ -29,8 +43,21 @@ export const metadata: Metadata = {
   keywords: ['seguridad', 'monitoreo', 'alertas', 'CCTV', 'vigilancia', 'TNS', 'The Next Security'],
   authors: [{ name: 'The Next Security' }],
   icons: {
-    icon: '/brand/tns-logo.png',
-    apple: '/brand/tns-logo.png',
+    icon: [
+      { url: '/icons/favicon.ico', sizes: 'any' },
+      { url: '/icons/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icons/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/icons/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/favicon-48x48.png', sizes: '48x48', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      { url: '/icons/apple-touch-icon-152x152.png', sizes: '152x152', type: 'image/png' },
+      { url: '/icons/apple-touch-icon-167x167.png', sizes: '167x167', type: 'image/png' },
+    ],
+    other: [
+      { rel: 'mask-icon', url: '/icons/safari-pinned-tab.svg', color: '#121212' },
+    ],
   },
 }
 
@@ -51,16 +78,28 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      data-console-theme={DEFAULT_CONSOLE_THEME}
       suppressHydrationWarning
-      data-scroll-behavior="smooth"
     >
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground`}>
+      <head>
+        {/* bm-design-system:start — blocking theme boot before paint */}
+        <script
+          id="bm-ds-theme-boot"
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('bm-ds-theme');var t=s==='light'||s==='dark'||s==='system'?s:'system';var r=t==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):t;if(r==='dark')document.documentElement.classList.add('dark')}catch(e){}})()`,
+          }}
+        />
+        {/* bm-design-system:end */}
+      </head>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${dmSans.variable} font-ds-body antialiased bg-ds-page text-ds-ink-body`}
+        suppressHydrationWarning
+      >
         <ThemeProvider>
           <AuthProvider>
             {children}
           </AuthProvider>
         </ThemeProvider>
+        <ServiceWorkerRegister />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

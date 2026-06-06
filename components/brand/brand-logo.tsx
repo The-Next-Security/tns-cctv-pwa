@@ -73,7 +73,7 @@ export function BrandLogo({
       <div
         className={cn(
           'relative mx-auto shrink-0 overflow-hidden rounded-xl',
-          'bg-[var(--cctv-bg-muted)] ring-1 ring-[var(--cctv-border)]'
+          'bg-[var(--cctv-bg-ds-muted)] ring-1 ring-[var(--cctv-border)]'
         )}
         style={{ width: markHeight, height: markHeight }}
       >
@@ -103,7 +103,7 @@ export function BrandLogo({
     >
       {logoImage}
       {subtitle && variant !== 'mark' && (
-        <p className="truncate text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        <p className="truncate text-[10px] font-medium uppercase tracking-[0.14em] text-ds-ink-muted">
           {subtitle}
         </p>
       )}

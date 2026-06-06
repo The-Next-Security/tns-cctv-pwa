@@ -148,10 +148,10 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
               'flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 flex-col items-center justify-center rounded-lg sm:rounded-xl text-[9px] font-bold uppercase tracking-wide leading-tight gap-0.5',
               isCriticalClass
                 ? CRITICALITY_STYLES[alert.criticality].bgSubtle
-                : 'bg-muted/60',
+                : 'bg-ds-muted/60',
               isCriticalClass
                 ? CRITICALITY_STYLES[alert.criticality].text
-                : 'text-muted-foreground',
+                : 'text-ds-ink-muted',
               isCriticalClass && isPending && 'badge-urgency-critical-pulse ring-1 ring-[var(--urgency-critical-border)]'
             )}>
               {isCriticalClass ? (
@@ -170,7 +170,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
                 <h3 className="font-medium text-sm sm:text-base leading-snug line-clamp-2">
                   {alert.description || getEventLabel(alert.event_code)}
                 </h3>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs sm:text-sm text-muted-foreground mt-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs sm:text-sm text-ds-ink-muted mt-1">
                   {alert.camera && (
                     <span className="flex items-center gap-1">
                       <Camera className="h-3.5 w-3.5" />
@@ -203,10 +203,15 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
               )}
 
               {/* Status for non-pending alerts */}
-              {!isPending && !isInReview && (
+              {!isPending && !isInReview && alert.status === 'escalada' && (
+                <UrgencyBadge level="escalated" className="text-xs">
+                  ↑ Escalada — en manos del supervisor
+                </UrgencyBadge>
+              )}
+
+              {!isPending && !isInReview && (alert.status === 'resuelta' || alert.status === 'descartada') && (
                 <UrgencyBadge level="resolved" className="text-xs">
                   {alert.status === 'resuelta' && `Resuelta: ${alert.resolution_notes || 'Sin notas'}`}
-                  {alert.status === 'escalada' && 'Escalada a supervisor'}
                   {alert.status === 'descartada' && 'Descartada'}
                 </UrgencyBadge>
               )}
@@ -319,7 +324,7 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
             <Button variant="outline" onClick={() => setResolveDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleResolve} disabled={isLoading} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={handleResolve} disabled={isLoading} className="bg-ds-accent hover:bg-ds-accent-darker">
               <Check className="h-4 w-4 mr-2" />
               Resolver Alerta
             </Button>

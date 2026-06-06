@@ -223,7 +223,7 @@ export default function ReglasPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Reglas Operativas</h1>
-          <p className="text-muted-foreground">
+          <p className="text-ds-ink-muted">
             Configure las reglas que determinan criticidad y comportamiento de alertas
           </p>
         </div>
@@ -247,9 +247,9 @@ export default function ReglasPage() {
         <CardContent>
           {rules.length === 0 ? (
             <div className="text-center py-12">
-              <Cog className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
+              <Cog className="h-12 w-12 mx-auto text-ds-ink-muted/30 mb-4" />
               <p className="text-lg font-medium">Sin reglas configuradas</p>
-              <p className="text-muted-foreground mb-4">
+              <p className="text-ds-ink-muted mb-4">
                 Cree una regla para comenzar a clasificar alertas
               </p>
               <Button onClick={handleNewRule}>
@@ -258,7 +258,73 @@ export default function ReglasPage() {
               </Button>
             </div>
           ) : (
-            <div className="overflow-auto">
+            <>
+              {/* Aviso mobile — Reglas está optimizada para escritorio */}
+              <div
+                className="mb-4 flex items-start gap-2 rounded-xl border p-3 text-xs md:hidden"
+                style={{ backgroundColor: 'rgb(91 122 157 / 0.12)', borderColor: 'rgb(91 122 157 / 0.35)' }}
+              >
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-ds-accent" />
+                <span className="text-ds-ink-body">
+                  La configuración de reglas está optimizada para escritorio. Aquí ves un resumen;
+                  para editar con todos los parámetros, usa un computador.
+                </span>
+              </div>
+
+              {/* Vista mobile — tarjetas resumidas */}
+              <div className="flex flex-col gap-2 md:hidden">
+                {[...enabledRules, ...disabledRules].map(rule => (
+                  <div
+                    key={rule.id}
+                    className={cn(
+                      'rounded-xl border border-ds-hairline bg-ds-surface p-3',
+                      !rule.enabled && 'opacity-60'
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-ds-ink-display">{rule.name}</p>
+                        <p className="mt-0.5 text-xs text-ds-ink-muted">
+                          {rule.zone?.name || 'Todas las zonas'} · {rule.time_from || '00:00'}–{rule.time_to || '23:59'}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={rule.enabled}
+                        onCheckedChange={() => handleToggleRule(rule)}
+                      />
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline" className={cn(criticalityStyles[rule.criticality])}>
+                        {CRITICALITY_LABELS[rule.criticality]}
+                      </Badge>
+                      {(rule.event_codes ?? [rule.event_code_pattern]).slice(0, 2).map(code => (
+                        <Badge key={code} variant="secondary" className="text-[11px] font-normal">
+                          {getEventLabel(code)}
+                        </Badge>
+                      ))}
+                      {(rule.event_codes?.length ?? 0) > 2 && (
+                        <span className="text-[10px] text-ds-ink-muted">
+                          +{(rule.event_codes?.length ?? 0) - 2}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 flex items-center gap-1 border-t border-ds-hairline pt-2">
+                      <Button variant="ghost" size="sm" onClick={() => handleEditRule(rule)} className="flex-1 touch-target">
+                        <Pencil className="mr-1.5 h-4 w-4" /> Editar
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleCloneRule(rule)} className="touch-target" aria-label="Clonar">
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteDialog(rule)} className="touch-target" aria-label="Eliminar">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Vista desktop — tabla densa */}
+              <div className="hidden overflow-auto md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -284,7 +350,7 @@ export default function ReglasPage() {
                         <div>
                           <p className="font-medium">{rule.name}</p>
                           {rule.description && (
-                            <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                            <p className="text-xs text-ds-ink-muted truncate max-w-[200px]">
                               {rule.description}
                             </p>
                           )}
@@ -305,10 +371,10 @@ export default function ReglasPage() {
                                 <Radar className="h-3 w-3" /> ITC/LPR
                               </span>
                             )}
-                            {rule.priority_popup && <span className="text-[10px] text-muted-foreground">Popup</span>}
-                            {rule.notify_admin && <span className="text-[10px] text-muted-foreground">· Admin</span>}
-                            {rule.notify_tenant && <span className="text-[10px] text-muted-foreground">· Correo</span>}
-                            {rule.record_evidence && <span className="text-[10px] text-muted-foreground">· Evidencia</span>}
+                            {rule.priority_popup && <span className="text-[10px] text-ds-ink-muted">Popup</span>}
+                            {rule.notify_admin && <span className="text-[10px] text-ds-ink-muted">· Admin</span>}
+                            {rule.notify_tenant && <span className="text-[10px] text-ds-ink-muted">· Correo</span>}
+                            {rule.record_evidence && <span className="text-[10px] text-ds-ink-muted">· Evidencia</span>}
                           </div>
                         </div>
                       </TableCell>
@@ -358,7 +424,8 @@ export default function ReglasPage() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -383,7 +450,7 @@ export default function ReglasPage() {
             <div className="grid gap-x-8 gap-y-6 lg:grid-cols-3">
               <div className="space-y-3 lg:col-span-2">
                 <Label htmlFor="name" className="text-sm font-medium">
-                  Nombre <span className="text-destructive">*</span>
+                  Nombre <span className="text-ds-signal">*</span>
                 </Label>
                 <Input
                   id="name"
@@ -431,16 +498,16 @@ export default function ReglasPage() {
             {/* Event codes (catalogo Dahua) */}
             <div className="space-y-3">
               <Label className="text-sm font-medium">
-                Eventos Dahua <span className="text-destructive">*</span>
+                Eventos Dahua <span className="text-ds-signal">*</span>
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-ds-ink-muted">
                 Seleccione uno o mas eventos del catalogo soportado por la API Dahua.
                 Use la <Info className="inline h-3 w-3 align-[-1px]" /> para ver que hace cada uno.
               </p>
               <div className="grid gap-x-8 gap-y-5 md:grid-cols-3">
                 {eventCategories.map(category => (
                   <div key={category} className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-ds-ink-muted">
                       {EVENT_CATEGORY_LABELS[category]}
                     </p>
                     <div className="flex flex-col gap-2">
@@ -452,8 +519,8 @@ export default function ReglasPage() {
                             className={cn(
                               'flex items-center gap-1 rounded-lg border transition-colors',
                               selected
-                                ? 'border-primary bg-primary/10'
-                                : 'border-border bg-card hover:bg-muted'
+                                ? 'border-ds-accent bg-ds-accent-faded'
+                                : 'border-ds-hairline bg-ds-surface hover:bg-ds-muted'
                             )}
                           >
                             <button
@@ -465,8 +532,8 @@ export default function ReglasPage() {
                                 className={cn(
                                   'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
                                   selected
-                                    ? 'border-primary bg-primary text-primary-foreground'
-                                    : 'border-border'
+                                    ? 'border-ds-accent bg-ds-accent text-white'
+                                    : 'border-ds-hairline'
                                 )}
                               >
                                 {selected && <Check className="h-3 w-3" />}
@@ -481,21 +548,21 @@ export default function ReglasPage() {
                                 <button
                                   type="button"
                                   aria-label={`Que es ${event.label}`}
-                                  className="mr-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                  className="mr-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ds-ink-muted transition-colors hover:bg-ds-page hover:text-ds-ink-display"
                                 >
                                   <Info className="h-3.5 w-3.5" />
                                 </button>
                               </PopoverTrigger>
                               <PopoverContent side="top" align="end" className="w-72 text-xs leading-relaxed">
                                 <p className="mb-1 font-semibold">{event.label}</p>
-                                <p className="text-muted-foreground">{event.description}</p>
+                                <p className="text-ds-ink-muted">{event.description}</p>
                                 {event.requiresDedicatedHardware && (
                                   <p className="mt-2 flex items-start gap-1.5 text-[var(--warning)]">
                                     <Radar className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                                     Requiere camara dedicada ITC/LPR/ANPR.
                                   </p>
                                 )}
-                                <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                                <p className="mt-2 font-mono text-[10px] text-ds-ink-muted">
                                   {event.value}
                                 </p>
                               </PopoverContent>
@@ -547,7 +614,7 @@ export default function ReglasPage() {
                 <Label className="text-sm font-medium">Rango horario</Label>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="time_from" className="text-xs text-muted-foreground">Desde</Label>
+                    <Label htmlFor="time_from" className="text-xs text-ds-ink-muted">Desde</Label>
                     <Input
                       id="time_from"
                       type="time"
@@ -557,7 +624,7 @@ export default function ReglasPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="time_to" className="text-xs text-muted-foreground">Hasta</Label>
+                    <Label htmlFor="time_to" className="text-xs text-ds-ink-muted">Hasta</Label>
                     <Input
                       id="time_to"
                       type="time"
@@ -583,7 +650,7 @@ export default function ReglasPage() {
                   <div key={action.key} className="flex items-center justify-between gap-3 rounded-xl border p-3">
                     <div className="space-y-0.5">
                       <Label className="text-sm font-medium">{action.title}</Label>
-                      <p className="text-xs text-muted-foreground">{action.desc}</p>
+                      <p className="text-xs text-ds-ink-muted">{action.desc}</p>
                     </div>
                     <Switch
                       checked={formData[action.key]}
@@ -595,10 +662,10 @@ export default function ReglasPage() {
             </div>
 
             {/* Enabled */}
-            <div className="flex items-center justify-between rounded-xl bg-muted/50 p-4">
+            <div className="flex items-center justify-between rounded-xl bg-ds-muted/50 p-4">
               <div className="space-y-1">
                 <Label className="text-sm font-medium">Regla activa</Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-ds-ink-muted">
                   Las reglas inactivas no se aplican a nuevas alertas
                 </p>
               </div>

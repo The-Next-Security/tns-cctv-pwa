@@ -79,33 +79,33 @@ export default function SaludPage() {
   const getStatusColor = (estado: string) => {
     switch (estado) {
       case 'online':
-        return 'bg-green-100 text-green-800'
+        return 'bg-ds-accent-faded text-ds-accent'
       case 'offline':
-        return 'bg-red-100 text-red-800'
+        return 'bg-ds-signal-faded text-ds-signal'
       case 'degradado':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'bg-ds-surface text-ds-ink-body'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-ds-surface text-ds-ink-muted'
     }
   }
 
   const getStatusIcon = (estado: string) => {
     switch (estado) {
       case 'online':
-        return <CheckCircle className="h-5 w-5 text-green-600" />
+        return <CheckCircle className="h-5 w-5 text-ds-accent" />
       case 'offline':
-        return <XCircle className="h-5 w-5 text-red-600" />
+        return <XCircle className="h-5 w-5 text-ds-signal" />
       case 'degradado':
-        return <AlertCircle className="h-5 w-5 text-yellow-600" />
+        return <AlertCircle className="h-5 w-5 text-ds-ink-muted" />
       default:
-        return <Clock className="h-5 w-5 text-gray-600" />
+        return <Clock className="h-5 w-5 text-ds-ink-muted" />
     }
   }
 
   const getMetricColor = (value: number) => {
-    if (value < 60) return 'text-green-600'
-    if (value < 80) return 'text-yellow-600'
-    return 'text-red-600'
+    if (value < 60) return 'text-ds-accent'
+    if (value < 80) return 'text-ds-ink-muted'
+    return 'text-ds-signal'
   }
 
   return (
@@ -114,7 +114,7 @@ export default function SaludPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Salud Técnica</h1>
-          <p className="text-muted-foreground">Estado de NVRs, colas y conexiones</p>
+          <p className="text-ds-ink-muted">Estado de NVRs, colas y conexiones</p>
         </div>
         <RoleGate roles={['admin_parque', 'tecnico']}>
           <Button>Diagnosticar Sistema</Button>
@@ -125,40 +125,40 @@ export default function SaludPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-ds-ink-muted flex items-center gap-2">
               <Wifi className="h-4 w-4" />
               Conexiones Activas
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">52</div>
-            <p className="text-xs text-green-600 mt-2">Todas normales</p>
+            <p className="text-xs text-ds-accent mt-2">Todas normales</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-ds-ink-muted flex items-center gap-2">
               <Zap className="h-4 w-4" />
               Disponibilidad
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">99.8%</div>
-            <p className="text-xs text-muted-foreground mt-2">Últimos 30 días</p>
+            <p className="text-xs text-ds-ink-muted mt-2">Últimos 30 días</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-ds-ink-muted flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               Alertas Técnicas
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">1</div>
-            <p className="text-xs text-yellow-600 mt-2">1 advertencia moderada</p>
+            <p className="text-xs text-ds-ink-muted mt-2">1 advertencia moderada</p>
           </CardContent>
         </Card>
       </div>
@@ -176,7 +176,7 @@ export default function SaludPage() {
                   {getStatusIcon(nvr.estado)}
                   <div>
                     <h3 className="font-semibold">{nvr.nombre}</h3>
-                    <p className="text-sm text-muted-foreground">{nvr.ip}</p>
+                    <p className="text-sm text-ds-ink-muted">{nvr.ip}</p>
                   </div>
                 </div>
                 <Badge className={getStatusColor(nvr.estado)}>
@@ -186,53 +186,53 @@ export default function SaludPage() {
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                 <div>
-                  <p className="text-muted-foreground">Cámaras</p>
+                  <p className="text-ds-ink-muted">Cámaras</p>
                   <p className="font-semibold">
                     {nvr.conectadas}/{nvr.totalCamaras}
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Última Conexión</p>
+                  <p className="text-ds-ink-muted">Última Conexión</p>
                   <p className="font-semibold">{nvr.ultimaConexion}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">CPU</p>
+                  <p className="text-ds-ink-muted">CPU</p>
                   <p className={`font-semibold ${getMetricColor(nvr.cpu)}`}>{nvr.cpu}%</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Memoria</p>
+                  <p className="text-ds-ink-muted">Memoria</p>
                   <p className={`font-semibold ${getMetricColor(nvr.memoria)}`}>{nvr.memoria}%</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Almacenamiento</p>
+                  <p className="text-ds-ink-muted">Almacenamiento</p>
                   <p className={`font-semibold ${getMetricColor(nvr.almacenamiento)}`}>{nvr.almacenamiento}%</p>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-16">CPU</span>
-                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <span className="text-xs text-ds-ink-muted w-16">CPU</span>
+                  <div className="flex-1 h-2 bg-ds-hairline/40 rounded-full overflow-hidden">
                     <div
-                      className={`h-full ${nvr.cpu > 80 ? 'bg-red-500' : nvr.cpu > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                      className={`h-full ${nvr.cpu > 80 ? 'bg-ds-signal' : nvr.cpu > 60 ? 'bg-ds-accent-darker' : 'bg-ds-accent'}`}
                       style={{ width: `${nvr.cpu}%` }}
                     />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-16">Memoria</span>
-                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <span className="text-xs text-ds-ink-muted w-16">Memoria</span>
+                  <div className="flex-1 h-2 bg-ds-hairline/40 rounded-full overflow-hidden">
                     <div
-                      className={`h-full ${nvr.memoria > 80 ? 'bg-red-500' : nvr.memoria > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                      className={`h-full ${nvr.memoria > 80 ? 'bg-ds-signal' : nvr.memoria > 60 ? 'bg-ds-accent-darker' : 'bg-ds-accent'}`}
                       style={{ width: `${nvr.memoria}%` }}
                     />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-16">Almac.</span>
-                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <span className="text-xs text-ds-ink-muted w-16">Almac.</span>
+                  <div className="flex-1 h-2 bg-ds-hairline/40 rounded-full overflow-hidden">
                     <div
-                      className={`h-full ${nvr.almacenamiento > 80 ? 'bg-red-500' : nvr.almacenamiento > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                      className={`h-full ${nvr.almacenamiento > 80 ? 'bg-ds-signal' : nvr.almacenamiento > 60 ? 'bg-ds-accent-darker' : 'bg-ds-accent'}`}
                       style={{ width: `${nvr.almacenamiento}%` }}
                     />
                   </div>
@@ -254,7 +254,7 @@ export default function SaludPage() {
               <div key={cola.nombre} className="border rounded-lg p-4 flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">{cola.nombre}</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-ds-ink-muted">
                     Procesadas: {cola.procesadas} | Latencia: {cola.latencia}
                   </p>
                 </div>
@@ -277,19 +277,19 @@ export default function SaludPage() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="border rounded-lg p-4">
-              <p className="text-sm text-muted-foreground">Clientes Conectados</p>
+              <p className="text-sm text-ds-ink-muted">Clientes Conectados</p>
               <p className="text-2xl font-bold">42</p>
             </div>
             <div className="border rounded-lg p-4">
-              <p className="text-sm text-muted-foreground">Ancho Banda</p>
+              <p className="text-sm text-ds-ink-muted">Ancho Banda</p>
               <p className="text-2xl font-bold">12.3 Mbps</p>
             </div>
             <div className="border rounded-lg p-4">
-              <p className="text-sm text-muted-foreground">Eventos/seg</p>
+              <p className="text-sm text-ds-ink-muted">Eventos/seg</p>
               <p className="text-2xl font-bold">284</p>
             </div>
             <div className="border rounded-lg p-4">
-              <p className="text-sm text-muted-foreground">Latencia Promedio</p>
+              <p className="text-sm text-ds-ink-muted">Latencia Promedio</p>
               <p className="text-2xl font-bold">62ms</p>
             </div>
           </div>

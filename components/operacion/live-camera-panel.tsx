@@ -34,7 +34,7 @@ export function LiveCameraPanel({
   }, [])
 
   return (
-    <div className={cn('relative aspect-video overflow-hidden rounded-lg border border-border bg-zinc-950', className)}>
+    <div className={cn('relative aspect-video overflow-hidden rounded-lg border border-ds-hairline video-feed', className)}>
       <video
         key={videoUrl}
         src={videoUrl}

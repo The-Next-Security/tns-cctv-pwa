@@ -42,10 +42,10 @@ export default function DashboardLayout({
   // Mostrar loading mientras se verifica autenticación
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-screen items-center justify-center bg-ds-page">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Cargando...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-ds-accent border-t-transparent" />
+          <p className="text-sm text-ds-ink-muted font-ds-body">Cargando...</p>
         </div>
       </div>
     )
@@ -57,7 +57,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen dashboard-canvas">
+    <div className="min-h-screen w-full overflow-x-hidden dashboard-canvas">
       {/* Sidebar desktop */}
       <div className="hidden lg:block">
         <AppSidebar
@@ -97,7 +97,7 @@ export default function DashboardLayout({
           sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[var(--sidebar-width)]'
         )}
       >
-        <div className="page-content animate-fade-in">
+        <div className="page-content w-full max-w-full overflow-x-hidden animate-fade-in">
           {children}
         </div>
       </main>

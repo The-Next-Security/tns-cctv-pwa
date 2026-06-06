@@ -11,7 +11,7 @@ export default function ConfiguracionPage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Configuración</h1>
-        <p className="text-muted-foreground">Parámetros generales del sistema</p>
+        <p className="text-ds-ink-muted">Parámetros generales del sistema</p>
       </div>
 
       {/* General Settings */}
@@ -32,7 +32,7 @@ export default function ConfiguracionPage() {
             <label className="text-sm font-medium">Zona Horaria</label>
             <Input defaultValue="America/Argentina/Buenos_Aires" className="mt-2" />
           </div>
-          <Button gap-2>
+          <Button className="gap-2">
             <Save className="h-4 w-4" />
             Guardar Cambios
           </Button>
@@ -60,7 +60,7 @@ export default function ConfiguracionPage() {
               </Button>
             </div>
           </div>
-          <Button gap-2>
+          <Button className="gap-2">
             <Save className="h-4 w-4" />
             Guardar Cambios
           </Button>
@@ -79,7 +79,7 @@ export default function ConfiguracionPage() {
           <Button variant="outline" className="w-full">
             Exportar Base de Datos
           </Button>
-          <Button variant="outline" className="w-full text-destructive">
+          <Button variant="outline" className="w-full text-ds-signal">
             Reiniciar Sistema
           </Button>
         </CardContent>

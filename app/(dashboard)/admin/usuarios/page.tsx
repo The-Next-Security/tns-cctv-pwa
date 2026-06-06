@@ -60,16 +60,16 @@ const roles: UserRole[] = ['admin_parque', 'supervisor', 'vigilante', 'recepcion
 const getRoleColor = (role: UserRole) => {
   const colors: Record<UserRole, string> = {
     admin_parque: 'bg-[var(--danger-bg)] text-[var(--danger)] border-[var(--danger)]/30',
-    supervisor: 'bg-[var(--stat-review-bg)] text-[var(--crextio-brown)] border-[var(--crextio-brown)]/30',
+    supervisor: 'bg-ds-accent-faded text-ds-accent border-ds-accent/30',
     vigilante: 'bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30',
     recepcionista: 'bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30',
-    tecnico: 'bg-accent/50 text-foreground border-[var(--crextio-gold-strong)]/30',
-    visualizador: 'bg-muted text-muted-foreground border-border',
+    tecnico: 'bg-ds-muted text-ds-ink-display border-ds-accent/30',
+    visualizador: 'bg-ds-muted text-ds-ink-muted border-ds-hairline',
     recepcion: 'bg-[var(--stat-pending-bg)] text-[var(--stat-pending)] border-[var(--stat-pending)]/30',
     responsable_seguridad: 'bg-[var(--danger-bg)] text-[var(--crextio-terracotta)] border-[var(--crextio-terracotta)]/30',
-    soporte_tns: 'bg-accent/60 text-foreground border-[var(--crextio-gold-strong)]/30',
+    soporte_tns: 'bg-ds-muted text-ds-ink-display border-ds-accent/30',
   }
-  return colors[role] || 'bg-muted text-muted-foreground'
+  return colors[role] || 'bg-ds-muted text-ds-ink-muted'
 }
 
 interface UserFormData {
@@ -186,7 +186,7 @@ export default function UsuariosPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Usuarios</h1>
-          <p className="text-muted-foreground">Gestiona usuarios, roles y permisos</p>
+          <p className="text-ds-ink-muted">Gestiona usuarios, roles y permisos</p>
         </div>
         <Button onClick={handleNewUser} className="touch-target">
           <Plus className="h-4 w-4 mr-2" />
@@ -199,12 +199,12 @@ export default function UsuariosPage() {
         <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Users className="h-5 w-5 text-primary" />
+              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl bg-ds-accent-faded flex items-center justify-center">
+                <Users className="h-5 w-5 text-ds-accent" />
               </div>
               <div className="min-w-0">
                 <p className="text-xl sm:text-2xl font-bold tabular-nums">{stats.total}</p>
-                <p className="text-sm text-muted-foreground">Total</p>
+                <p className="text-sm text-ds-ink-muted">Total</p>
               </div>
             </div>
           </CardContent>
@@ -212,12 +212,12 @@ export default function UsuariosPage() {
         <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl bg-green-500/10 flex items-center justify-center">
-                <UserCheck className="h-5 w-5 text-green-500" />
+              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl bg-ds-accent-faded flex items-center justify-center">
+                <UserCheck className="h-5 w-5 text-ds-accent" />
               </div>
               <div className="min-w-0">
                 <p className="text-xl sm:text-2xl font-bold tabular-nums">{stats.activos}</p>
-                <p className="text-sm text-muted-foreground">Activos</p>
+                <p className="text-sm text-ds-ink-muted">Activos</p>
               </div>
             </div>
           </CardContent>
@@ -225,12 +225,12 @@ export default function UsuariosPage() {
         <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl bg-red-500/10 flex items-center justify-center">
-                <UserX className="h-5 w-5 text-red-500" />
+              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl bg-ds-signal-faded flex items-center justify-center">
+                <UserX className="h-5 w-5 text-ds-signal" />
               </div>
               <div className="min-w-0">
                 <p className="text-xl sm:text-2xl font-bold tabular-nums">{stats.inactivos}</p>
-                <p className="text-sm text-muted-foreground">Inactivos</p>
+                <p className="text-sm text-ds-ink-muted">Inactivos</p>
               </div>
             </div>
           </CardContent>
@@ -239,7 +239,7 @@ export default function UsuariosPage() {
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-3 top-3 h-4 w-4 text-ds-ink-muted" />
         <Input
           placeholder="Buscar por nombre o email..."
           className="pl-10 h-11"
@@ -271,9 +271,9 @@ export default function UsuariosPage() {
                   <TableRow key={usuario.id} className="animate-fade-in">
                     <TableCell className="font-medium">
                       {usuario.nombre}
-                      <span className="block text-xs text-muted-foreground md:hidden">{usuario.email}</span>
+                      <span className="block text-xs text-ds-ink-muted md:hidden">{usuario.email}</span>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{usuario.email}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm text-ds-ink-muted">{usuario.email}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn(getRoleColor(usuario.role))}>
                         {ROLE_LABELS[usuario.role]}
@@ -284,7 +284,7 @@ export default function UsuariosPage() {
                         {usuario.activo ? 'Activo' : 'Inactivo'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                    <TableCell className="hidden lg:table-cell text-sm text-ds-ink-muted">
                       {formatDistanceToNow(new Date(usuario.ultimaConexion), { addSuffix: true, locale: es })}
                     </TableCell>
                     <TableCell className="text-right">
@@ -300,7 +300,7 @@ export default function UsuariosPage() {
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          className="text-destructive touch-target"
+                          className="text-ds-signal touch-target"
                           onClick={() => setDeleteDialog(usuario)}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -334,7 +334,7 @@ export default function UsuariosPage() {
             {/* Nombre */}
             <div className="space-y-3">
               <Label htmlFor="nombre" className="text-sm font-medium">
-                Nombre completo <span className="text-destructive">*</span>
+                Nombre completo <span className="text-ds-signal">*</span>
               </Label>
               <Input
                 id="nombre"
@@ -348,7 +348,7 @@ export default function UsuariosPage() {
             {/* Email */}
             <div className="space-y-3">
               <Label htmlFor="email" className="text-sm font-medium">
-                Correo electronico <span className="text-destructive">*</span>
+                Correo electronico <span className="text-ds-signal">*</span>
               </Label>
               <Input
                 id="email"
@@ -363,7 +363,7 @@ export default function UsuariosPage() {
             {/* Password */}
             <div className="space-y-3">
               <Label htmlFor="password" className="text-sm font-medium">
-                Contraseña {!editingUser && <span className="text-destructive">*</span>}
+                Contraseña {!editingUser && <span className="text-ds-signal">*</span>}
               </Label>
               <Input
                 id="password"
@@ -374,7 +374,7 @@ export default function UsuariosPage() {
                 className="h-11"
               />
               {editingUser && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-ds-ink-muted">
                   Deje vacio si no desea cambiar la contraseña
                 </p>
               )}
@@ -405,10 +405,10 @@ export default function UsuariosPage() {
             </div>
 
             {/* Activo */}
-            <div className="flex items-center justify-between rounded-xl bg-muted/50 p-4">
+            <div className="flex items-center justify-between rounded-xl bg-ds-muted/50 p-4">
               <div className="space-y-1">
                 <Label className="text-sm font-medium">Usuario activo</Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-ds-ink-muted">
                   Los usuarios inactivos no pueden iniciar sesion
                 </p>
               </div>

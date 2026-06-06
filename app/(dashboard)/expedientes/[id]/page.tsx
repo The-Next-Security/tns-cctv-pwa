@@ -45,7 +45,7 @@ import { MATCH_STATUS_LABELS } from '@/lib/types'
 const matchStatusStyles: Record<MatchStatus, string> = {
   match_confiable: 'bg-status-ok/20 text-status-ok border-status-ok/30',
   revision_manual: 'bg-status-degraded/20 text-status-degraded border-status-degraded/30',
-  fuera_ventana: 'bg-muted text-muted-foreground',
+  fuera_ventana: 'bg-ds-muted text-ds-ink-muted',
   sin_coincidencia: 'bg-status-down/20 text-status-down border-status-down/30',
 }
 
@@ -129,9 +129,9 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
         </Link>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+            <AlertTriangle className="h-12 w-12 text-ds-signal mb-4" />
             <p className="text-lg font-medium">Error al cargar el expediente</p>
-            <p className="text-muted-foreground">No se encontro el expediente solicitado</p>
+            <p className="text-ds-ink-muted">No se encontro el expediente solicitado</p>
           </CardContent>
         </Card>
       </div>
@@ -190,7 +190,7 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Evidence Image */}
-            <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+            <div className="relative aspect-video bg-ds-muted rounded-lg overflow-hidden">
               {caseFile.infraction?.evidence_url ? (
                 <Image
                   src={caseFile.infraction.evidence_url}
@@ -200,34 +200,34 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Camera className="h-12 w-12 text-muted-foreground/30" />
+                  <Camera className="h-12 w-12 text-ds-ink-muted/30" />
                 </div>
               )}
             </div>
 
             <dl className="space-y-3 text-sm">
               <div className="flex justify-between">
-                <dt className="text-muted-foreground">Patente leida</dt>
+                <dt className="text-ds-ink-muted">Patente leida</dt>
                 <dd className="font-mono font-medium">{caseFile.infraction?.plate_read || '-'}</dd>
               </div>
               {caseFile.infraction?.speed_kmh && (
                 <>
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Velocidad</dt>
-                    <dd className="font-medium text-destructive">
+                    <dt className="text-ds-ink-muted">Velocidad</dt>
+                    <dd className="font-medium text-ds-signal">
                       {caseFile.infraction.speed_kmh} km/h
                     </dd>
                   </div>
                   {caseFile.infraction.speed_limit_kmh && (
                     <div className="flex justify-between">
-                      <dt className="text-muted-foreground">Limite</dt>
+                      <dt className="text-ds-ink-muted">Limite</dt>
                       <dd>{caseFile.infraction.speed_limit_kmh} km/h</dd>
                     </div>
                   )}
                 </>
               )}
               <div className="flex justify-between">
-                <dt className="text-muted-foreground">Detectado</dt>
+                <dt className="text-ds-ink-muted">Detectado</dt>
                 <dd>
                   {caseFile.infraction?.detected_at
                     ? format(new Date(caseFile.infraction.detected_at), 'dd/MM/yyyy HH:mm:ss', { locale: es })
@@ -236,7 +236,7 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
               </div>
               {caseFile.infraction?.camera && (
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Camara</dt>
+                  <dt className="text-ds-ink-muted">Camara</dt>
                   <dd>{caseFile.infraction.camera.name}</dd>
                 </div>
               )}
@@ -268,19 +268,19 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
                 </div>
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Patente</dt>
+                    <dt className="text-ds-ink-muted">Patente</dt>
                     <dd className="font-mono">{caseFile.matched_entry.plate}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Conductor</dt>
+                    <dt className="text-ds-ink-muted">Conductor</dt>
                     <dd>{caseFile.matched_entry.declared_driver_name || '-'}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">RUT</dt>
+                    <dt className="text-ds-ink-muted">RUT</dt>
                     <dd>{caseFile.matched_entry.declared_driver_id || '-'}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Ingreso</dt>
+                    <dt className="text-ds-ink-muted">Ingreso</dt>
                     <dd>{format(new Date(caseFile.matched_entry.entry_at), 'dd/MM HH:mm', { locale: es })}</dd>
                   </div>
                 </dl>
@@ -297,22 +297,22 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
                     className={cn(
                       'rounded-lg border p-3 cursor-pointer transition-colors',
                       selectedEntry === entry.id
-                        ? 'border-primary bg-primary/5'
-                        : 'hover:bg-accent'
+                        ? 'border-ds-accent bg-ds-accent-faded'
+                        : 'hover:bg-ds-muted'
                     )}
                     onClick={() => setSelectedEntry(entry.id)}
                   >
                     <dl className="space-y-1 text-sm">
                       <div className="flex justify-between">
-                        <dt className="text-muted-foreground">Patente</dt>
+                        <dt className="text-ds-ink-muted">Patente</dt>
                         <dd className="font-mono">{entry.plate}</dd>
                       </div>
                       <div className="flex justify-between">
-                        <dt className="text-muted-foreground">Conductor</dt>
+                        <dt className="text-ds-ink-muted">Conductor</dt>
                         <dd>{entry.declared_driver_name || '-'}</dd>
                       </div>
                       <div className="flex justify-between">
-                        <dt className="text-muted-foreground">Ingreso</dt>
+                        <dt className="text-ds-ink-muted">Ingreso</dt>
                         <dd>{format(new Date(entry.entry_at), 'dd/MM HH:mm', { locale: es })}</dd>
                       </div>
                     </dl>
@@ -328,22 +328,22 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
 
             {/* Tenant Info */}
             {caseFile.tenant && (
-              <div className="rounded-lg bg-muted p-4 space-y-2">
+              <div className="rounded-lg bg-ds-muted p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
                   <span className="font-medium">Empresa</span>
                 </div>
                 <p>{caseFile.tenant.legal_name}</p>
                 {caseFile.tenant.contact_email && (
-                  <p className="text-sm text-muted-foreground">{caseFile.tenant.contact_email}</p>
+                  <p className="text-sm text-ds-ink-muted">{caseFile.tenant.contact_email}</p>
                 )}
               </div>
             )}
 
             {caseFile.match_status === 'sin_coincidencia' && (
               <div className="text-center py-4">
-                <AlertTriangle className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-sm text-muted-foreground">
+                <AlertTriangle className="h-8 w-8 mx-auto text-ds-ink-muted/50 mb-2" />
+                <p className="text-sm text-ds-ink-muted">
                   No se encontro registro de ingreso coincidente
                 </p>
               </div>
@@ -382,7 +382,7 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
                       disabled={needsManualReview && !selectedEntry}
                     >
                       <Mail className="h-4 w-4 mr-2" />
-                      Notificar a Tenant
+                      Notificar a la Empresa
                     </Button>
                   )}
                   <Button
@@ -404,7 +404,7 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
                 </div>
 
                 {needsManualReview && !selectedEntry && (
-                  <p className="text-xs text-muted-foreground text-center">
+                  <p className="text-xs text-ds-ink-muted text-center">
                     Seleccione un registro de ingreso para poder notificar
                   </p>
                 )}
@@ -414,32 +414,32 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
               <div className="space-y-4">
                 <dl className="space-y-3 text-sm">
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Estado</dt>
+                    <dt className="text-ds-ink-muted">Estado</dt>
                     <dd>
                       <Badge>{resolutionLabels[caseFile.resolution]}</Badge>
                     </dd>
                   </div>
                   {caseFile.resolved_by_user && (
                     <div className="flex justify-between">
-                      <dt className="text-muted-foreground">Resuelto por</dt>
+                      <dt className="text-ds-ink-muted">Resuelto por</dt>
                       <dd>{caseFile.resolved_by_user.full_name}</dd>
                     </div>
                   )}
                   {caseFile.resolved_at && (
                     <div className="flex justify-between">
-                      <dt className="text-muted-foreground">Fecha</dt>
+                      <dt className="text-ds-ink-muted">Fecha</dt>
                       <dd>{format(new Date(caseFile.resolved_at), 'dd/MM/yyyy HH:mm', { locale: es })}</dd>
                     </div>
                   )}
                   {caseFile.notification_sent_at && (
                     <div className="flex justify-between">
-                      <dt className="text-muted-foreground">Notificado</dt>
+                      <dt className="text-ds-ink-muted">Notificado</dt>
                       <dd>{format(new Date(caseFile.notification_sent_at), 'dd/MM/yyyy HH:mm', { locale: es })}</dd>
                     </div>
                   )}
                 </dl>
                 {caseFile.resolution_note && (
-                  <div className="rounded-lg bg-muted p-3">
+                  <div className="rounded-lg bg-ds-muted p-3">
                     <p className="text-sm font-medium mb-1">Nota:</p>
                     <p className="text-sm">{caseFile.resolution_note}</p>
                   </div>
@@ -454,7 +454,7 @@ export default function ExpedienteDetallePage({ params }: { params: Promise<{ id
       <Dialog open={actionDialog === 'notify'} onOpenChange={() => setActionDialog(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Notificar a Tenant</DialogTitle>
+            <DialogTitle>Notificar a la Empresa</DialogTitle>
             <DialogDescription>
               Se enviara una notificacion por correo a {caseFile.tenant?.legal_name}
             </DialogDescription>

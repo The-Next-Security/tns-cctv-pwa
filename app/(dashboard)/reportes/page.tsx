@@ -64,7 +64,7 @@ export default function ReportesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Reportes</h1>
-          <p className="text-muted-foreground">Análisis de incidentes y rendimiento del sistema</p>
+          <p className="text-ds-ink-muted">Análisis de incidentes y rendimiento del sistema</p>
         </div>
         <RoleGate roles={['admin_parque', 'supervisor']}>
           <Button onClick={handleExport} className="gap-2">
@@ -95,41 +95,41 @@ export default function ReportesPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Alertas</CardTitle>
+            <CardTitle className="text-sm font-medium text-ds-ink-muted">Total Alertas</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">514</div>
-            <p className="text-xs text-green-600 mt-2">+12% desde período anterior</p>
+            <p className="text-xs text-ds-accent mt-2">+12% desde período anterior</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Resueltas</CardTitle>
+            <CardTitle className="text-sm font-medium text-ds-ink-muted">Resueltas</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">412</div>
-            <p className="text-xs text-muted-foreground mt-2">80% de resolución</p>
+            <p className="text-xs text-ds-ink-muted mt-2">80% de resolución</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Tiempo Promedio</CardTitle>
+            <CardTitle className="text-sm font-medium text-ds-ink-muted">Tiempo Promedio</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">58s</div>
-            <p className="text-xs text-green-600 mt-2">-5s vs período anterior</p>
+            <p className="text-xs text-ds-accent mt-2">-5s vs período anterior</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Criticidad Crítica</CardTitle>
+            <CardTitle className="text-sm font-medium text-ds-ink-muted">Criticidad Crítica</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">77</div>
-            <p className="text-xs text-red-600 mt-2">15% del total</p>
+            <p className="text-xs text-ds-signal mt-2">15% del total</p>
           </CardContent>
         </Card>
       </div>
