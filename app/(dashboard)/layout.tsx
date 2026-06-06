@@ -57,7 +57,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen dashboard-canvas">
+    <div className="min-h-screen w-full overflow-x-hidden dashboard-canvas">
       {/* Sidebar desktop */}
       <div className="hidden lg:block">
         <AppSidebar
@@ -97,7 +97,7 @@ export default function DashboardLayout({
           sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[var(--sidebar-width)]'
         )}
       >
-        <div className="page-content animate-fade-in">
+        <div className="page-content w-full max-w-full overflow-x-hidden animate-fade-in">
           {children}
         </div>
       </main>
