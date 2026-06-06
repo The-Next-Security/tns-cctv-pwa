@@ -1,0 +1,17 @@
+DELIMITER $$
+
+CREATE FUNCTION fn_normalize_plate(p_plate VARCHAR(16))
+RETURNS VARCHAR(16)
+DETERMINISTIC
+BEGIN
+  RETURN UPPER(REPLACE(REPLACE(TRIM(p_plate), ' ', ''), '-', ''));
+END$$
+
+CREATE FUNCTION fn_is_santiago_business_hours(p_time TIME)
+RETURNS TINYINT(1)
+DETERMINISTIC
+BEGIN
+  RETURN (p_time BETWEEN '08:00:00' AND '20:59:59');
+END$$
+
+DELIMITER ;
