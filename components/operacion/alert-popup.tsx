@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ArrowUpRight, Image, AlertTriangle } from 'lucide-react'
+import { Image, AlertTriangle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,10 @@ import { cn } from '@/lib/utils'
 import type { Alert } from '@/lib/types'
 import { getEventLabel } from '@/lib/types'
 import { CRITICALITY_STYLES, DISCARD_REASONS } from '@/lib/constants'
+import {
+  CallContactsPopover,
+  EscalateButton,
+} from '@/components/operacion/escalation-controls'
 
 interface AlertPopupProps {
   alert: Alert | null
@@ -33,6 +37,7 @@ interface AlertPopupProps {
   onOpenChange: (open: boolean) => void
   onAction: (id: number, action: string, reason?: string) => void
   onEscalate?: () => void
+  onLlamar: (id: number) => void
   recentAlerts?: Alert[]
 }
 
@@ -42,6 +47,7 @@ export function AlertPopup({
   onOpenChange,
   onAction,
   onEscalate,
+  onLlamar,
   recentAlerts = [],
 }: AlertPopupProps) {
   const [imageError, setImageError] = useState(false)
@@ -219,17 +225,21 @@ export function AlertPopup({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button
-            variant="outline"
+          <CallContactsPopover
+            alert={alert}
+            onLlamar={onLlamar}
             className="h-11 w-full touch-target border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
-            onClick={() => {
+          />
+
+          <EscalateButton
+            alert={alert}
+            onEscalate={() => {
               onEscalate?.()
               onOpenChange(false)
             }}
-          >
-            <ArrowUpRight className="h-4 w-4 mr-2" />
-            Escalar
-          </Button>
+            wrapperClassName="w-full sm:w-auto"
+            className="h-11 w-full border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

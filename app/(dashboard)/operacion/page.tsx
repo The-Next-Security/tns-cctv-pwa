@@ -199,6 +199,17 @@ export default function OperacionPage() {
     }
   }
 
+  function handleLlamar(alertId: number) {
+    const llamadaAt = new Date().toISOString()
+    const markCalled = (alert: Alert) =>
+      alert.id === alertId ? { ...alert, llamada_at: llamadaAt } : alert
+
+    setLocalAlerts(prev => prev.map(markCalled))
+    setPriorityAlert(prev => prev ? markCalled(prev) : prev)
+    setSelectedAlert(prev => prev ? markCalled(prev) : prev)
+    setEscalateAlert(prev => prev ? markCalled(prev) : prev)
+  }
+
   function handleShowDetails(alert: Alert) {
     setSelectedAlert(alert)
     setShowPopup(true)
@@ -253,6 +264,7 @@ export default function OperacionPage() {
               alert={alert}
               onAction={(action, notes) => handleAlertAction(alert.id, action, notes)}
               onEscalate={() => setEscalateAlert(alert)}
+              onLlamar={handleLlamar}
               onShowDetails={handleShowDetails}
             />
           </div>
@@ -543,6 +555,7 @@ export default function OperacionPage() {
                       alert={alert}
                       onAction={(action, notes) => handleAlertAction(alert.id, action, notes)}
                       onEscalate={() => setEscalateAlert(alert)}
+                      onLlamar={handleLlamar}
                       onShowDetails={handleShowDetails}
                       readonly={alert.status === 'resuelta' || alert.status === 'escalada' || alert.status === 'descartada'}
                     />
@@ -568,6 +581,7 @@ export default function OperacionPage() {
           setEscalateAlert(priorityAlert)
           setPriorityAlert(null)
         }}
+        onLlamar={handleLlamar}
       />
 
       <AlertPopup
@@ -578,6 +592,7 @@ export default function OperacionPage() {
         onEscalate={() => {
           if (selectedAlert) setEscalateAlert(selectedAlert)
         }}
+        onLlamar={handleLlamar}
         recentAlerts={selectedAlert ? localAlerts.filter(a => a.camera?.id === selectedAlert.camera?.id) : []}
       />
 

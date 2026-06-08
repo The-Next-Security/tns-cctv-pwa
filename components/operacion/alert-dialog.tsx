@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Camera, Clock, MapPin, Check, X, ArrowUpRight, ChevronDown } from 'lucide-react'
+import { Camera, Clock, MapPin, Check, X, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -28,12 +28,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
 import { DISCARD_REASON_LABELS, CRITICALITY_LABELS, getEventLabel } from '@/lib/types'
+import {
+  CallContactsPopover,
+  EscalateButton,
+} from '@/components/operacion/escalation-controls'
 
 interface AlertDialogProps {
   alert: Alert | null
   onClose: () => void
   onAction: (action: 'acknowledge' | 'resolve' | 'escalate', notes?: string) => void
   onEscalate: () => void
+  onLlamar: (id: number) => void
 }
 
 const criticalityStyles: Record<Criticality, string> = {
@@ -52,7 +57,7 @@ const discardReasons: DiscardReason[] = [
   'otro',
 ]
 
-export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialogProps) {
+export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: AlertDialogProps) {
   const [isLoading, setIsLoading] = useState(false)
 
   if (!alert) return null
@@ -198,15 +203,20 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate }: AlertDialo
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button
-            variant="outline"
-            onClick={onEscalate}
+          <CallContactsPopover
+            alert={alert}
+            onLlamar={onLlamar}
             disabled={isLoading}
             className="h-11 w-full touch-target border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
-          >
-            <ArrowUpRight className="h-4 w-4 mr-2" />
-            Escalar
-          </Button>
+          />
+
+          <EscalateButton
+            alert={alert}
+            onEscalate={onEscalate}
+            disabled={isLoading}
+            wrapperClassName="w-full sm:w-auto"
+            className="h-11 w-full border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

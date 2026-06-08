@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Camera, Clock, MapPin, ChevronDown, Check, X, ArrowUpRight, Eye } from 'lucide-react'
+import { Camera, Clock, MapPin, ChevronDown, Check, X, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -29,11 +29,16 @@ import type { Alert, Criticality, DiscardReason } from '@/lib/types'
 import { DISCARD_REASON_LABELS, getEventLabel, getAlertClass } from '@/lib/types'
 import { CRITICALITY_STYLES, CRITICALITY_LABELS } from '@/lib/constants'
 import { UrgencyBadge } from '@/components/ui/urgency-badge'
+import {
+  CallContactsPopover,
+  EscalateButton,
+} from '@/components/operacion/escalation-controls'
 
 interface AlertCardProps {
   alert: Alert
   onAction: (action: 'acknowledge' | 'resolve' | 'escalate', notes?: string) => void
   onEscalate: () => void
+  onLlamar: (id: number) => void
   onShowDetails?: (alert: Alert) => void
   readonly?: boolean
 }
@@ -48,7 +53,14 @@ const discardReasons: DiscardReason[] = [
   'otro',
 ]
 
-export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly = false }: AlertCardProps) {
+export function AlertCard({
+  alert,
+  onAction,
+  onEscalate,
+  onLlamar,
+  onShowDetails,
+  readonly = false,
+}: AlertCardProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false)
   const [resolveNotes, setResolveNotes] = useState('')
@@ -281,16 +293,19 @@ export function AlertCard({ alert, onAction, onEscalate, onShowDetails, readonly
                       Resuelta
                     </Button>
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={onEscalate}
+                    <CallContactsPopover
+                      alert={alert}
+                      onLlamar={onLlamar}
                       disabled={isLoading}
-                      className="h-10 sm:h-9 touch-target rounded-xl"
-                    >
-                      <ArrowUpRight className="h-4 w-4 mr-1" />
-                      Escalar
-                    </Button>
+                      className="h-10 rounded-xl sm:h-9"
+                    />
+
+                    <EscalateButton
+                      alert={alert}
+                      onEscalate={onEscalate}
+                      disabled={isLoading}
+                      className="h-10 rounded-xl sm:h-9"
+                    />
                   </>
                 )}
               </div>
