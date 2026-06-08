@@ -152,6 +152,7 @@ export interface Alert {
   discard_reason?: DiscardReason | null
   discard_note?: string | null
   escalated_to?: number | null
+  llamada_at?: string | null
   observation?: string | null
   description?: string
   plate?: string
@@ -188,6 +189,8 @@ export interface Rule {
   notify_admin?: boolean
   notify_tenant?: boolean
   record_evidence?: boolean
+  can_escalate?: boolean
+  escalation_roles?: Role[]
   active?: boolean
   enabled: boolean
   created_by?: number | null

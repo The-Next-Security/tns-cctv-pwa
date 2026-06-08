@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -56,11 +57,13 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { MOCK_RULES, MOCK_ZONES } from '@/lib/mock-data'
-import type { Rule, Criticality, EventCategory } from '@/lib/types'
+import { ESCALATION_ROLE_OPTIONS } from '@/lib/escalation'
+import type { Rule, Criticality, EventCategory, Role } from '@/lib/types'
 import {
   CRITICALITY_LABELS,
   EVENT_CODES_BY_CATEGORY,
   EVENT_CATEGORY_LABELS,
+  ROLE_LABELS,
   getEventLabel,
   requiresDedicatedHardware,
 } from '@/lib/types'
@@ -86,6 +89,8 @@ interface RuleFormData {
   notify_admin: boolean
   notify_tenant: boolean
   record_evidence: boolean
+  can_escalate: boolean
+  escalation_roles: Role[]
   enabled: boolean
 }
 
@@ -101,6 +106,8 @@ const defaultFormData: RuleFormData = {
   notify_admin: false,
   notify_tenant: false,
   record_evidence: false,
+  can_escalate: false,
+  escalation_roles: [],
   enabled: true,
 }
 
@@ -133,6 +140,8 @@ export default function ReglasPage() {
       notify_admin: rule.notify_admin ?? false,
       notify_tenant: rule.notify_tenant ?? false,
       record_evidence: rule.record_evidence ?? false,
+      can_escalate: rule.can_escalate ?? false,
+      escalation_roles: rule.escalation_roles ?? [],
       enabled: rule.enabled,
     }
   }
@@ -162,6 +171,15 @@ export default function ReglasPage() {
     }))
   }
 
+  function toggleEscalationRole(role: Role) {
+    setFormData(prev => ({
+      ...prev,
+      escalation_roles: prev.escalation_roles.includes(role)
+        ? prev.escalation_roles.filter(currentRole => currentRole !== role)
+        : [...prev.escalation_roles, role],
+    }))
+  }
+
   function handleToggleRule(rule: Rule) {
     setRules(prev => prev.map(r => 
       r.id === rule.id ? { ...r, enabled: !r.enabled } : r
@@ -176,6 +194,10 @@ export default function ReglasPage() {
     }
     if (formData.event_codes.length === 0) {
       toast.error('Seleccione al menos un evento')
+      return
+    }
+    if (formData.can_escalate && formData.escalation_roles.length === 0) {
+      toast.error('Seleccione al menos un rol para la escalación')
       return
     }
 
@@ -659,6 +681,67 @@ export default function ReglasPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Escalación */}
+            <div className="space-y-4 rounded-xl border border-ds-hairline bg-ds-surface p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="can-escalate" className="text-sm font-medium text-ds-ink-display">
+                    Permitir escalación en alertas de esta regla
+                  </Label>
+                  <p className="text-xs text-ds-ink-muted">
+                    Habilita el flujo LLAMAR → ESCALAR cuando la alerta está en revisión.
+                  </p>
+                </div>
+                <Switch
+                  id="can-escalate"
+                  checked={formData.can_escalate}
+                  onCheckedChange={canEscalate => setFormData(prev => ({
+                    ...prev,
+                    can_escalate: canEscalate,
+                    escalation_roles: canEscalate ? prev.escalation_roles : [],
+                  }))}
+                />
+              </div>
+
+              {formData.can_escalate && (
+                <div className="space-y-3 border-t border-ds-hairline pt-4">
+                  <div>
+                    <p className="text-sm font-medium text-ds-ink-display">
+                      Roles que recibirán la escalación
+                    </p>
+                    <p className="text-xs text-ds-ink-muted">
+                      Los contactos se fijan en la regla y no podrán editarse durante la atención.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {ESCALATION_ROLE_OPTIONS.map(role => {
+                      const checkboxId = `escalation-role-${role}`
+                      return (
+                        <label
+                          key={role}
+                          htmlFor={checkboxId}
+                          className="flex cursor-pointer items-center gap-3 rounded-lg border border-ds-hairline bg-ds-muted p-3 text-sm text-ds-ink-body"
+                        >
+                          <Checkbox
+                            id={checkboxId}
+                            checked={formData.escalation_roles.includes(role)}
+                            onCheckedChange={() => toggleEscalationRole(role)}
+                          />
+                          <span>{ROLE_LABELS[role]}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+
+                  <div className="rounded-lg border border-ds-accent/30 bg-ds-accent-faded p-3 text-xs leading-relaxed text-ds-ink-body">
+                    Al escalar una alerta de esta regla, se notificará a los roles seleccionados.
+                    El operador deberá haber presionado LLAMAR antes de poder escalar.
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Enabled */}
