@@ -406,3 +406,209 @@ CREATE TABLE api_audit_log (
 2. Idempotency key repetida con hash distinto => `IDEMPOTENCY_CONFLICT`.
 3. Transiciones de estado se validan contra estado actual.
 4. Correlación manual exige justificación y auditoría.
+
+## 6. Tablas de integración Dahua HTTP API v3.26
+
+Estas tablas almacenan los datos originados en los NVRs/cámaras Dahua. Todas dependen de `sources` para mantener el aislamiento multi-tenant.
+
+```sql
+-- Evento crudo recibido del stream SSE Dahua antes de procesamiento
+CREATE TABLE dahua_event_raw (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,           -- FK a sources (NVR o CAMERA)
+  channel INT NOT NULL,
+  event_code VARCHAR(64) NOT NULL,       -- VideoMotion, FaceDetection, TrafficJunction, etc.
+  action ENUM('Start','Stop','Pulse') NOT NULL,
+  received_at DATETIME(3) NOT NULL,
+  payload_json JSON NOT NULL,            -- payload completo para auditoría y reprocess
+  processed TINYINT(1) NOT NULL DEFAULT 0,
+  linked_event_id CHAR(26) NULL,         -- FK a events una vez procesado
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_dhr_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_dhr_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  CONSTRAINT fk_dhr_event FOREIGN KEY (linked_event_id) REFERENCES events(id),
+  INDEX idx_dhr_tenant_time (tenant_id, received_at DESC),
+  INDEX idx_dhr_source_code (source_id, event_code, received_at DESC),
+  INDEX idx_dhr_processed (processed, received_at ASC)
+) ENGINE=InnoDB;
+
+-- Detección facial (sin requerir reconocimiento exitoso)
+CREATE TABLE face_detection_records (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  dahua_event_raw_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,
+  channel INT NOT NULL,
+  detected_at DATETIME(3) NOT NULL,
+  sex ENUM('Man','Woman','Unknown') NOT NULL DEFAULT 'Unknown',
+  age TINYINT UNSIGNED NULL,
+  has_glasses TINYINT(1) NULL,           -- NULL = no detectado
+  has_mask TINYINT(1) NULL,
+  has_beard TINYINT(1) NULL,
+  snapshot_path VARCHAR(512) NULL,       -- ruta en object storage
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_fdr_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_fdr_raw FOREIGN KEY (dahua_event_raw_id) REFERENCES dahua_event_raw(id),
+  CONSTRAINT fk_fdr_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  INDEX idx_fdr_tenant_time (tenant_id, detected_at DESC),
+  INDEX idx_fdr_source_time (source_id, detected_at DESC)
+) ENGINE=InnoDB;
+
+-- Reconocimiento facial (match contra base de datos del NVR)
+CREATE TABLE face_recognition_records (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  detection_id CHAR(26) NOT NULL,        -- FK a face_detection_records
+  rec_result TINYINT(1) NOT NULL,        -- 0=failed, 1=success
+  similarity TINYINT UNSIGNED NULL,      -- 0-100
+  person_name VARCHAR(128) NULL,
+  person_id VARCHAR(64) NULL,            -- ID en base de datos del NVR
+  person_group_id VARCHAR(64) NULL,
+  certificate_type ENUM('IC','Passport','Unknown') NULL,
+  scene_image_path VARCHAR(512) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_frr_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_frr_detection FOREIGN KEY (detection_id) REFERENCES face_detection_records(id),
+  INDEX idx_frr_tenant_person (tenant_id, person_id),
+  INDEX idx_frr_detection (detection_id)
+) ENGINE=InnoDB;
+
+-- Detección vehicular y ANPR (TrafficJunction, TrafficOverSpeed, etc.)
+CREATE TABLE vehicle_detection_records (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  dahua_event_raw_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,
+  channel INT NOT NULL,
+  detected_at DATETIME(3) NOT NULL,
+  plate_number VARCHAR(16) NULL,         -- patente leída por ANPR
+  plate_type VARCHAR(32) NULL,           -- Yellow, Blue, etc.
+  plate_color VARCHAR(32) NULL,
+  vehicle_color VARCHAR(32) NULL,        -- White, Black, Silver, etc.
+  country_code CHAR(2) NULL,             -- ISO 3166-1 alpha-2
+  speed_kmh SMALLINT UNSIGNED NULL,      -- NULL si no aplica
+  traffic_event VARCHAR(64) NULL,        -- TrafficJunction, TrafficOverSpeed, TrafficRetrograde, etc.
+  snapshot_path VARCHAR(512) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_vdr_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_vdr_raw FOREIGN KEY (dahua_event_raw_id) REFERENCES dahua_event_raw(id),
+  CONSTRAINT fk_vdr_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  INDEX idx_vdr_tenant_plate (tenant_id, plate_number, detected_at DESC),
+  INDEX idx_vdr_source_time (source_id, detected_at DESC)
+) ENGINE=InnoDB;
+
+-- Eventos IVS: línea virtual, zona, merodeo, objeto abandonado, etc.
+CREATE TABLE ivs_event_records (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  dahua_event_raw_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,
+  channel INT NOT NULL,
+  triggered_at DATETIME(3) NOT NULL,
+  rule_name VARCHAR(128) NULL,           -- nombre de la regla configurada en el NVR
+  rule_type VARCHAR(64) NOT NULL,        -- CrossLineDetection, CrossRegionDetection, WanderDetection, etc.
+  action VARCHAR(32) NOT NULL,           -- Appear, Disappear, Inside, Cross
+  object_type VARCHAR(32) NULL,          -- Human, Vehicle, NonMotor, Unknown
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_ivs_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_ivs_raw FOREIGN KEY (dahua_event_raw_id) REFERENCES dahua_event_raw(id),
+  CONSTRAINT fk_ivs_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  INDEX idx_ivs_tenant_time (tenant_id, triggered_at DESC),
+  INDEX idx_ivs_source_type (source_id, rule_type, triggered_at DESC)
+) ENGINE=InnoDB;
+
+-- Eventos de análisis de audio (disparos, gritos, vidrio roto, etc.)
+CREATE TABLE audio_event_records (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  dahua_event_raw_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,
+  channel INT NOT NULL,
+  detected_at DATETIME(3) NOT NULL,
+  sound_type VARCHAR(64) NOT NULL,       -- AudioCry, AudioAlarm, AudioGunshot, AudioExplosion, AudioScream, AudioCrashingGlass
+  intensity_threshold TINYINT UNSIGNED NULL,  -- 1-100
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_aer_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_aer_raw FOREIGN KEY (dahua_event_raw_id) REFERENCES dahua_event_raw(id),
+  CONSTRAINT fk_aer_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  INDEX idx_aer_tenant_time (tenant_id, detected_at DESC),
+  INDEX idx_aer_source_type (source_id, sound_type, detected_at DESC)
+) ENGINE=InnoDB;
+
+-- Archivos de grabación indexados via mediaFileFind
+CREATE TABLE recording_files (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,           -- FK a sources (NVR o CAMERA)
+  channel INT NOT NULL,
+  start_time DATETIME NOT NULL,
+  end_time DATETIME NOT NULL,
+  file_type ENUM('dav','mp4','jpg') NOT NULL,
+  video_stream ENUM('Main','Extra1','Extra2','Extra3') NOT NULL DEFAULT 'Main',
+  file_path VARCHAR(512) NOT NULL,       -- ruta en NVR
+  duration_seconds SMALLINT UNSIGNED NULL,
+  file_size_bytes INT UNSIGNED NULL,
+  events_json JSON NULL,                 -- array de event_codes presentes en el clip
+  fetched_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_rf_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_rf_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  INDEX idx_rf_tenant_time (tenant_id, start_time DESC),
+  INDEX idx_rf_source_time (source_id, start_time DESC),
+  CONSTRAINT uq_rf_source_path UNIQUE (source_id, file_path)
+) ENGINE=InnoDB;
+
+-- Snapshots individuales (bajo demanda, por evento o programado)
+CREATE TABLE snapshots (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,
+  event_id CHAR(26) NULL,               -- FK a events si fue disparado por un evento
+  channel INT NOT NULL,
+  captured_at DATETIME(3) NOT NULL,
+  trigger ENUM('ON_DEMAND','EVENT','SCHEDULED') NOT NULL,
+  storage_uri VARCHAR(1024) NOT NULL,    -- URI en object storage
+  mime_type VARCHAR(64) NULL,
+  sha256 CHAR(64) NULL,
+  width_px SMALLINT UNSIGNED NULL,
+  height_px SMALLINT UNSIGNED NULL,
+  file_size_bytes INT UNSIGNED NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_snap_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_snap_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  CONSTRAINT fk_snap_event FOREIGN KEY (event_id) REFERENCES events(id),
+  INDEX idx_snap_tenant_time (tenant_id, captured_at DESC),
+  INDEX idx_snap_source_time (source_id, captured_at DESC),
+  INDEX idx_snap_event (event_id)
+) ENGINE=InnoDB;
+
+-- Suscripciones SSE activas por NVR (para gestión del ciclo de vida del conector)
+CREATE TABLE dahua_subscriptions (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL,
+  source_id CHAR(26) NOT NULL,           -- FK a sources tipo NVR o EDGE_CONNECTOR
+  channel INT NULL,                      -- NULL = todos los canales
+  event_codes_json JSON NOT NULL,        -- array de event_codes suscritos
+  status ENUM('ACTIVE','INACTIVE','ERROR') NOT NULL DEFAULT 'ACTIVE',
+  last_heartbeat_at DATETIME(3) NULL,
+  error_message VARCHAR(255) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_dsub_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_dsub_source FOREIGN KEY (source_id) REFERENCES sources(id),
+  INDEX idx_dsub_tenant_status (tenant_id, status, updated_at DESC)
+) ENGINE=InnoDB;
+```
+
+## 7. Índices adicionales para integración Dahua
+
+- `vehicle_detection_records`: búsqueda por patente para correlación con `admissions`.
+- `dahua_event_raw`: cola de procesamiento pendiente via `idx_dhr_processed`.
+- `ivs_event_records`: análisis por tipo de regla y fuente.
+
+## 8. Nota de correlación ANPR
+
+`vehicle_detection_records.plate_number` puede cruzarse con `admissions.plate` para verificación de ingresos en tiempo real. El `Correlation Engine` (M9/S2) usa este cruce como fuente de verdad cuando `admissions.source_type = 'ANPR'`.
+
+---
+*Última actualización: 2026-06-08*
