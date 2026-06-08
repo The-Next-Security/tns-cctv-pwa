@@ -123,7 +123,46 @@ F5 Salud técnica:
 3) Ruido de reglas -> calibración y versionado de reglas.
 4) Fuga cross-tenant -> guardrails de consulta + pruebas negativas.
 
-## 9. Integración Dahua HTTP API v3.26
+## 9. Gestión de Configuración (ConfigLoader)
+
+Toda configuración de runtime vive en la base de datos. El **único dato externo** son las credenciales para conectarse a la BD (`connection-config.json`, siempre en `.gitignore`).
+
+### Archivo de credenciales (solo local)
+- **Archivo template commiteado:** `connection-config.template.json`
+- **Archivo real (gitignored):** `connection-config.json`
+- Estructura: `{ environment: 0|1, development: {...}, production: {...} }`
+- `environment: 0` → usa bloque `development`; `1` → `production`
+
+### Tablas en BD
+- `gen_configuracion_grupos` — grupos de parámetros (jwt, system, dahua, storage, etc.)
+- `gen_configuracion_parametros` — define cada parámetro: ruta, tipo, si es sensible, si es requerido
+- `gen_configuracion_valores` — valor activo de cada parámetro, con historial de versiones
+
+### Patrón ConfigLoader (Singleton)
+
+```
+Arranque del sistema:
+1. Leer connection-config.json → credenciales de BD
+2. Conectar a MySQL
+3. ConfigLoader.initialize() → carga todos los parámetros activos de gen_configuracion_*
+4. Cachear resultado (TTL 5 minutos)
+5. Todo módulo lee config con ConfigLoader.getValue('jwt.secret')
+```
+
+**API:**
+- `initialize()` — async, ejecutar una vez al arrancar, idempotente
+- `getValue('ruta.completa')` — síncrono, retorna el valor
+- `hasConfig('ruta')` — síncrono, booleano
+- `reloadConfig()` — async, recarga desde BD sin reiniciar
+
+### Reglas absolutas
+- Nunca hardcodear valores de configuración en código
+- Nunca loguear parámetros con `es_sensible = 1`
+- Validar parámetros con `es_requerido = 1` al arrancar; si falta alguno → error fatal
+
+---
+
+## 10. Integración Dahua HTTP API v3.26
 
 El Edge Connector se conecta a los NVRs Dahua usando la HTTP API v3.26. Flujo de integración:
 
