@@ -176,27 +176,27 @@ El Edge Connector se conecta a los NVRs Dahua usando la HTTP API v3.26. Flujo de
 - Respuesta `multipart/x-mixed-replace` continua.
 - Heartbeat configurable (1-60 segundos) para detección de desconexión.
 - Eventos recibidos: `VideoMotion`, `VideoLoss`, `VideoBlind`, `FaceDetection`, `FaceRecognition`, `TrafficJunction`, `TrafficOverSpeed`, `CrossLineDetection`, `CrossRegionDetection`, `WanderDetection`, `LeftDetection`, `AlarmLocal`, `StorageFailure`, `StorageLowSpace`.
-- El conector persiste cada evento en `dahua_event_raw` antes de procesarlo.
+- El conector persiste cada evento en `dah_evento_crudo` antes de procesarlo.
 
 ### Polling de estado de cámaras
 - `POST /cgi-bin/api/LogicDeviceManager/getCameraState` cada 30s.
-- Actualiza `health_sources_status` con latencia y estado online/offline.
+- Actualiza `sal_estado_fuente` con latencia y estado online/offline.
 - Alternativa de suscripción push: `POST /cgi-bin/api/LogicDeviceManager/attachCameraState`.
 
 ### Búsqueda de archivos multimedia
 - Sesión de búsqueda via `mediaFileFind.cgi?action=factory.create`.
 - Query por canal, rango de tiempo y tipo (`dav`, `mp4`, `jpg`).
-- Resultados indexados en `recording_files`.
+- Resultados indexados en `dah_archivo_grabacion`.
 - Descarga via `GET /cgi-bin/RPC_Loadfile/<Filename>` con token activo.
 
 ### Snapshots bajo demanda
 - `GET /cgi-bin/snapshot.cgi?channel=<n>` con token activo.
-- Almacenados en object storage, referenciados en tabla `snapshots`.
+- Almacenados en object storage, referenciados en tabla `dah_snapshot`.
 
 ### Gestión de estado de grabación
 - `POST /cgi-bin/api/recordManager/getStateAll` para estado de todos los canales.
 
-## 10. Decisiones abiertas (aprobación humana)
+## 11. Decisiones abiertas (aprobación humana)
 - Ventana temporal inicial de correlación por tenant.
 - Canal secundario de notificación interna además de in-app/WS.
 - Política final de retención de clips (90 días sugerido).
