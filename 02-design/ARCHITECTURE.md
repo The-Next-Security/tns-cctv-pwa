@@ -123,7 +123,46 @@ F5 Salud técnica:
 3) Ruido de reglas -> calibración y versionado de reglas.
 4) Fuga cross-tenant -> guardrails de consulta + pruebas negativas.
 
-## 9. Integración Dahua HTTP API v3.26
+## 9. Gestión de Configuración (ConfigLoader)
+
+Toda configuración de runtime vive en la base de datos. El **único dato externo** son las credenciales para conectarse a la BD (`connection-config.json`, siempre en `.gitignore`).
+
+### Archivo de credenciales (solo local)
+- **Archivo template commiteado:** `connection-config.template.json`
+- **Archivo real (gitignored):** `connection-config.json`
+- Estructura: `{ environment: 0|1, development: {...}, production: {...} }`
+- `environment: 0` → usa bloque `development`; `1` → `production`
+
+### Tablas en BD
+- `gen_configuracion_grupos` — grupos de parámetros (jwt, system, dahua, storage, etc.)
+- `gen_configuracion_parametros` — define cada parámetro: ruta, tipo, si es sensible, si es requerido
+- `gen_configuracion_valores` — valor activo de cada parámetro, con historial de versiones
+
+### Patrón ConfigLoader (Singleton)
+
+```
+Arranque del sistema:
+1. Leer connection-config.json → credenciales de BD
+2. Conectar a MySQL
+3. ConfigLoader.initialize() → carga todos los parámetros activos de gen_configuracion_*
+4. Cachear resultado (TTL 5 minutos)
+5. Todo módulo lee config con ConfigLoader.getValue('jwt.secret')
+```
+
+**API:**
+- `initialize()` — async, ejecutar una vez al arrancar, idempotente
+- `getValue('ruta.completa')` — síncrono, retorna el valor
+- `hasConfig('ruta')` — síncrono, booleano
+- `reloadConfig()` — async, recarga desde BD sin reiniciar
+
+### Reglas absolutas
+- Nunca hardcodear valores de configuración en código
+- Nunca loguear parámetros con `es_sensible = 1`
+- Validar parámetros con `es_requerido = 1` al arrancar; si falta alguno → error fatal
+
+---
+
+## 10. Integración Dahua HTTP API v3.26
 
 El Edge Connector se conecta a los NVRs Dahua usando la HTTP API v3.26. Flujo de integración:
 
@@ -137,27 +176,27 @@ El Edge Connector se conecta a los NVRs Dahua usando la HTTP API v3.26. Flujo de
 - Respuesta `multipart/x-mixed-replace` continua.
 - Heartbeat configurable (1-60 segundos) para detección de desconexión.
 - Eventos recibidos: `VideoMotion`, `VideoLoss`, `VideoBlind`, `FaceDetection`, `FaceRecognition`, `TrafficJunction`, `TrafficOverSpeed`, `CrossLineDetection`, `CrossRegionDetection`, `WanderDetection`, `LeftDetection`, `AlarmLocal`, `StorageFailure`, `StorageLowSpace`.
-- El conector persiste cada evento en `dahua_event_raw` antes de procesarlo.
+- El conector persiste cada evento en `dah_evento_crudo` antes de procesarlo.
 
 ### Polling de estado de cámaras
 - `POST /cgi-bin/api/LogicDeviceManager/getCameraState` cada 30s.
-- Actualiza `health_sources_status` con latencia y estado online/offline.
+- Actualiza `sal_estado_fuente` con latencia y estado online/offline.
 - Alternativa de suscripción push: `POST /cgi-bin/api/LogicDeviceManager/attachCameraState`.
 
 ### Búsqueda de archivos multimedia
 - Sesión de búsqueda via `mediaFileFind.cgi?action=factory.create`.
 - Query por canal, rango de tiempo y tipo (`dav`, `mp4`, `jpg`).
-- Resultados indexados en `recording_files`.
+- Resultados indexados en `dah_archivo_grabacion`.
 - Descarga via `GET /cgi-bin/RPC_Loadfile/<Filename>` con token activo.
 
 ### Snapshots bajo demanda
 - `GET /cgi-bin/snapshot.cgi?channel=<n>` con token activo.
-- Almacenados en object storage, referenciados en tabla `snapshots`.
+- Almacenados en object storage, referenciados en tabla `dah_snapshot`.
 
 ### Gestión de estado de grabación
 - `POST /cgi-bin/api/recordManager/getStateAll` para estado de todos los canales.
 
-## 10. Decisiones abiertas (aprobación humana)
+## 11. Decisiones abiertas (aprobación humana)
 - Ventana temporal inicial de correlación por tenant.
 - Canal secundario de notificación interna además de in-app/WS.
 - Política final de retención de clips (90 días sugerido).
