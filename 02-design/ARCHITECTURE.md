@@ -123,7 +123,46 @@ F5 Salud técnica:
 3) Ruido de reglas -> calibración y versionado de reglas.
 4) Fuga cross-tenant -> guardrails de consulta + pruebas negativas.
 
-## 9. Decisiones abiertas (aprobación humana)
+## 9. Integración Dahua HTTP API v3.26
+
+El Edge Connector se conecta a los NVRs Dahua usando la HTTP API v3.26. Flujo de integración:
+
+### Autenticación
+- Token de sesión via `POST /cgi-bin/api/TokenManager/createToken`.
+- Token de corta duración; el conector renueva antes de expiración.
+- Credenciales por dispositivo almacenadas cifradas en secrets del conector.
+
+### Suscripción a eventos (streaming SSE multipart)
+- `GET /cgi-bin/snapManager.cgi?action=attachFileProc&Flags[]=Event`
+- Respuesta `multipart/x-mixed-replace` continua.
+- Heartbeat configurable (1-60 segundos) para detección de desconexión.
+- Eventos recibidos: `VideoMotion`, `VideoLoss`, `VideoBlind`, `FaceDetection`, `FaceRecognition`, `TrafficJunction`, `TrafficOverSpeed`, `CrossLineDetection`, `CrossRegionDetection`, `WanderDetection`, `LeftDetection`, `AlarmLocal`, `StorageFailure`, `StorageLowSpace`.
+- El conector persiste cada evento en `dahua_event_raw` antes de procesarlo.
+
+### Polling de estado de cámaras
+- `POST /cgi-bin/api/LogicDeviceManager/getCameraState` cada 30s.
+- Actualiza `health_sources_status` con latencia y estado online/offline.
+- Alternativa de suscripción push: `POST /cgi-bin/api/LogicDeviceManager/attachCameraState`.
+
+### Búsqueda de archivos multimedia
+- Sesión de búsqueda via `mediaFileFind.cgi?action=factory.create`.
+- Query por canal, rango de tiempo y tipo (`dav`, `mp4`, `jpg`).
+- Resultados indexados en `recording_files`.
+- Descarga via `GET /cgi-bin/RPC_Loadfile/<Filename>` con token activo.
+
+### Snapshots bajo demanda
+- `GET /cgi-bin/snapshot.cgi?channel=<n>` con token activo.
+- Almacenados en object storage, referenciados en tabla `snapshots`.
+
+### Gestión de estado de grabación
+- `POST /cgi-bin/api/recordManager/getStateAll` para estado de todos los canales.
+
+## 10. Decisiones abiertas (aprobación humana)
 - Ventana temporal inicial de correlación por tenant.
 - Canal secundario de notificación interna además de in-app/WS.
 - Política final de retención de clips (90 días sugerido).
+- Listado completo de `event_codes` Dahua a suscribir por instalación (depende de capacidades del NVR físico).
+- Frecuencia de polling de estado de cámaras (30s default vs menor latencia vs carga LAN).
+
+---
+*Última actualización: 2026-06-08*
