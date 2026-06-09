@@ -69,6 +69,8 @@ web_modules/
 .env
 .env.*
 !.env.example
+connection-config.json
+db/connection-config.json
 
 # Credenciales de conexión a base de datos (usar connection-config.template.json como base)
 connection-config.json
