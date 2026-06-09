@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { AuthContext, getDefaultRoute } from '@/lib/auth'
 import { persistDemoUser, restoreDemoUserFromStorage } from '@/lib/demo-users'
 import { DEMO_ALERT_POPUP_KEY } from '@/lib/reset-demo'
-import type { User } from '@/lib/types'
+import { auth as authApi, ApiError } from '@/lib/api'
+import type { Role, User } from '@/lib/types'
 
 interface AuthProviderProps {
   children: ReactNode
@@ -39,15 +40,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error('Correo o contraseña incorrectos')
     }
 
-    const demoUser = restoreDemoUserFromStorage(email)
+    let authedUser: User
+    try {
+      const res = await authApi.login(email, password)
+      localStorage.setItem('tns_token', res.token)
+      authedUser = {
+        id: res.user.id,
+        email: res.user.email,
+        nombre: res.user.nombre ?? res.user.full_name ?? email.split('@')[0],
+        role: res.user.role as Role,
+        activo: res.user.activo ?? true,
+      }
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 400)) {
+        throw new Error('Correo o contraseña incorrectos')
+      }
+      throw new Error('No se pudo conectar con el servidor de autenticación')
+    }
 
-    localStorage.setItem('tns_token', 'mock_token_' + Date.now())
-    persistDemoUser(demoUser)
-
-    setUser(demoUser)
+    persistDemoUser(authedUser)
+    setUser(authedUser)
 
     setTimeout(() => {
-      router.push(getDefaultRoute(demoUser.role))
+      router.push(getDefaultRoute(authedUser.role))
     }, 100)
   }, [router])
 

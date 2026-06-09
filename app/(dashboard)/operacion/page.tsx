@@ -15,6 +15,7 @@ import { AlertPopup } from '@/components/operacion/alert-popup'
 import { EscalateSheet } from '@/components/operacion/escalate-sheet'
 import { ConnectionStatus } from '@/components/operacion/connection-status'
 import { useRealtime } from '@/hooks/use-realtime'
+import { alerts as alertsApi } from '@/lib/api'
 import { MOCK_ALERTS, MOCK_ZONES } from '@/lib/mock-data'
 import { DEMO_ALERT_POPUP_KEY } from '@/lib/reset-demo'
 import { URGENCY_STYLES, type UrgencyLevel } from '@/lib/constants'
@@ -94,13 +95,32 @@ export default function OperacionPage() {
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
   const [showPopup, setShowPopup] = useState(false)
   const [escalateAlert, setEscalateAlert] = useState<Alert | null>(null)
-  const [localAlerts, setLocalAlerts] = useState<Alert[]>(MOCK_ALERTS)
+  const [localAlerts, setLocalAlerts] = useState<Alert[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800)
-    return () => clearTimeout(timer)
+  const loadAlerts = useCallback(async () => {
+    try {
+      const res = await alertsApi.list()
+      const items = (res as unknown as { data?: Alert[]; items?: Alert[] }).data
+        ?? (res as unknown as { items?: Alert[] }).items
+        ?? []
+      setLocalAlerts(items)
+    } catch {
+      // Fallback a datos mock si el backend no está disponible.
+      setLocalAlerts(MOCK_ALERTS)
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    loadAlerts()
+  }, [loadAlerts])
+
+  const resolveEventId = useCallback(
+    (alertId: number) => localAlerts.find(a => a.id === alertId)?.event_id ?? String(alertId),
+    [localAlerts]
+  )
 
   // Demo: popup automático solo para clase 'critica' (alta + critica)
   useEffect(() => {
@@ -167,10 +187,11 @@ export default function OperacionPage() {
 
   function handleRefresh() {
     setIsLoading(true)
-    setTimeout(() => setIsLoading(false), 500)
+    loadAlerts()
   }
 
   function handleAlertAction(alertId: number, action: 'acknowledge' | 'resolve' | 'escalate', notes?: string) {
+    const eventId = resolveEventId(alertId)
     setLocalAlerts(prev => prev.map(a => {
       if (a.id !== alertId) return a
       if (action === 'acknowledge') {
@@ -184,6 +205,8 @@ export default function OperacionPage() {
       }
       return a
     }))
+    // Persistencia best-effort en el backend (no bloquea la UX optimista).
+    alertsApi.attendEvent(eventId, action, notes).catch(() => {})
     setPriorityAlert(null)
 
     if (action === 'acknowledge') {
@@ -224,6 +247,7 @@ export default function OperacionPage() {
           ? { ...a, status: 'descartada' as const, discard_reason: reason as any }
           : a
       ))
+      alertsApi.attendEvent(resolveEventId(alertId), 'discard', reason).catch(() => {})
       setStatusView('resueltas')
     }
     setShowPopup(false)
