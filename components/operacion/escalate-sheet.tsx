@@ -1,8 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, ArrowUpRight, Check, Bell, Loader2, CheckCircle2, User } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Bell,
+  Check,
+  CheckCircle2,
+  Loader2,
+  User,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -13,7 +22,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
 import { alerts as alertsApi } from '@/lib/api'
 import {
   canNotify,
@@ -23,6 +31,12 @@ import {
 } from '@/lib/pwa-notifications'
 import type { Alert, Role } from '@/lib/types'
 import { ROLE_LABELS, getEventLabel } from '@/lib/types'
+import {
+  buildEscalationObservation,
+  ESCALATION_CHECKLIST_ACTIONS,
+  getEscalationRoles,
+  ROLE_CONTACTS,
+} from '@/lib/escalation'
 
 interface EscalateSheetProps {
   alert: Alert | null
@@ -30,28 +44,7 @@ interface EscalateSheetProps {
   onSuccess: () => void
 }
 
-// Roles que pueden recibir escalaciones
-const ESCALATION_ROLES: Role[] = [
-  'responsable_seguridad',
-  'admin_parque',
-  'supervisor',
-]
-
-// Mock de contactos por rol para el preview
-const ROLE_CONTACTS: Record<Role, { name: string; phone?: string; email?: string }> = {
-  responsable_seguridad: { name: 'Carlos Rodríguez', phone: '+56 9 8821 4430', email: 'c.rodriguez@agrolivo.cl' },
-  admin_parque:          { name: 'Ana Méndez',       phone: '+56 9 7743 2219', email: 'admin@agrolivo.cl' },
-  supervisor:            { name: 'Pedro Soto',        phone: '+56 9 9103 5567', email: 'p.soto@agrolivo.cl' },
-  soporte_tns:           { name: 'TNS Soporte',       phone: '+56 2 2891 0045', email: 'soporte@thenextsecurity.cl' },
-  // unused roles — minimal entries
-  vigilante:     { name: 'Vigilante' },
-  recepcionista: { name: 'Recepcionista' },
-  recepcion:     { name: 'Recepción' },
-  tecnico:       { name: 'Técnico' },
-  visualizador:  { name: 'Visualizador' },
-}
-
-type Phase = 'select' | 'preview' | 'sending' | 'done'
+type Phase = 'checklist' | 'preview' | 'sending' | 'done'
 
 interface DeliveryStatus {
   role: Role
@@ -60,211 +53,217 @@ interface DeliveryStatus {
 }
 
 export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps) {
-  const [selectedRoles, setSelectedRoles] = useState<Role[]>([])
+  const [checkedActions, setCheckedActions] = useState<string[]>([])
   const [observation, setObservation] = useState('')
-  const [phase, setPhase] = useState<Phase>('select')
+  const [phase, setPhase] = useState<Phase>('checklist')
   const [delivery, setDelivery] = useState<DeliveryStatus[]>([])
 
-  function toggleRole(role: Role) {
-    setSelectedRoles(prev =>
-      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
+  if (!alert) return null
+
+  const currentAlert = alert
+  const escalationRoles = getEscalationRoles(currentAlert.rule)
+  const escalationObservation = buildEscalationObservation(checkedActions, observation)
+  const eventLabel = getEventLabel(alert.event_code)
+  const zone = alert.zone?.name ?? 'Sin zona'
+  const camera = alert.camera?.name ?? 'Sin cámara'
+  const notificationsBlocked =
+    typeof window !== 'undefined' &&
+    'Notification' in window &&
+    Notification.permission === 'denied'
+
+  function toggleChecklistAction(action: string) {
+    setCheckedActions(prev =>
+      prev.includes(action)
+        ? prev.filter(currentAction => currentAction !== action)
+        : [...prev, action]
     )
   }
 
-  function handleContinueToPreview() {
-    if (selectedRoles.length === 0) return
-    setPhase('preview')
+  function resetState() {
+    setCheckedActions([])
+    setObservation('')
+    setPhase('checklist')
+    setDelivery([])
   }
 
-  function handleBack() {
-    setPhase('select')
+  function handleClose() {
+    if (phase === 'done') {
+      onSuccess()
+    }
+    resetState()
+    onClose()
+  }
+
+  function handleOpenChange(open: boolean) {
+    if (!open) handleClose()
   }
 
   async function handleSend() {
-    if (!alert) return
     setPhase('sending')
 
-    // Inicializar estados de entrega
-    const initial: DeliveryStatus[] = selectedRoles.map(role => ({
+    const initialDelivery: DeliveryStatus[] = escalationRoles.map(role => ({
       role,
       name: ROLE_CONTACTS[role]?.name ?? ROLE_LABELS[role],
       state: 'pending',
     }))
-    setDelivery(initial)
+    setDelivery(initialDelivery)
 
-    // Llamada al backend (fire-and-forget en demo)
-    alertsApi.attend(alert.id, { action: 'escalada', observation: observation || undefined })
-      .catch(() => { /* ignorar en demo */ })
+    alertsApi
+      .attend(currentAlert.id, {
+        action: 'escalada',
+        observation: escalationObservation,
+      })
+      .catch(() => {
+        // El flujo mock continúa aunque el backend no esté disponible.
+      })
 
-    // Pedir permiso de notificaciones si hace falta
     const permission = await requestNotificationPermission()
 
-    // Animar entrega escalonada por destinatario
-    for (let i = 0; i < initial.length; i++) {
+    for (let index = 0; index < initialDelivery.length; index++) {
       await delay(300)
-      setDelivery(prev => prev.map((d, idx) => idx === i ? { ...d, state: 'sending' } : d))
-      await delay(500 + i * 150)
-      setDelivery(prev => prev.map((d, idx) => idx === i ? { ...d, state: 'sent' } : d))
+      setDelivery(prev =>
+        prev.map((item, itemIndex) =>
+          itemIndex === index ? { ...item, state: 'sending' } : item
+        )
+      )
+      await delay(500 + index * 150)
+      setDelivery(prev =>
+        prev.map((item, itemIndex) =>
+          itemIndex === index ? { ...item, state: 'sent' } : item
+        )
+      )
     }
 
-    // Disparar push notification real (una sola notificación con todos los destinatarios)
     if (permission === 'granted') {
-      const recipients: EscalationRecipient[] = selectedRoles.map(role => ({
+      const recipients: EscalationRecipient[] = escalationRoles.map(role => ({
         name: ROLE_CONTACTS[role]?.name ?? ROLE_LABELS[role],
         role: ROLE_LABELS[role],
       }))
-      await sendEscalationNotification(alert, recipients, observation || undefined)
+      await sendEscalationNotification(currentAlert, recipients, escalationObservation)
     }
 
     setPhase('done')
   }
 
-  function handleClose() {
-    // Si ya se envió, llamar onSuccess para actualizar el estado de la alerta
-    if (phase === 'done') {
-      onSuccess()
-    }
-    // Resetear todo
-    setSelectedRoles([])
-    setObservation('')
-    setPhase('select')
-    setDelivery([])
-    onClose()
-  }
-
-  // Si se cierra el sheet externamente (overlay click) y ya estaba en 'done', disparar onSuccess
-  function handleOpenChange(open: boolean) {
-    if (!open) handleClose()
-  }
-
-  if (!alert) return null
-
-  const eventLabel = getEventLabel(alert.event_code)
-  const zone = alert.zone?.name ?? 'Sin zona'
-  const camera = alert.camera?.name ?? 'Sin cámara'
-  const notificationsBlocked = typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied'
-
   return (
-    <Sheet open={!!alert} onOpenChange={handleOpenChange}>
+    <Sheet open onOpenChange={handleOpenChange}>
       <SheetContent>
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            {phase !== 'select' && phase !== 'done' && (
+          <SheetTitle className="flex items-center gap-2 text-ds-ink-display">
+            {phase === 'preview' && (
               <button
-                onClick={handleBack}
-                className="mr-1 rounded-lg p-1 hover:bg-accent transition-colors"
-                aria-label="Volver"
+                type="button"
+                onClick={() => setPhase('checklist')}
+                className="mr-1 rounded-lg p-1 transition-colors hover:bg-ds-muted"
+                aria-label="Volver al checklist"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeft size={16} />
               </button>
             )}
-            {phase === 'select' && 'Escalar Alerta'}
+            {phase === 'checklist' && 'Antes de escalar'}
             {phase === 'preview' && 'Vista previa'}
             {(phase === 'sending' || phase === 'done') && 'Enviando notificaciones'}
           </SheetTitle>
           <SheetDescription>
-            {phase === 'select' && 'Seleccione uno o más roles para escalar esta alerta.'}
-            {phase === 'preview' && 'Revise el mensaje antes de enviar.'}
+            {phase === 'checklist' && 'Indique qué acciones realizó antes de escalar.'}
+            {phase === 'preview' && 'Revise los destinatarios definidos por la regla.'}
             {phase === 'sending' && 'Notificando a los responsables...'}
             {phase === 'done' && 'Notificaciones enviadas correctamente.'}
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex-1 space-y-5 px-4 pt-4">
-          {/* Alert info — siempre visible */}
           <div className="rounded-lg bg-ds-muted p-3 text-sm">
-            <p className="font-medium leading-snug">{eventLabel}</p>
-            <p className="text-ds-ink-muted mt-0.5">{camera} — {zone}</p>
+            <p className="font-medium leading-snug text-ds-ink-display">{eventLabel}</p>
+            <p className="mt-0.5 text-ds-ink-muted">{camera} · {zone}</p>
           </div>
 
-          {/* ── FASE SELECCIÓN ── */}
-          {phase === 'select' && (
+          {phase === 'checklist' && (
             <>
-              <div className="space-y-2">
-                <Label>Escalar a (puede elegir más de uno)</Label>
+              <div className="space-y-3">
+                <div>
+                  <p className="font-ds-display text-sm font-semibold text-ds-ink-display">
+                    Antes de escalar — ¿qué acciones realizaste?
+                  </p>
+                  <p className="mt-1 text-xs text-ds-ink-muted">
+                    Ninguna acción es obligatoria. La selección quedará registrada.
+                  </p>
+                </div>
+
                 <div className="space-y-2">
-                  {ESCALATION_ROLES.map(role => {
-                    const selected = selectedRoles.includes(role)
-                    const contact = ROLE_CONTACTS[role]
+                  {ESCALATION_CHECKLIST_ACTIONS.map(action => {
+                    const checkboxId = `escalation-action-${action}`
                     return (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => toggleRole(role)}
-                        className={cn(
-                          'w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm text-left transition-colors',
-                          selected
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'border-ds-hairline bg-secondary/40 hover:bg-secondary/70 text-ds-ink-display'
-                        )}
+                      <label
+                        key={action}
+                        htmlFor={checkboxId}
+                        className="flex cursor-pointer items-start gap-3 rounded-xl border border-ds-hairline bg-ds-surface p-3 text-sm text-ds-ink-body"
                       >
-                        <div className="min-w-0">
-                          <p className="font-medium">{ROLE_LABELS[role]}</p>
-                          {contact?.name && (
-                            <p className={cn('text-xs mt-0.5 truncate', selected ? 'text-primary/70' : 'text-ds-ink-muted')}>
-                              {contact.name}
-                            </p>
-                          )}
-                        </div>
-                        {selected && <Check className="h-4 w-4 shrink-0 ml-2" />}
-                      </button>
+                        <Checkbox
+                          id={checkboxId}
+                          checked={checkedActions.includes(action)}
+                          onCheckedChange={() => toggleChecklistAction(action)}
+                          className="mt-0.5"
+                        />
+                        <span>{action}</span>
+                      </label>
                     )
                   })}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="observation">Observaciones (opcional)</Label>
+                <Label htmlFor="escalation-observation">Observaciones (opcional)</Label>
                 <Textarea
-                  id="observation"
+                  id="escalation-observation"
                   placeholder="Agregue contexto adicional para los responsables..."
                   value={observation}
-                  onChange={e => setObservation(e.target.value)}
+                  onChange={event => setObservation(event.target.value)}
                   rows={3}
                 />
               </div>
 
-              <div className="sticky bottom-0 -mx-4 flex gap-2 border-t border-ds-hairline/60 bg-ds-page/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-ds-page/80">
-                <Button variant="outline" className="h-11 flex-1 touch-target" onClick={handleClose}>
+              <div className="sticky bottom-0 -mx-4 flex gap-2 border-t border-ds-hairline bg-ds-page/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
+                <Button variant="outline" className="h-11 flex-1" onClick={handleClose}>
                   Cancelar
                 </Button>
                 <Button
-                  className="h-11 flex-1 touch-target"
-                  onClick={handleContinueToPreview}
-                  disabled={selectedRoles.length === 0}
+                  className="h-11 flex-1"
+                  onClick={() => setPhase('preview')}
+                  disabled={escalationRoles.length === 0}
                 >
-                  Continuar
-                  <ArrowUpRight className="h-4 w-4 ml-2" />
+                  Continuar con escalación ({checkedActions.length})
+                  <ArrowUpRight size={16} />
                 </Button>
               </div>
             </>
           )}
 
-          {/* ── FASE PREVIEW ── */}
           {phase === 'preview' && (
             <>
-              {/* Mock de notificación push */}
               <div className="space-y-2">
-                <p className="text-xs font-medium text-ds-ink-muted uppercase tracking-wide">
+                <p className="text-xs font-medium uppercase tracking-wide text-ds-ink-muted">
                   Vista previa de la notificación
                 </p>
-                <div className="rounded-2xl border border-ds-hairline bg-ds-surface/80 p-4 shadow-soft-sm">
+                <div className="rounded-2xl border border-ds-hairline bg-ds-surface p-4 shadow-soft-sm">
                   <div className="flex items-start gap-3">
-                    <div className="h-9 w-9 shrink-0 rounded-xl bg-[var(--urgency-critical-bg)] flex items-center justify-center">
-                      <Bell className="h-4 w-4 text-[var(--urgency-critical)]" />
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ds-signal-faded">
+                      <Bell className="text-ds-signal" size={16} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-2">
                         <p className="text-xs font-semibold text-ds-ink-display">TNS CCTV</p>
-                        <span className="text-[10px] text-ds-ink-muted shrink-0">ahora</span>
+                        <span className="shrink-0 text-[10px] text-ds-ink-muted">ahora</span>
                       </div>
-                      <p className="text-xs font-bold mt-0.5">🚨 Alerta Escalada — Atención Requerida</p>
-                      <p className="text-xs text-ds-ink-muted mt-1 leading-snug">
+                      <p className="mt-0.5 text-xs font-bold text-ds-ink-display">
+                        Alerta escalada — atención requerida
+                      </p>
+                      <p className="mt-1 text-xs leading-snug text-ds-ink-muted">
                         {zone} · {camera}
                       </p>
-                      {observation && (
-                        <p className="text-xs text-ds-ink-muted mt-0.5 italic line-clamp-2">
-                          "{observation}"
+                      {escalationObservation && (
+                        <p className="mt-1 line-clamp-3 whitespace-pre-line text-xs text-ds-ink-body">
+                          {escalationObservation}
                         </p>
                       )}
                     </div>
@@ -272,26 +271,37 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
                 </div>
               </div>
 
-              {/* Lista de destinatarios */}
               <div className="space-y-2">
-                <p className="text-xs font-medium text-ds-ink-muted uppercase tracking-wide">
-                  Se notificará a
-                </p>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-ds-ink-muted">
+                    Contactos definidos en la regla · {alert.rule?.name}
+                  </p>
+                  <p className="mt-1 text-xs text-ds-ink-muted">
+                    Los destinatarios no pueden modificarse en esta etapa.
+                  </p>
+                </div>
                 <div className="space-y-2">
-                  {selectedRoles.map(role => {
+                  {escalationRoles.map(role => {
                     const contact = ROLE_CONTACTS[role]
                     return (
-                      <div key={role} className="flex items-center gap-3 rounded-xl bg-secondary/40 px-3 py-2.5">
-                        <div className="h-8 w-8 shrink-0 rounded-full bg-accent/60 flex items-center justify-center">
-                          <User className="h-4 w-4 text-ds-ink-muted" />
+                      <div
+                        key={role}
+                        className="flex items-center gap-3 rounded-xl border border-ds-hairline bg-ds-muted px-3 py-2.5"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ds-accent-faded">
+                          <User className="text-ds-accent" size={16} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium">{contact?.name ?? ROLE_LABELS[role]}</p>
+                          <p className="text-sm font-medium text-ds-ink-display">
+                            {contact?.name ?? ROLE_LABELS[role]}
+                          </p>
                           <p className="text-xs text-ds-ink-muted">{ROLE_LABELS[role]}</p>
                         </div>
-                        <div className="text-right shrink-0">
+                        <div className="shrink-0 text-right">
                           {contact?.phone && (
-                            <p className="text-[10px] text-ds-ink-muted font-mono">{contact.phone}</p>
+                            <p className="font-mono text-[10px] text-ds-ink-body">
+                              {contact.phone}
+                            </p>
                           )}
                           <p className="text-[10px] text-ds-ink-muted">Push · Email</p>
                         </div>
@@ -302,29 +312,36 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
               </div>
 
               {notificationsBlocked && (
-                <p className="text-xs text-[var(--warning)] bg-[var(--warning-bg)] rounded-lg px-3 py-2">
-                  Las notificaciones push están bloqueadas en este navegador. El escalado se registrará igualmente.
+                <p className="rounded-lg border border-ds-hairline bg-ds-muted px-3 py-2 text-xs text-ds-ink-body">
+                  Las notificaciones push están bloqueadas. La escalación se registrará igualmente.
                 </p>
               )}
 
-              <div className="sticky bottom-0 -mx-4 flex gap-2 border-t border-ds-hairline/60 bg-ds-page/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-ds-page/80">
-                <Button variant="outline" className="h-11 flex-1 touch-target" onClick={handleBack}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
+              <div className="sticky bottom-0 -mx-4 flex gap-2 border-t border-ds-hairline bg-ds-page/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
+                <Button
+                  variant="outline"
+                  className="h-11 flex-1"
+                  onClick={() => setPhase('checklist')}
+                >
+                  <ArrowLeft size={16} />
                   Atrás
                 </Button>
-                <Button className="h-11 flex-1 touch-target" onClick={handleSend}>
-                  <Bell className="h-4 w-4 mr-2" />
+                <Button
+                  className="h-11 flex-1"
+                  onClick={handleSend}
+                  disabled={escalationRoles.length === 0}
+                >
+                  <Bell size={16} />
                   Enviar notificaciones
                 </Button>
               </div>
             </>
           )}
 
-          {/* ── FASE SENDING / DONE ── */}
           {(phase === 'sending' || phase === 'done') && (
             <>
               <div className="space-y-2">
-                <p className="text-xs font-medium text-ds-ink-muted uppercase tracking-wide">
+                <p className="text-xs font-medium uppercase tracking-wide text-ds-ink-muted">
                   Estado de entrega
                 </p>
                 <div className="space-y-2">
@@ -332,39 +349,21 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
                     <div
                       key={item.role}
                       className={cn(
-                        'flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors duration-300',
-                        item.state === 'sent'
-                          ? 'bg-[var(--urgency-resolved-bg)]'
-                          : 'bg-secondary/40'
+                        'flex items-center gap-3 rounded-xl border border-ds-hairline px-3 py-2.5 transition-colors',
+                        item.state === 'sent' ? 'bg-ds-accent-faded' : 'bg-ds-muted'
                       )}
                     >
-                      <div className={cn(
-                        'h-8 w-8 shrink-0 rounded-full flex items-center justify-center transition-colors duration-300',
-                        item.state === 'sent'
-                          ? 'bg-[var(--urgency-resolved-bg)]'
-                          : 'bg-accent/60'
-                      )}>
-                        {item.state === 'pending' && (
-                          <User className="h-4 w-4 text-ds-ink-muted" />
-                        )}
-                        {item.state === 'sending' && (
-                          <Loader2 className="h-4 w-4 text-primary animate-spin" />
-                        )}
-                        {item.state === 'sent' && (
-                          <CheckCircle2 className="h-4 w-4 text-[var(--urgency-resolved)]" />
-                        )}
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ds-surface">
+                        {item.state === 'pending' && <User className="text-ds-ink-muted" size={16} />}
+                        {item.state === 'sending' && <Loader2 className="animate-spin text-ds-accent" size={16} />}
+                        {item.state === 'sent' && <CheckCircle2 className="text-ds-accent" size={16} />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{item.name}</p>
-                        <p className={cn(
-                          'text-xs transition-colors duration-300',
-                          item.state === 'sent'
-                            ? 'text-[var(--urgency-resolved)]'
-                            : 'text-ds-ink-muted'
-                        )}>
-                          {item.state === 'pending'  && 'En espera...'}
-                          {item.state === 'sending'  && 'Enviando notificación...'}
-                          {item.state === 'sent'     && 'Notificado correctamente'}
+                        <p className="text-sm font-medium text-ds-ink-display">{item.name}</p>
+                        <p className="text-xs text-ds-ink-muted">
+                          {item.state === 'pending' && 'En espera...'}
+                          {item.state === 'sending' && 'Enviando notificación...'}
+                          {item.state === 'sent' && 'Notificado correctamente'}
                         </p>
                       </div>
                     </div>
@@ -373,21 +372,28 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
               </div>
 
               {phase === 'done' && !canNotify() && (
-                <p className="text-xs text-ds-ink-muted text-center">
-                  El escalado fue registrado. Para recibir notificaciones push, habilite los permisos en su navegador.
+                <p className="text-center text-xs text-ds-ink-muted">
+                  El escalado fue registrado. Habilite permisos para recibir notificaciones push.
                 </p>
               )}
 
-              <div className="sticky bottom-0 -mx-4 border-t border-ds-hairline/60 bg-ds-page/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-ds-page/80">
+              <div className="sticky bottom-0 -mx-4 border-t border-ds-hairline bg-ds-page/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
                 <Button
-                  className="h-11 w-full touch-target"
+                  className="h-11 w-full"
                   onClick={handleClose}
                   disabled={phase === 'sending'}
                 >
-                  {phase === 'sending'
-                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Enviando...</>
-                    : <><Check className="h-4 w-4 mr-2" /> Cerrar</>
-                  }
+                  {phase === 'sending' ? (
+                    <>
+                      <Loader2 className="animate-spin" size={16} />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} />
+                      Cerrar
+                    </>
+                  )}
                 </Button>
               </div>
             </>

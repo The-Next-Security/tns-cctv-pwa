@@ -17,11 +17,12 @@ import { ConnectionStatus } from '@/components/operacion/connection-status'
 import { useRealtime } from '@/hooks/use-realtime'
 import { MOCK_ALERTS, MOCK_ZONES } from '@/lib/mock-data'
 import { DEMO_ALERT_POPUP_KEY } from '@/lib/reset-demo'
-import { CRITICALITY_STYLES, CRITICALITY_LABELS, getCriticalityBadgeClass, URGENCY_STYLES, type UrgencyLevel } from '@/lib/constants'
+import { URGENCY_STYLES, type UrgencyLevel } from '@/lib/constants'
 import { UrgencyBadge, UrgencyText } from '@/components/ui/urgency-badge'
-import type { Alert, Criticality } from '@/lib/types'
+import type { Alert } from '@/lib/types'
 import { getAlertClass } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { sortAlertsByMostRecent } from '@/lib/alert-list'
 
 type StatusView = 'activas' | 'pendiente' | 'en_revision' | 'escaladas' | 'resueltas' | 'criticas' | 'baja_prioridad' | 'all'
 
@@ -65,7 +66,7 @@ function matchesStatusView(alert: Alert, view: StatusView): boolean {
   const alertClass = getAlertClass(alert.criticality)
   switch (view) {
     case 'activas':
-      return alert.status === 'pendiente' || alert.status === 'en_revision'
+      return alert.status !== 'resuelta' && alert.status !== 'descartada'
     case 'pendiente':
       return alert.status === 'pendiente'
     case 'en_revision':
@@ -138,7 +139,6 @@ export default function OperacionPage() {
     onAlertUpdated: handleAlertUpdated,
   })
 
-  // Filter alerts
   const filteredAlerts = localAlerts.filter(alert => {
     if (!matchesStatusView(alert, statusView)) return false
     if (zoneFilter !== 'all' && alert.zone_id !== parseInt(zoneFilter)) return false
@@ -151,11 +151,7 @@ export default function OperacionPage() {
     return true
   })
 
-  // Subgrupos para la vista "Activas" agrupada
-  const activasCriticasPending  = filteredAlerts.filter(a => getAlertClass(a.criticality) === 'critica'       && a.status === 'pendiente')
-  const activasBajaPending      = filteredAlerts.filter(a => getAlertClass(a.criticality) === 'baja_prioridad' && a.status === 'pendiente')
-  const activasInReview         = filteredAlerts.filter(a => a.status === 'en_revision')
-  const showGroupedActivas      = statusView === 'activas'
+  const sortedFilteredAlerts = sortAlertsByMostRecent(filteredAlerts)
 
   // Stats
   const stats = {
@@ -199,6 +195,17 @@ export default function OperacionPage() {
     }
   }
 
+  function handleLlamar(alertId: number) {
+    const llamadaAt = new Date().toISOString()
+    const markCalled = (alert: Alert) =>
+      alert.id === alertId ? { ...alert, llamada_at: llamadaAt } : alert
+
+    setLocalAlerts(prev => prev.map(markCalled))
+    setPriorityAlert(prev => prev ? markCalled(prev) : prev)
+    setSelectedAlert(prev => prev ? markCalled(prev) : prev)
+    setEscalateAlert(prev => prev ? markCalled(prev) : prev)
+  }
+
   function handleShowDetails(alert: Alert) {
     setSelectedAlert(alert)
     setShowPopup(true)
@@ -220,45 +227,6 @@ export default function OperacionPage() {
       setStatusView('resueltas')
     }
     setShowPopup(false)
-  }
-
-  // Helper para renderizar una sección de tarjetas
-  function AlertSection({
-    alerts,
-    badgeLevel,
-    label,
-    hint,
-  }: {
-    alerts: Alert[]
-    badgeLevel: UrgencyLevel
-    label: string
-    hint: string
-  }) {
-    if (alerts.length === 0) return null
-    return (
-      <section className="space-y-2 sm:space-y-3">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-          <UrgencyBadge level={badgeLevel}>
-            {label} ({alerts.length})
-          </UrgencyBadge>
-          <p className="text-xs sm:text-sm text-ds-ink-muted">{hint}</p>
-        </div>
-        {alerts.map((alert, index) => (
-          <div
-            key={alert.id}
-            className={cn('animate-fade-in', index === 0 && 'animate-slide-in-up')}
-            style={{ animationDelay: `${index * 50}ms` }}
-          >
-            <AlertCard
-              alert={alert}
-              onAction={(action, notes) => handleAlertAction(alert.id, action, notes)}
-              onEscalate={() => setEscalateAlert(alert)}
-              onShowDetails={handleShowDetails}
-            />
-          </div>
-        ))}
-      </section>
-    )
   }
 
   return (
@@ -509,31 +477,9 @@ export default function OperacionPage() {
                   )}
                 </div>
               </div>
-            ) : showGroupedActivas ? (
-              /* Vista "Activas" — 3 secciones: Críticas pendientes / Baja prioridad pendientes / En revisión */
-              <div className="space-y-4 sm:space-y-6">
-                <AlertSection
-                  alerts={activasCriticasPending}
-                  badgeLevel="critical"
-                  label="Críticas"
-                  hint="Atención inmediata requerida"
-                />
-                <AlertSection
-                  alerts={activasBajaPending}
-                  badgeLevel="pending"
-                  label="Baja Prioridad"
-                  hint="Atender o descartar"
-                />
-                <AlertSection
-                  alerts={activasInReview}
-                  badgeLevel="review"
-                  label="En Revisión"
-                  hint="Resolver o escalar"
-                />
-              </div>
             ) : (
               <div className="space-y-3">
-                {filteredAlerts.map((alert, index) => (
+                {sortedFilteredAlerts.map((alert, index) => (
                   <div
                     key={alert.id}
                     className={cn('animate-fade-in', index === 0 && 'animate-slide-in-up')}
@@ -543,8 +489,9 @@ export default function OperacionPage() {
                       alert={alert}
                       onAction={(action, notes) => handleAlertAction(alert.id, action, notes)}
                       onEscalate={() => setEscalateAlert(alert)}
+                      onLlamar={handleLlamar}
                       onShowDetails={handleShowDetails}
-                      readonly={alert.status === 'resuelta' || alert.status === 'escalada' || alert.status === 'descartada'}
+                      useReviewActions
                     />
                   </div>
                 ))}
@@ -568,6 +515,7 @@ export default function OperacionPage() {
           setEscalateAlert(priorityAlert)
           setPriorityAlert(null)
         }}
+        onLlamar={handleLlamar}
       />
 
       <AlertPopup
@@ -578,6 +526,7 @@ export default function OperacionPage() {
         onEscalate={() => {
           if (selectedAlert) setEscalateAlert(selectedAlert)
         }}
+        onLlamar={handleLlamar}
         recentAlerts={selectedAlert ? localAlerts.filter(a => a.camera?.id === selectedAlert.camera?.id) : []}
       />
 

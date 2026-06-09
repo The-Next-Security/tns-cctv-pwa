@@ -56,7 +56,7 @@ export function ThemeToggle({ block = false, className }: ThemeToggleProps) {
                 : 'text-ds-ink-muted hover:text-ds-ink-display',
             )}
           >
-            <Icon size={16} />
+            <Icon className="size-4" />
             {block && <span className="ml-1.5 text-xs font-medium">{label}</span>}
           </button>
         )

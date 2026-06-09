@@ -14,7 +14,6 @@ import {
   MapPin, 
   Check, 
   X, 
-  ArrowUpRight, 
   ChevronDown,
   Info,
   AlertTriangle
@@ -42,6 +41,10 @@ import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
 import { DISCARD_REASON_LABELS, CRITICALITY_LABELS, ALERT_STATUS_LABELS, getEventLabel } from '@/lib/types'
 import { EscalateSheet } from '@/components/operacion/escalate-sheet'
+import {
+  CallContactsPopover,
+  EscalateButton,
+} from '@/components/operacion/escalation-controls'
 
 const criticalityStyles: Record<Criticality, string> = {
   baja: 'bg-criticality-baja/20 text-criticality-baja border-criticality-baja/30',
@@ -66,6 +69,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
   const [isLoading, setIsLoading] = useState(false)
   const [metadataOpen, setMetadataOpen] = useState(false)
   const [escalateOpen, setEscalateOpen] = useState(false)
+  const [llamadaAt, setLlamadaAt] = useState<string | null>(null)
 
   const { data: alert, error, mutate } = useSWR<Alert>(
     `alert-${id}`,
@@ -73,6 +77,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
   )
 
   const isPending = alert?.status === 'pendiente'
+  const isInReview = alert?.status === 'en_revision'
 
   async function handleRevisar() {
     if (!alert) return
@@ -147,6 +152,11 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
         </div>
       </div>
     )
+  }
+
+  const operationalAlert: Alert = {
+    ...alert,
+    llamada_at: llamadaAt ?? alert.llamada_at ?? null,
   }
 
   const timeAgo = formatDistanceToNow(new Date(alert.created_at || new Date()), {
@@ -357,15 +367,32 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setEscalateOpen(true)}
+              </CardContent>
+            </Card>
+          )}
+
+          {isInReview && operationalAlert.rule?.can_escalate === true && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Escalación</CardTitle>
+                <CardDescription>
+                  Primero contacte a los responsables definidos en la regla.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <CallContactsPopover
+                  alert={operationalAlert}
+                  onLlamar={() => setLlamadaAt(new Date().toISOString())}
                   disabled={isLoading}
-                >
-                  <ArrowUpRight className="h-4 w-4 mr-2" />
-                  Escalar
-                </Button>
+                  className="w-full"
+                />
+                <EscalateButton
+                  alert={operationalAlert}
+                  onEscalate={() => setEscalateOpen(true)}
+                  disabled={isLoading}
+                  wrapperClassName="w-full"
+                  className="w-full"
+                />
               </CardContent>
             </Card>
           )}
@@ -428,7 +455,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
 
       {/* Escalate Sheet */}
       <EscalateSheet
-        alert={escalateOpen ? alert : null}
+        alert={escalateOpen ? operationalAlert : null}
         onClose={() => setEscalateOpen(false)}
         onSuccess={() => {
           mutate()
