@@ -98,6 +98,16 @@ export const alerts = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  // Atiende una alerta por su event_id real (CHAR(26)) usando el vocabulario del backend MySQL.
+  attendEvent: (
+    eventId: string,
+    action: 'acknowledge' | 'resolve' | 'escalate' | 'discard',
+    notes?: string
+  ) =>
+    fetchApi<import('./types').Alert>(`/alerts/${eventId}/attend`, {
+      method: 'POST',
+      body: JSON.stringify({ action, notes }),
+    }),
 }
 
 // Reglas

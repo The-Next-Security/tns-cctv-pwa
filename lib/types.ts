@@ -134,6 +134,8 @@ export interface NVR {
 // Alerta
 export interface Alert {
   id: number
+  /** ID real del evento en la base de datos (CHAR(26)); presente cuando proviene del backend */
+  event_id?: string
   event_raw_id?: number
   rule_id?: number | null
   camera_id?: number
