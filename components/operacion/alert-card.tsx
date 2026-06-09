@@ -41,6 +41,7 @@ interface AlertCardProps {
   onLlamar: (id: number) => void
   onShowDetails?: (alert: Alert) => void
   readonly?: boolean
+  useReviewActions?: boolean
 }
 
 
@@ -60,6 +61,7 @@ export function AlertCard({
   onLlamar,
   onShowDetails,
   readonly = false,
+  useReviewActions = false,
 }: AlertCardProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false)
@@ -143,6 +145,10 @@ export function AlertCard({
   const isInReview = alert.status === 'en_revision'
   const alertClass = getAlertClass(alert.criticality)
   const isCriticalClass = alertClass === 'critica'
+  const showReviewActions = useReviewActions || isInReview
+  const escalationAlert = showReviewActions && alert.status !== 'en_revision'
+    ? { ...alert, status: 'en_revision' as const }
+    : alert
 
   return (
     <>
@@ -247,7 +253,7 @@ export function AlertCard({
                 className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:flex-wrap sm:justify-end sm:shrink-0"
                 onClick={e => e.stopPropagation()}
               >
-                {isPending && (
+                {isPending && !showReviewActions && (
                   <>
                     <Button
                       size="sm"
@@ -281,7 +287,7 @@ export function AlertCard({
                   </>
                 )}
 
-                {isInReview && (
+                {showReviewActions && (
                   <>
                     <Button
                       size="sm"
@@ -294,14 +300,14 @@ export function AlertCard({
                     </Button>
 
                     <CallContactsPopover
-                      alert={alert}
+                      alert={escalationAlert}
                       onLlamar={onLlamar}
                       disabled={isLoading}
                       className="h-10 rounded-xl sm:h-9"
                     />
 
                     <EscalateButton
-                      alert={alert}
+                      alert={escalationAlert}
                       onEscalate={onEscalate}
                       disabled={isLoading}
                       className="h-10 rounded-xl sm:h-9"
