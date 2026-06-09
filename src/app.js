@@ -25,14 +25,14 @@ function createApp(deps = {}) {
     next();
   });
 
-  app.post('/api/v1/auth/login', (req, res) => {
+  app.post('/api/v1/auth/login', async (req, res) => {
     const schema = z.object({ email: z.string().email(), password: z.string().min(1) });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'invalid payload', req.requestId, parsed.error.issues));
     }
 
-    const user = store.auth(parsed.data.email, parsed.data.password);
+    const user = await store.auth(parsed.data.email, parsed.data.password);
     if (!user) return res.status(401).json(errorEnvelope('UNAUTHORIZED', 'invalid credentials', req.requestId));
 
     const accessToken = jwt.sign({ sub: user.id, tenant_id: user.tenant_id, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
@@ -40,15 +40,29 @@ function createApp(deps = {}) {
 
     return res.status(200).json({
       access_token: accessToken,
+      // alias para el cliente del frontend (lib/api.ts espera `token`)
+      token: accessToken,
       refresh_token: refreshToken,
       expires_in: 3600,
       token_type: 'Bearer',
-      user: { user_id: user.id, tenant_id: user.tenant_id, role: user.role, site_ids: user.site_ids },
+      user: {
+        id: user.id,
+        user_id: user.id,
+        tenant_id: user.tenant_id,
+        email: user.email,
+        nombre: user.nombre ?? user.full_name,
+        apellido: user.apellido,
+        full_name: user.full_name,
+        role: user.app_role || user.role,
+        permissions: user.permissions || [],
+        site_ids: user.site_ids,
+        activo: true,
+      },
       request_id: req.requestId,
     });
   });
 
-  app.post('/api/v1/ingest/events', (req, res) => {
+  app.post('/api/v1/ingest/events', async (req, res) => {
     const idempotencyKey = req.headers['x-idempotency-key'];
     if (!idempotencyKey) {
       return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'x-idempotency-key is required', req.requestId));
@@ -76,7 +90,7 @@ function createApp(deps = {}) {
     }
 
     const payloadHash = crypto.createHash('sha256').update(JSON.stringify(parsed.data)).digest('hex');
-    const result = store.ingestEvent(idempotencyKey, payloadHash, parsed.data);
+    const result = await store.ingestEvent(idempotencyKey, payloadHash, parsed.data);
 
     if (result.conflict) {
       return res.status(409).json(errorEnvelope('IDEMPOTENCY_CONFLICT', 'same key with different payload', req.requestId));
@@ -92,8 +106,8 @@ function createApp(deps = {}) {
     });
   });
 
-  app.get('/api/v1/events', (req, res) => {
-    const items = store.listEvents();
+  app.get('/api/v1/events', async (req, res) => {
+    const items = await store.listEvents();
     return res.status(200).json({
       items,
       page: 1,
@@ -103,20 +117,21 @@ function createApp(deps = {}) {
     });
   });
 
-  app.get('/api/v1/events/:eventId', (req, res) => {
-    const event = store.getEvent(req.params.eventId);
+  app.get('/api/v1/events/:eventId', async (req, res) => {
+    const event = await store.getEvent(req.params.eventId);
     if (!event) return res.status(404).json(errorEnvelope('NOT_FOUND', 'event not found', req.requestId));
-    return res.status(200).json({ ...event, timeline: store.getTimeline(req.params.eventId), request_id: req.requestId });
+    const timeline = await store.getTimeline(req.params.eventId);
+    return res.status(200).json({ ...event, timeline, request_id: req.requestId });
   });
 
-  app.patch('/api/v1/events/:eventId/state', (req, res) => {
+  app.patch('/api/v1/events/:eventId/state', async (req, res) => {
     const schema = z.object({ to_state: z.enum(['IN_REVIEW', 'CLOSED']), decision: z.string().min(1), comment: z.string().min(1) });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'invalid payload', req.requestId, parsed.error.issues));
     }
 
-    const changed = store.changeState(req.params.eventId, parsed.data.to_state, parsed.data.decision, parsed.data.comment, 'usr_01');
+    const changed = await store.changeState(req.params.eventId, parsed.data.to_state, parsed.data.decision, parsed.data.comment, 'usr_01');
     if (changed.notFound) return res.status(404).json(errorEnvelope('NOT_FOUND', 'event not found', req.requestId));
     if (changed.invalid) {
       return res.status(400).json(errorEnvelope('INVALID_STATE_TRANSITION', `${changed.fromState} -> ${changed.toState} not allowed`, req.requestId));
@@ -130,6 +145,43 @@ function createApp(deps = {}) {
       actor_user_id: 'usr_01',
       request_id: req.requestId,
     });
+  });
+
+  // --- Contrato de alertas para el frontend (requiere store con soporte) ---
+  app.get('/api/v1/alerts', async (req, res) => {
+    if (typeof store.listAlerts !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'alerts no disponible en este store', req.requestId));
+    }
+    const items = await store.listAlerts();
+    const pagination = { page: 1, page_size: items.length, total: items.length, total_pages: 1 };
+    // Devolvemos ambas formas: `items` (contrato src) y `data`/`pagination` (PaginatedResponse del frontend).
+    return res.status(200).json({ items, data: items, pagination, page: 1, page_size: items.length, total: items.length, request_id: req.requestId });
+  });
+
+  app.post('/api/v1/alerts/:eventId/attend', async (req, res) => {
+    if (typeof store.attendAlert !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'attend no disponible en este store', req.requestId));
+    }
+    const schema = z.object({
+      action: z.enum(['acknowledge', 'resolve', 'escalate', 'discard', 'revisada', 'descartada', 'escalada']),
+      notes: z.string().optional(),
+      observation: z.string().optional(),
+      discard_note: z.string().optional(),
+      discard_reason: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'invalid payload', req.requestId, parsed.error.issues));
+    }
+    const notes = parsed.data.notes || parsed.data.observation || parsed.data.discard_note || parsed.data.discard_reason;
+    const eventId = await store.resolveEventId(req.params.eventId);
+    if (!eventId) return res.status(404).json(errorEnvelope('NOT_FOUND', 'alert not found', req.requestId));
+    const result = await store.attendAlert(eventId, parsed.data.action, notes, req.user?.sub || null);
+    if (result.notFound) return res.status(404).json(errorEnvelope('NOT_FOUND', 'alert not found', req.requestId));
+    if (result.invalid) {
+      return res.status(400).json(errorEnvelope('INVALID_STATE_TRANSITION', result.reason || 'transición inválida', req.requestId));
+    }
+    return res.status(200).json({ ...result.alert, request_id: req.requestId });
   });
 
   app.use((_, res) => res.status(404).json(errorEnvelope('NOT_FOUND', 'route not found', `req_${crypto.randomUUID().slice(0, 8)}`)));
