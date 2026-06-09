@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS gen_usuario (
   id_usuario      CHAR(26)     PRIMARY KEY,
   id_tenant       CHAR(26)     NOT NULL,
   email           VARCHAR(190) NOT NULL,
-  full_name       VARCHAR(160) NOT NULL,
-  role            ENUM('GUARD','ADMIN','OPS','SUPERADMIN_TNS') NOT NULL,
+  nombre          VARCHAR(120) NOT NULL,
+  apellido        VARCHAR(120) NOT NULL,
   password_hash   VARCHAR(255) NOT NULL,
   status          ENUM('ACTIVE','INACTIVE','LOCKED') NOT NULL DEFAULT 'ACTIVE',
   creado_en       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -39,7 +39,32 @@ CREATE TABLE IF NOT EXISTS gen_usuario (
   CONSTRAINT fk_gen_usuario_id_tenant_gen_tenant_id_tenant
     FOREIGN KEY (id_tenant) REFERENCES gen_tenant(id_tenant),
   CONSTRAINT uk_usuario_tenant_email UNIQUE (id_tenant, email),
-  INDEX idx_usuario_tenant_role_status (id_tenant, role, status)
+  INDEX idx_usuario_tenant_status (id_tenant, status)
+) ENGINE=InnoDB;
+
+-- Autorizacion basada en permisos (sin concepto de roles).
+-- gen_permiso: catalogo de permisos del software.
+-- gen_usuario_permiso: relacion N:M usuario <-> permiso.
+CREATE TABLE IF NOT EXISTS gen_permiso (
+  id_permiso   CHAR(26)     PRIMARY KEY,
+  code         VARCHAR(128) NOT NULL,
+  descripcion  VARCHAR(255) NULL,
+  modulo       VARCHAR(64)  NULL,
+  creado_en    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT uk_permiso_code UNIQUE (code),
+  INDEX idx_permiso_modulo (modulo)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS gen_usuario_permiso (
+  id_usuario  CHAR(26)    NOT NULL,
+  id_permiso  CHAR(26)    NOT NULL,
+  granted_at  DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id_usuario, id_permiso),
+  CONSTRAINT fk_gen_usuario_permiso_usuario
+    FOREIGN KEY (id_usuario) REFERENCES gen_usuario(id_usuario) ON DELETE CASCADE,
+  CONSTRAINT fk_gen_usuario_permiso_permiso
+    FOREIGN KEY (id_permiso) REFERENCES gen_permiso(id_permiso) ON DELETE CASCADE,
+  INDEX idx_usuario_permiso_permiso (id_permiso)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS gen_acceso_sitio (
