@@ -163,4 +163,24 @@ No funciona todavia como un sistema unico desplegable de punta a punta sin traba
 4. Conectar auth, eventos, reglas y escalacion a persistencia real.
 
 ---
+
+## Actualización 2026-06-09 — Integración real Frontend ↔ Backend ↔ MySQL
+
+> El diagnóstico anterior describe el punto de partida. Esta sección refleja los cambios aplicados en la sesión del 2026-06-09. Detalle completo en `01-prd/HANDOFF_2026-06-09_BASE_DATOS_E_INTEGRACION.md`.
+
+Cambios que actualizan el estado del arte:
+
+- **La capa de datos SQL ya está creada y se consume en runtime.** Se ejecutó el bundle prefijado contra MySQL 9.6 local (base `tns_cctv`, 34 tablas + función + SP + evento). Es el modelo vivo.
+- **`src/` ahora puede correr contra MySQL.** Con `STORE=mysql` usa `src/mysqlStore.cjs` (pool `db/lib/pool.cjs`) en lugar del store in-memory. Misma interfaz, persistencia real.
+- **Auth real en la UI.** `components/providers/auth-provider.tsx` llama a `/api/v1/auth/login` y valida contra `gen_usuario` (bcrypt). Ya no acepta cualquier credencial.
+- **Cliente API parcialmente alineado.** `lib/api.ts` (`/alerts`, `/auth/login`) ya tiene contraparte real en `src/app.js`. El frontend llega al backend mediante el **proxy** `rewrites()` de `next.config.mjs` (`/api/v1/*` → `:4000`).
+- **Consola operativa conectada.** `app/(dashboard)/operacion/page.tsx` lee alertas reales (`ale_evento`) y persiste atender/escalar/descartar vía el stored procedure de transición de estados.
+
+Lo que sigue divergente (sin cambios):
+- Realtime UI (`socket.io` `/realtime`) vs backend (`ws` `/ws/operations`).
+- `backend/src/` (hardening PoC) sigue sin integrar.
+- Recepción, reglas, expedientes, reportes, salud y admin siguen en mock.
+- Coexisten aún los 3 modelos SQL; el operativo es el prefijado.
+
+---
 Ultima actualizacion basada en codigo: 2026-06-09

@@ -235,4 +235,28 @@ Si hay que documentar "el modelo de datos del proyecto" sin inventar nada, hoy l
 - la migracion bootstrap es un artefacto aparte, util para pruebas iniciales
 
 ---
+
+## Actualización 2026-06-09 — El modelo prefijado pasó a ser el modelo vivo
+
+> Ver hand-off completo en `01-prd/HANDOFF_2026-06-09_BASE_DATOS_E_INTEGRACION.md`.
+
+- De los 3 modelos que coexisten, el **bundle prefijado** (`01_CreacionDesdeCero/*`) fue el ejecutado en MySQL y el que ahora consume el backend (`src/mysqlStore.cjs`). Es el modelo operativo de facto.
+- Los modelos **core** (`01_ddl.sql`) y **bootstrap** (`001_init.sql`) siguen versionados pero **no** se ejecutaron ni se consumen.
+- Fix aplicado al DDL prefijado: `dah_snapshot.trigger` → `` `trigger` `` (palabra reservada).
+- Mapeos usados por el runtime (frontend ↔ BD), implementados en `src/mysqlStore.cjs`:
+  - Rol app↔ENUM: `admin_parque/supervisor/vigilante/recepcion/soporte_tns` ↔ `ADMIN/OPS/GUARD/SUPERADMIN_TNS`.
+  - Estado↔status: `NEW/IN_REVIEW/CLOSED` ↔ `pendiente/en_revision/(resuelta|descartada|escalada según decision)`.
+  - Severidad↔criticidad: 5/4/3/≤2 ↔ critica/alta/media/baja.
+- Las **zonas** no tienen tabla propia: se modelan como `zone_code` (`zone-1`…`zone-8`) en `ale_evento` y en `metadata_json` de `src_fuente`.
+
+### Rediseño 2026-06-09 (tarde) — usuarios y autorización por permisos
+- `gen_usuario`: `full_name` → **`nombre` + `apellido`**; **sin columna `role`**.
+- **Autorización basada en permisos (no roles)**:
+  - `gen_permiso` (catálogo, 12 permisos alineados con `lib/auth.ts`).
+  - `gen_usuario_permiso` (N:M usuario↔permiso).
+- Total de tablas del modelo prefijado: **36**.
+- Se **eliminó** el bundle core legacy en inglés (era el "Modelo A"). Ya no coexisten 3 modelos: el bootstrap `001_init.sql` permanece solo como artefacto mínimo; el modelo vivo y único mantenido es el **prefijado**.
+- Usuarios: 5 demo Agrolivo + 3 reales TNS (admin completa). El backend deriva un `role` de presentación; la autoridad real son los `permissions`.
+
+---
 Ultima actualizacion basada en codigo: 2026-06-09

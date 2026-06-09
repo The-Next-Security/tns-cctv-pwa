@@ -65,7 +65,7 @@ Orden real de `SOURCE`:
 - `02_Funciones/02_01_fun_normalize_plate.sql`
 - `04_StoredProcedures/04_01_stpr_register_event_state.sql`
 - `05_Eventos/05_01_evt_purge_idempotencia.sql`
-- `07_DatosIniciales/07_01_configuracion.sql`
+- `07_DatosIniciales/07_01_datos_iniciales.sql`
 
 ## Reglas de diseño que hoy si existen en SQL
 
@@ -231,6 +231,41 @@ Si hay que ejecutar o ampliar la base real del proyecto hoy:
 1. el bundle mas completo es el prefijado
 2. el orquestador real es `db/sql_files/crear_base_datos.sql`
 3. hay que resolver antes la divergencia `SQL_FILES` vs `sql_files` si el runtime final sera Linux
+
+---
+
+## Actualización 2026-06-09 — Base creada y poblada en local
+
+> Ver hand-off completo en `01-prd/HANDOFF_2026-06-09_BASE_DATOS_E_INTEGRACION.md`.
+
+### La base ya existe físicamente
+- Motor: MySQL **9.6.0** (Homebrew) en Mac M1.
+- Base: `tns_cctv`, bundle **prefijado** (34 tablas + `fun_normalize_plate` + `stpr_register_event_state` + `evt_purge_idempotencia`).
+- Usuario de aplicación: `tns_cctv_app` (`127.0.0.1` y `localhost`), permisos `SELECT/INSERT/UPDATE/DELETE/EXECUTE`.
+- Config local: `db/connection-config.json` (creado, **ignorado por git**).
+
+### Caveat de ejecución (importante)
+El orquestador `crear_base_datos.sql` usa `SOURCE`, que **no se interpreta** al canalizar por `stdin` en modo batch (`mysql < archivo.sql`). Para crear la base se ejecutaron los archivos **uno por uno en orden** contra `tns_cctv`. Alternativa: abrir el cliente `mysql` interactivo y hacer `SOURCE`.
+
+### Bug corregido
+`01_CreacionDesdeCero/01_07_tablas_dah.sql`: columna `trigger` (palabra reservada) en `dah_snapshot` → ahora con backticks `` `trigger` ``.
+
+### Datos demo (seed)
+- **Un solo archivo estático:** `07_DatosIniciales/07_01_datos_iniciales.sql` (config, permisos, tenant, usuarios, fuentes, reglas, eventos, ingresos).
+- Timestamps fijos (2026-06-09) y hash bcrypt fijo para `password123` → cada recreación de la BD produce los mismos datos.
+- Idempotente (`INSERT ... ON DUPLICATE KEY UPDATE`).
+- Contenido: 1 tenant, 1 site, 8 usuarios, 10 fuentes, 9 reglas, 12 eventos, 24 timeline, 5 ingresos.
+
+### Consumo runtime
+El bundle prefijado **ya se consume** desde `src/mysqlStore.cjs` (pool `db/lib/pool.cjs`) cuando el backend corre con `STORE=mysql`. Ya no es cierto que "ningún backend usa estas tablas en runtime".
+
+### Rediseño 2026-06-09 (tarde)
+- **36 tablas** (antes 34). Nuevas: `gen_permiso`, `gen_usuario_permiso` (autorización por permisos, sin roles).
+- `gen_usuario`: `full_name` → `nombre` + `apellido`; **eliminada** la columna `role` (ENUM).
+- **Bundle core legacy eliminado** (`01_ddl.sql`, `02_indices.sql`, `03_seed_inserts.sql`, `05_functions.sql`, `06_events.sql`, `07_logs.sql`, `00_setup.sql`, `04_procedures.sql`). Fuente única: bundle prefijado.
+- Datos iniciales: **un solo archivo** `07_01_datos_iniciales.sql` (config + permisos + demo).
+- `crear_base_datos.sql`: rutas en minúscula `db/sql_files`, instrucciones de uso en el encabezado, y SOURCE de todos los pasos.
+- **`SOURCE` solo funciona en cliente interactivo** (`mysql> SOURCE db/sql_files/crear_base_datos.sql;` desde la raíz del repo).
 
 ---
 Ultima actualizacion basada en codigo: 2026-06-09

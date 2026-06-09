@@ -309,4 +309,36 @@ No estan implementados en codigo conectado:
 - SQL real versionado: `db/sql_files/`
 
 ---
+
+## Actualización 2026-06-09 — Endpoints conectados a MySQL y consumidos por el frontend
+
+> Ver hand-off completo en `01-prd/HANDOFF_2026-06-09_BASE_DATOS_E_INTEGRACION.md`.
+
+La superficie `src/` ahora puede correr con persistencia real (`STORE=mysql` → `src/mysqlStore.cjs`). Cambios de contrato:
+
+### `POST /api/v1/auth/login` (ampliado)
+- Valida contra `gen_usuario` (bcrypt). Rechaza credenciales inválidas (401).
+- Respuesta ahora incluye, además de `access_token`, los alias que consume `lib/api.ts`:
+  - `token` (= access_token)
+  - `user` con `{ id, email, nombre, apellido, role (hint en español), permissions: string[], site_ids, activo }`
+  - Desde el rediseño 2026-06-09 la BD **no almacena roles**: la autoridad es `permissions` (de `gen_usuario_permiso`); `role` es solo una etiqueta derivada para el frontend actual.
+
+### `GET /api/v1/alerts` (nuevo)
+- Mapea `ale_evento` (+ última decisión de `log_evento_timeline`) a la forma `Alert` del frontend.
+- Responde ambas formas: `{ items }` (estilo `src`) y `{ data, pagination }` (`PaginatedResponse` del frontend).
+
+### `POST /api/v1/alerts/:eventId/attend` (nuevo)
+- Acciones: `acknowledge | resolve | escalate | discard` **y** alias del frontend `revisada | descartada | escalada`.
+- Acepta el `event_id` real (`CHAR(26)`) o el surrogate numérico de la UI (`resolveEventId`).
+- Ejecuta transiciones con el stored procedure `stpr_register_event_state` (multi-paso `NEW→IN_REVIEW→CLOSED`).
+
+### Conexión frontend
+- `next.config.mjs` agrega `rewrites()`: `/api/v1/*` → `http://127.0.0.1:4000` (var `API_PROXY_TARGET`).
+- `lib/api.ts` agrega `alerts.attendEvent(eventId, action, notes)`.
+
+### Sigue pendiente
+- Endpoints `/rules`, `/vehicle-entries`, `/case-files`, `/zones`, `/cameras`, `/nvrs`, `/users`, `/reports`, `/health` aún sin contraparte real (el frontend usa mock para ellos).
+- Realtime sigue divergente (`socket.io /realtime` vs `ws /ws/operations`).
+
+---
 Ultima actualizacion basada en codigo: 2026-06-09
