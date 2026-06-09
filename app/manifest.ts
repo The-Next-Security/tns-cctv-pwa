@@ -13,26 +13,14 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: 'es',
     icons: [
       {
-        src: '/icons/android-chrome-192x192.png',
-        sizes: '192x192',
+        src: '/brand/tns-logo.png',
+        sizes: '800x250',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: '/icons/android-chrome-512x512.png',
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: '/icons/android-chrome-192x192.png',
-        sizes: '192x192',
-        type: 'image/png',
-        purpose: 'maskable',
-      },
-      {
-        src: '/icons/android-chrome-512x512.png',
-        sizes: '512x512',
+        src: '/brand/tns-logo.png',
+        sizes: '800x250',
         type: 'image/png',
         purpose: 'maskable',
       },
