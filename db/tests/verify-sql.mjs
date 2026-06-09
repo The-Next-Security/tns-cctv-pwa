@@ -105,7 +105,7 @@ const orchestrator = readFileSync(
   'utf8',
 )
 const sources = [
-  ...orchestrator.matchAll(/^SOURCE\s+([^;]+);$/gm),
+  ...orchestrator.matchAll(/^SOURCE\s+(\S+)\s*;?\s*$/gm),
 ].map((match) => match[1])
 
 const expectedSources = [
@@ -120,6 +120,12 @@ assert.deepEqual(
   sources,
   expectedSources,
   'El orden SOURCE del orquestador es incorrecto',
+)
+
+assert.doesNotMatch(
+  orchestrator,
+  /CREATE TABLE IF NOT EXISTS/,
+  'crear_base_datos.sql debe ser orquestador delgado; el DDL vive en los modulos',
 )
 
 for (const source of sources) {
@@ -151,5 +157,5 @@ assert.match(procedure, /COMMIT;/)
 
 console.log(
   `Bundle SQL verificado: ${actualTables.length} tablas, `
-    + `${identifiers.length} constraints/indices y ${sources.length} fuentes.`,
+    + `${identifiers.length} constraints/indices y ${sources.length} fuentes SOURCE.`,
 )
