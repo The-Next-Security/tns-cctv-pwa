@@ -1,207 +1,166 @@
 # ARCHITECTURE.md
 
-<!-- ARC_TASK:t_57457627 -->
+## Objetivo
 
-## 1. Alcance y referencia
-- PRD fuente: `/opt/tns-factory/buildroom/cctv-mvp/01-prd/PRD.md`.
-- Este diseño cubre MVP contractual M1..M14 y S1..S3 como capacidad de sprint.
-- No incluye scope fuera PRD: analítica predictiva, automatización legal/sancionatoria, ERP/CRM, cambios breaking fuera `/api/v1`.
+Este documento describe la arquitectura que realmente existe hoy en el repositorio. No describe la arquitectura objetivo del PRD ni una topologia futura.
 
-## 2. Arquitectura lógica
-1) Edge Connector (sitio)
-- Captura eventos NVR/cámaras/ANPR/velocidad.
-- Normaliza payload y envía por HTTPS saliente con idempotencia.
-- Heartbeat técnico y retry/backoff.
+## Capas reales del repositorio
 
-2) Core API `/api/v1` (backend modular)
-- Módulos: auth-rbac, ingest, events, admissions, speed-cases, notifications, health, audit.
-- Responsabilidades: JWT, RBAC, tenancy guard, validación de contratos, request_id.
+### 1. Frontend demo en App Router
 
-3) Rule Engine (M7)
-- Evalúa zona/horario/tipo/severidad.
-- Define prioridad/criticidad/popup/notificación.
-- Guarda rationale auditable.
+Archivos principales:
+- `app/`
+- `components/`
+- `hooks/`
+- `lib/`
 
-4) Workflow Engine (M6)
-- Estados: `NEW -> IN_REVIEW -> CLOSED`.
-- Transición inválida = error contractual.
-- Toda transición guarda actor, decision, comment, timestamp.
+Estado real:
+- La UI esta construida con estructura de Next.js App Router.
+- Usa design system propio y componentes `components/ui/`.
+- La mayor parte de la experiencia opera con datos mock en memoria.
+- El login es demo y persiste un token falso en `localStorage`.
+- Las vistas principales ya existen: operacion, recepcion, expedientes, reglas, reportes, salud y admin.
 
-5) Correlation Engine (M9/S2)
-- Vincula speed_event con admissions por patente + ventana configurable.
-- Resultado: `CORRELATED_AUTO`, `MANUAL_REVIEW_REQUIRED`, `NO_MATCH`.
-- Correlación manual con justificación obligatoria.
+### 2. Backend contractual minimo en `src/`
 
-6) Realtime Gateway WS (M12)
-- Server->client: `event.created`, `event.popup`, `event.state.changed`, `health.alert`.
-- Client->server: `ack.popup`, `subscribe.filters`, `presence.heartbeat`.
-- Scope por tenant/site/rol.
+Archivos principales:
+- `src/app.js`
+- `src/server.js`
+- `src/wsHub.js`
+- `src/store.js`
 
-7) Notification Worker (M10/S3)
-- Outbox asíncrono, reintentos, estados de entrega.
-- Endpoint de test de canal.
+Estado real:
+- Express + WebSocket nativo.
+- Persistencia solo in-memory.
+- Sirve como contrato backend mas consistente bajo prueba para ingest, list/detail de eventos y transiciones de estado.
+- No esta integrado con el frontend actual.
 
-8) Health Monitor (M11)
-- Sondeos de fuentes, incidentes OPEN/RESOLVED, checks manuales OPS.
+### 3. Backend de hardening en `backend/src/`
 
-9) Data Layer
-- MySQL 8 (source of truth).
-- Redis (fanout WS + locks efímeros).
-- Object storage privado para evidencia (URLs firmadas).
+Archivos principales:
+- `backend/src/app.js`
+- `backend/tests/security.test.js`
 
-## 3. Topología edge/cloud
-Edge (Parque):
-- 1 conector por sitio, acceso LAN a fuentes, tráfico solo saliente.
+Estado real:
+- Es un PoC paralelo.
+- Implementa auth con refresh rotation, tenant scope, evidencia firmada y auditoria.
+- No comparte contrato exacto con `src/`.
+- No esta integrado con el frontend actual.
 
-Cloud TNS:
-- API/WS stateless, workers asíncronos, MySQL, Redis, object storage, observabilidad.
+### 4. Capa de datos SQL
 
-## 4. Trazabilidad PRD -> módulos
-| PRD | Implementación técnica |
+Archivos principales:
+- `db/sql_files/01_ddl.sql`
+- `db/sql_files/01_CreacionDesdeCero/*`
+- `db/sql_files/crear_base_datos.sql`
+- `db/migrations/001_init.sql`
+
+Estado real:
+- Coexisten tres modelos SQL distintos.
+- No hay una sola ruta runtime en la aplicacion que hoy consuma esas tablas.
+- La mayor consistencia esta en el bundle prefijado de `db/sql_files/01_CreacionDesdeCero/*`, porque es el mas completo y el que valida `db/tests/verify-sql.mjs`.
+
+## Flujo real de la aplicacion frontend
+
+### Auth actual
+
+1. `app/(auth)/login/page.tsx` captura email y password.
+2. `components/providers/auth-provider.tsx` acepta cualquier combinacion no vacia.
+3. Se persiste:
+   - `tns_token`
+   - `tns_user_email`
+   - `tns_user_role`
+   - `tns_user_id`
+   - `tns_user_name`
+4. La navegacion posterior se decide con `lib/auth.ts`.
+
+No hay llamada real a backend para autenticacion en la experiencia de UI.
+
+### Consola operativa real
+
+1. `app/(dashboard)/operacion/page.tsx` inicializa `localAlerts` desde `MOCK_ALERTS`.
+2. Las acciones de atender, resolver y escalar mutan solo estado local.
+3. `EscalateSheet` dispara una llamada best-effort a `alertsApi.attend(...)`, pero la UI no depende de esa respuesta.
+4. El popup prioritario es demo y se basa en `sessionStorage`.
+
+### Realtime esperado vs realtime existente
+
+Frontend:
+- `hooks/use-realtime.ts` usa `socket.io-client`
+- endpoint esperado: `/realtime`
+- eventos esperados: `alert:new`, `alert:updated`, `case:new`, `nvr:status_changed`, `system:degraded`
+
+Backend real en `src/`:
+- usa `ws`
+- endpoint real: `/ws/operations`
+- evento real: `event.popup`
+
+Arquitectonicamente hoy eso significa que no existe una linea end-to-end unificada entre UI y backend realtime.
+
+## Fuente de verdad por subsistema
+
+| Subsistema | Fuente de verdad actual |
 |---|---|
-| M1 | Auth JWT + refresh + revocación sesión |
-| M2 | POST `/ingest/events` + idempotencia |
-| M3 | POST `/ingest/speed-events` + speed_case |
-| M4 | GET `/events` filtros/paginación |
-| M5 | GET `/events/{id}` + timeline |
-| M6 | PATCH state con state machine |
-| M7 | CRUD `/rules` + evaluator |
-| M8 | CRUD `/admissions` |
-| M9 | `/speed-cases` + manual-correlation |
-| M10 | `/notifications` + outbox |
-| M11 | `/health/sources` + incidents + checks |
-| M12 | WS operacional consistente con REST |
-| M13 | RBAC por rol + tenancy + versionado `/api/v1` |
-| M14 | Error envelope + `X-Request-Id` + timezone negocio |
+| UI y estados de demo | `app/`, `components/`, `lib/mock-data.ts` |
+| Contrato HTTP/WS minimo bajo prueba | `src/` + `tests/api.contract.spec.js` + `tests/ws.operations.spec.js` |
+| Controles de seguridad explorados | `backend/src/app.js` + `backend/tests/security.test.js` |
+| Modelo SQL mas completo | `db/sql_files/01_CreacionDesdeCero/*` + `db/sql_files/crear_base_datos.sql` |
+| Bundle SQL core simplificado | `db/sql_files/01_ddl.sql` + `02_indices.sql` + `06_events.sql` + `07_logs.sql` |
+| Bootstrap SQL minimo | `db/migrations/001_init.sql` |
 
-## 5. Flujos críticos
-F1 Evento crítico:
-- ingest -> reglas -> cola -> popup WS -> cambio estado -> notificación -> auditoría.
+## Divergencias estructurales importantes
 
-F2 Admissions:
-- registro manual/ANPR/híbrido -> corrección controlada -> disponible para correlación.
+### Frontend vs package root
 
-F3 Velocidad:
-- speed ingest -> speed_case -> correlación auto -> manual review si ambiguo.
+El repo tiene estructura de Next.js en `app/`, pero `package.json` root hoy declara:
+- `"type": "module"`
+- scripts con `vite`
 
-F4 Notificaciones:
-- trigger por criticidad/cambio -> outbox -> entrega + estado.
+Eso vuelve ambiguo el runtime principal del proyecto.
 
-F5 Salud técnica:
-- check programado/manual -> alerta -> incidente -> recuperación.
+### Dos backends con contratos distintos
 
-## 6. Decisiones de stack y trade-offs
-1. Monolito modular (MVP) vs microservicios.
-- Pro: velocidad entrega.
-- Contra: despliegue acoplado.
-- Mitigación: boundaries internos + outbox/eventos.
+`src/` y `backend/src/` no son variantes del mismo servicio. Tienen:
+- distintas rutas
+- distintas decisiones de auth
+- distintas capacidades
+- distintas pruebas
 
-2. MySQL relacional vs NoSQL.
-- Pro: consistencia y auditoría.
-- Contra: tuning de queries históricas.
-- Mitigación: índices compuestos y paginación obligatoria.
+### Tres modelos SQL coexistiendo
 
-3. Redis acotado (no fuente de verdad).
-- Pro: latencia WS.
-- Contra: componente adicional.
-- Mitigación: uso efímero estricto.
+Hoy existen en paralelo:
+- modelo core en ingles sin prefijos
+- modelo completo con prefijos `gen_/src_/ale_/log_/sal_/adm_/dah_`
+- migracion bootstrap de 8 tablas
 
-4. Evidencia en object storage.
-- Pro: costo/escala.
-- Contra: control de acceso extra.
-- Mitigación: signed URLs de vida corta.
+No hay un unico consumidor runtime que obligue a escoger uno.
 
-## 7. Observabilidad y NFR
-- p95 ingest->cola visible < 10s.
-- Availability API/WS objetivo 99.5% mensual.
-- 100% transiciones con actor/timestamp.
-- Métricas: ingest latency, popup delivery, correlation success/ambiguous, notification delivery, source availability, MTTD/MTTR.
+### Cliente API no alineado
 
-## 8. Riesgos técnicos
-1) ANPR variable -> manual review + confidence.
-2) Microcortes Starlink -> retry + idempotencia + buffering corto.
-3) Ruido de reglas -> calibración y versionado de reglas.
-4) Fuga cross-tenant -> guardrails de consulta + pruebas negativas.
+`lib/api.ts` consume rutas tipo:
+- `/alerts`
+- `/rules`
+- `/vehicle-entries`
+- `/case-files`
 
-## 9. Gestión de Configuración (ConfigLoader)
+Ninguna de esas rutas esta implementada en `src/` ni en `backend/src/` con ese contrato.
 
-Toda configuración de runtime vive en la base de datos. El **único dato externo** son las credenciales para conectarse a la BD (`connection-config.json`, siempre en `.gitignore`).
+## Lectura pragmatica del estado actual
 
-### Archivo de credenciales (solo local)
-- **Archivo template commiteado:** `connection-config.template.json`
-- **Archivo real (gitignored):** `connection-config.json`
-- Estructura: `{ environment: 0|1, development: {...}, production: {...} }`
-- `environment: 0` → usa bloque `development`; `1` → `production`
+Hoy el repositorio funciona mas como combinacion de:
+- frontend de demostracion bastante avanzado
+- backend contractual minimo para eventos
+- backend de seguridad paralelo
+- bundle SQL de diseño muy completo
 
-### Tablas en BD
-- `gen_configuracion_grupos` — grupos de parámetros (jwt, system, dahua, storage, etc.)
-- `gen_configuracion_parametros` — define cada parámetro: ruta, tipo, si es sensible, si es requerido
-- `gen_configuracion_valores` — valor activo de cada parámetro, con historial de versiones
+No funciona todavia como un sistema unico desplegable de punta a punta sin trabajo de consolidacion.
 
-### Patrón ConfigLoader (Singleton)
+## Prioridades naturales si se quiere unificar la arquitectura
 
-```
-Arranque del sistema:
-1. Leer connection-config.json → credenciales de BD
-2. Conectar a MySQL
-3. ConfigLoader.initialize() → carga todos los parámetros activos de gen_configuracion_*
-4. Cachear resultado (TTL 5 minutos)
-5. Todo módulo lee config con ConfigLoader.getValue('jwt.secret')
-```
-
-**API:**
-- `initialize()` — async, ejecutar una vez al arrancar, idempotente
-- `getValue('ruta.completa')` — síncrono, retorna el valor
-- `hasConfig('ruta')` — síncrono, booleano
-- `reloadConfig()` — async, recarga desde BD sin reiniciar
-
-### Reglas absolutas
-- Nunca hardcodear valores de configuración en código
-- Nunca loguear parámetros con `es_sensible = 1`
-- Validar parámetros con `es_requerido = 1` al arrancar; si falta alguno → error fatal
+1. Elegir un unico backend fuente de verdad: `src/` o `backend/src/`.
+2. Alinear `lib/api.ts` y `hooks/use-realtime.ts` con ese backend.
+3. Elegir un unico modelo SQL operativo.
+4. Conectar auth, eventos, reglas y escalacion a persistencia real.
 
 ---
-
-## 10. Integración Dahua HTTP API v3.26
-
-El Edge Connector se conecta a los NVRs Dahua usando la HTTP API v3.26. Flujo de integración:
-
-### Autenticación
-- Token de sesión via `POST /cgi-bin/api/TokenManager/createToken`.
-- Token de corta duración; el conector renueva antes de expiración.
-- Credenciales por dispositivo almacenadas cifradas en secrets del conector.
-
-### Suscripción a eventos (streaming SSE multipart)
-- `GET /cgi-bin/snapManager.cgi?action=attachFileProc&Flags[]=Event`
-- Respuesta `multipart/x-mixed-replace` continua.
-- Heartbeat configurable (1-60 segundos) para detección de desconexión.
-- Eventos recibidos: `VideoMotion`, `VideoLoss`, `VideoBlind`, `FaceDetection`, `FaceRecognition`, `TrafficJunction`, `TrafficOverSpeed`, `CrossLineDetection`, `CrossRegionDetection`, `WanderDetection`, `LeftDetection`, `AlarmLocal`, `StorageFailure`, `StorageLowSpace`.
-- El conector persiste cada evento en `dah_evento_crudo` antes de procesarlo.
-
-### Polling de estado de cámaras
-- `POST /cgi-bin/api/LogicDeviceManager/getCameraState` cada 30s.
-- Actualiza `sal_estado_fuente` con latencia y estado online/offline.
-- Alternativa de suscripción push: `POST /cgi-bin/api/LogicDeviceManager/attachCameraState`.
-
-### Búsqueda de archivos multimedia
-- Sesión de búsqueda via `mediaFileFind.cgi?action=factory.create`.
-- Query por canal, rango de tiempo y tipo (`dav`, `mp4`, `jpg`).
-- Resultados indexados en `dah_archivo_grabacion`.
-- Descarga via `GET /cgi-bin/RPC_Loadfile/<Filename>` con token activo.
-
-### Snapshots bajo demanda
-- `GET /cgi-bin/snapshot.cgi?channel=<n>` con token activo.
-- Almacenados en object storage, referenciados en tabla `dah_snapshot`.
-
-### Gestión de estado de grabación
-- `POST /cgi-bin/api/recordManager/getStateAll` para estado de todos los canales.
-
-## 11. Decisiones abiertas (aprobación humana)
-- Ventana temporal inicial de correlación por tenant.
-- Canal secundario de notificación interna además de in-app/WS.
-- Política final de retención de clips (90 días sugerido).
-- Listado completo de `event_codes` Dahua a suscribir por instalación (depende de capacidades del NVR físico).
-- Frecuencia de polling de estado de cámaras (30s default vs menor latencia vs carga LAN).
-
----
-*Última actualización: 2026-06-08*
+Ultima actualizacion basada en codigo: 2026-06-09

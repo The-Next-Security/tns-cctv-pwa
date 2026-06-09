@@ -1,85 +1,121 @@
 # STREAMING.md
 
-<!-- ARC_TASK:t_57457627 -->
+## Objetivo
 
-## 1. Objetivo
-Definir estrategia de video para el MVP según tipo de cliente y criticidad operacional, usando WebRTC y HLS sin ampliar alcance fuera del PRD.
+Este documento describe la estrategia de streaming que realmente existe hoy en la aplicacion. La respuesta corta es: no hay stack de streaming operacional; hoy existe una simulacion visual de snapshot y video demo.
 
-## 2. Estrategia por tipo de cliente
-| Cliente/escenario | Protocolo primario | Fallback | Meta latencia |
-|---|---|---|---|
-| Guardia - popup crítico (M12) | WebRTC | HLS -> snapshot | 0.5s-2s |
-| Guardia/Admin - detalle evento (M5) | HLS | snapshot/clip | 6s-12s |
-| Admin - historial/auditoría | HLS | descarga clip | no crítico realtime |
-| OPS - verificación de fuente (M11) | snapshot bajo demanda | HLS | no crítico realtime |
-| Navegador móvil PWA | HLS | snapshot | 6s-15s |
+## Estado real actual
 
-## 3. Decisión MVP
-1) WebRTC acotado a popup operativo crítico.
-2) HLS para revisión e historial.
-3) Snapshot/clip firmado como baseline obligatorio.
+### Snapshot
 
-Rationale:
-- WebRTC para todos los casos elevaría complejidad (TURN/NAT/costo) sin beneficio proporcional en MVP.
+Archivos fuente:
+- `lib/demo-media.ts`
+- `components/operacion/alert-dialog.tsx`
+- `components/operacion/alert-popup.tsx`
+- `app/(dashboard)/operacion/alerta/[id]/page.tsx`
 
-## 4. Flujo operativo
-1. WS `event.popup` llega al cliente.
-2. Front solicita sesión de stream para `event_id`.
-3. Intenta WebRTC (timeout corto, p.ej. 2-3s).
-4. Si falla, fallback automático a HLS.
-5. Si HLS falla, mostrar snapshot firmado y registrar degradación.
+Comportamiento real:
+- los snapshots salen de assets demo bajo `/demo/*`
+- `resolveSnapshotUrl(...)` decide la imagen
+- no existe firma backend de snapshot en la UI principal
+- no existe fetch a NVR ni object storage real desde estas pantallas
 
-## 5. Contratos auxiliares de streaming
-### POST /api/v1/events/{event_id}/stream-session
-Response ejemplo:
-```json
-{
-  "event_id":"evt_01",
-  "preferred_protocol":"WEBRTC",
-  "webrtc":{
-    "offer_endpoint":"/api/v1/streams/webrtc/offer",
-    "ice_servers":[{"urls":["stun:stun.l.google.com:19302"]}],
-    "token":"strm_tok_...",
-    "expires_at":"2026-05-28T19:06:00Z"
-  },
-  "hls":{
-    "playlist_url":"https://.../index.m3u8?sig=...",
-    "expires_at":"2026-05-28T19:06:00Z"
-  },
-  "snapshot":{"url":"https://.../frame.jpg?sig=..."}
-}
-```
+### Video
 
-### POST /api/v1/streams/webrtc/offer
-Request:
-```json
-{"event_id":"evt_01","sdp_offer":"v=0...","token":"strm_tok_..."}
-```
-Response:
-```json
-{"sdp_answer":"v=0...","expires_at":"2026-05-28T19:06:00Z"}
-```
+Archivos fuente:
+- `components/operacion/live-camera-panel.tsx`
+- `lib/demo-media.ts`
 
-## 6. Seguridad
-- URLs HLS/snapshot firmadas y expirables.
-- Token efímero WebRTC scope: tenant_id + user_id + event_id.
-- RBAC previo a credenciales de stream.
-- Nunca exponer endpoint directo de NVR/cámara a cliente.
+Comportamiento real:
+- el panel reproduce un `mp4` local en loop
+- URL por defecto: `/demo/live-feed-loop.mp4`
+- autoplay, loop, muted, playsInline
+- el texto "Dahua · Stream demo" esta hardcodeado en la UI
 
-## 7. Observabilidad de streaming
-Métricas:
-- `stream_webrtc_connect_success_ratio`
-- `stream_webrtc_connect_time_ms`
-- `stream_fallback_to_hls_ratio`
-- `stream_hls_startup_time_ms`
-- `stream_snapshot_fallback_ratio`
+Conclusion:
+- hoy no hay WebRTC
+- hoy no hay HLS
+- hoy no hay negociacion de sesion
+- hoy no hay bridge con NVR ni con un media server
 
-Alertas:
-- Aumento sostenido fallback WebRTC->HLS.
-- Fallas HLS sobre umbral.
+## Superficies UI que consumen video demo
 
-## 8. Límites MVP
-Fuera de alcance:
-- VMS completo multi-cámara low-latency para todos los perfiles.
-- Optimización adaptativa avanzada de bitrate multi-perfil.
-- Analítica de video en tiempo real fuera de eventos PRD.
+### `AlertDialog`
+
+Tiene tabs:
+- `Snapshot`
+- `Video`
+
+El tab `Video` monta `LiveCameraPanel`.
+
+### `AlertPopup`
+
+Tambien tiene tabs:
+- `Snapshot`
+- `Video`
+
+Tambien monta `LiveCameraPanel`.
+
+### Detalle de alerta
+
+`app/(dashboard)/operacion/alerta/[id]/page.tsx` hoy muestra snapshot, pero no negocia una sesion de stream ni ofrece WebRTC/HLS real.
+
+## Endpoints de streaming reales
+
+No existen hoy en el backend:
+- `POST /api/v1/events/{event_id}/stream-session`
+- `POST /api/v1/streams/webrtc/offer`
+- playlists HLS
+- signed URLs de video operacional
+
+Lo mas cercano a evidencia real es:
+- `POST /api/v1/evidence/sign` en `backend/src/app.js`
+
+Pero ese endpoint solo firma un `object_url`; no entrega una sesion de streaming.
+
+## Realtime y streaming no estan integrados
+
+La app si tiene conceptos de realtime visual, pero hoy estan desconectados del video:
+
+- frontend espera `socket.io` en `/realtime`
+- backend real ofrece `ws` en `/ws/operations`
+- el evento realtime real hoy es `event.popup`
+- ese evento no abre ni negocia ningun stream
+
+## Que si esta resuelto hoy
+
+1. La UX visual de cambiar entre snapshot y video demo.
+2. El layout responsive del panel.
+3. La presentacion de overlays operacionales:
+   - reloj
+   - badge "EN VIVO"
+   - nombre de camara
+   - fps demo
+
+## Que no esta resuelto hoy
+
+1. Transporte de video real.
+2. Fallback entre protocolos.
+3. Session tokens de media.
+4. Control de acceso por tenant/rol sobre video.
+5. Degradacion operacional medida con metricas reales.
+6. Integracion con Dahua HTTP API o RTSP/RTMP.
+
+## Lectura tecnica correcta
+
+Hoy la "capa de streaming" del producto es realmente una capa de demo media:
+- snapshot demo
+- clip demo
+- UI ya preparada para alojar un stream real
+
+Eso sirve para validacion UX, no para operacion CCTV en produccion.
+
+## Siguiente paso natural si se implementa de verdad
+
+1. Elegir protocolo real por caso de uso: WebRTC o HLS.
+2. Implementar backend de sesion de media.
+3. Vincular `event_id` con evidencia y stream source reales.
+4. Reemplazar `demo-media.ts` por resolucion de media autenticada.
+
+---
+Ultima actualizacion basada en codigo: 2026-06-09

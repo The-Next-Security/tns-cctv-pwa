@@ -1,83 +1,265 @@
 # SECURITY.md
 
-<!-- ARC_TASK:t_57457627 -->
+## Objetivo
 
-## 1. Objetivo
-Controles de seguridad para MVP CCTV: JWT, RBAC, aislamiento multi-tenant, secretos, CORS y auditoría.
+Este documento refleja los controles de seguridad que realmente existen hoy en el codigo. No asume hardening futuro ni controles del PRD que todavia no estan implementados.
 
-## 2. Auth JWT (M1)
-- Access token corto (ej. 15 min).
-- Refresh token persistido como hash en `auth_sessions`.
-- Logout revoca refresh.
-- Claims mínimos: `sub`, `tenant_id`, `role`, `site_ids`, `iat`, `exp`, `jti`.
-- Firma recomendada: RS256/ES256 con `kid` para rotación.
+## Resumen real por capa
 
-## 3. Autorización RBAC (M13)
-Roles:
-- GUARD
-- ADMIN
-- OPS
-- SUPERADMIN_TNS
+### Frontend
 
-Reglas:
-1) Deny-by-default.
-2) Verificar rol + tenant + site scope en cada endpoint.
-3) Endpoints sensibles:
-- `/rules*` solo ADMIN/SUPERADMIN_TNS.
-- `/health/checks/run` solo OPS/SUPERADMIN_TNS.
+Archivos fuente:
+- `components/providers/auth-provider.tsx`
+- `app/(auth)/login/page.tsx`
+- `lib/auth.ts`
+- `lib/demo-users.ts`
 
-## 4. Multi-tenant estricto
-- Todas las tablas de dominio incluyen `tenant_id`.
-- Toda query debe filtrar `tenant_id`.
-- Evidencia por prefijo aislado (`/<tenant_id>/...`).
-- WS separado por topics tenant/site.
+Estado real:
+- autenticacion demo
+- cualquier email y password no vacios permiten login
+- se persiste un token falso en `localStorage`
+- la autorizacion de rutas es local y basada en roles mock
 
-## 5. Seguridad de ingesta edge
-- Credencial técnica por conector tenant/site.
-- TLS obligatorio.
-- `X-Idempotency-Key` + hash payload para deduplicación/replay control.
-- Validar `tenant_id/site_id` contra identidad del conector.
+Implicancias:
+- no existe seguridad real de identidad en la UI
+- el control de acceso del frontend sirve para demo UX, no para enforcement real
 
-## 6. CORS
-- Allowlist explícita de origins (sin wildcard abierto).
-- Métodos: GET, POST, PATCH, DELETE, OPTIONS.
-- Headers permitidos: Authorization, Content-Type, X-Request-Id, X-Idempotency-Key.
-- No combinar `*` con credenciales.
+### Backend contractual en `src/`
 
-## 7. Gestión de secretos
-- Secretos solo en vault/env seguros, nunca en repo.
-- Rotación de claves JWT y credenciales técnicas.
-- Mínimo privilegio por servicio.
-- Enmascarar secretos en logs.
+Archivos fuente:
+- `src/app.js`
+- `src/errors.js`
+- `src/wsHub.js`
 
-## 8. Hardening API/WS
-- Rate limit por IP/user/tenant.
-- Protección brute force en login.
-- Límite de tamaño payload.
-- Sanitización de campos texto (`comment`, `notes`).
-- WS heartbeat obligatorio y cierre en token inválido/expirado.
+Estado real:
+- usa `helmet()`
+- usa `cors()` sin allowlist explicita
+- genera y propaga `x-request-id`
+- valida payloads con `zod`
+- no exige auth para ingest, list, detail ni state transition
+- no aplica tenant scope
 
-## 9. Auditoría (M14)
-- Propagar `X-Request-Id` en todo request/response.
-- Registrar acciones críticas en `api_audit_log`.
-- Registrar timeline en cambios de estado y correlaciones manuales.
+Implicancias:
+- tiene buenas bases de validacion y trazabilidad
+- no puede considerarse seguro para multi-tenant real
 
-Eventos a auditar:
-- login fail/success
-- refresh/logout
-- cambios reglas
-- cambios estado evento
-- correlación manual speed case
-- ejecución manual health check
+### Backend PoC en `backend/src/`
 
-## 10. Retención y privacidad
-- Minimizar PII en responses según rol.
-- Audit y timeline: 12 meses.
-- Evidencia pesada: 90 días (ajustable por política).
-- URLs firmadas de evidencia con expiración corta.
+Archivos fuente:
+- `backend/src/app.js`
+- `backend/tests/security.test.js`
 
-## 11. Riesgos y mitigación
-1) Fuga cross-tenant -> guardrails de repositorio + pruebas negativas.
-2) Token comprometido -> expiración corta + revocación refresh + rotación claves.
-3) CORS mal configurado -> checklist de release y validación automática.
-4) Conector comprometido -> credenciales por sitio, revocación inmediata, rotación.
+Estado real:
+- access token JWT HS256
+- refresh token JWT HS256 con rotacion y revocacion in-memory
+- auth middleware para rutas protegidas
+- tenant/site scope por query params
+- firma de URL de evidencia
+- auditoria in-memory
+
+Implicancias:
+- es la capa con controles mas cercanos a un backend real
+- sigue siendo un PoC paralelo, no el backend unificado del sistema
+
+## Auth actual
+
+### Frontend
+
+Login real:
+- `AuthProvider.login()` acepta cualquier combinacion no vacia
+- crea `mock_token_<timestamp>`
+- deriva usuario desde `lib/demo-users.ts`
+
+Esto no llama a `/api/v1/auth/login`.
+
+### Backend `src/`
+
+Solo existe:
+- `POST /api/v1/auth/login`
+
+No existen en esta superficie:
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me`
+
+### Backend `backend/src/`
+
+Si existen:
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/logout`
+
+Controles reales:
+- refresh rotation
+- refresh revocation
+- rechazo de refresh reutilizado
+
+Eso esta cubierto por `backend/tests/security.test.js`.
+
+## Autorizacion y RBAC
+
+### En frontend
+
+`lib/auth.ts` implementa:
+- matriz de permisos por string
+- `hasPermission(role, permission)`
+- `canAccessRoute(role, path)`
+- `getDefaultRoute(role)`
+
+Roles reales del frontend:
+- `vigilante`
+- `recepcion`
+- `recepcionista`
+- `responsable_seguridad`
+- `admin_parque`
+- `soporte_tns`
+- `supervisor`
+- `tecnico`
+- `visualizador`
+
+### En backend `src/`
+
+No existe RBAC hoy.
+
+### En backend `backend/src/`
+
+Existe control parcial:
+- verifica bearer token
+- limita `tenant_id`
+- limita `site_id`
+
+No existe aun una matriz completa de permisos por endpoint.
+
+## Multi-tenant
+
+### En frontend
+
+No existe enforcement real. Solo mock data por contexto visual.
+
+### En backend `src/`
+
+No existe tenant isolation real.
+
+### En backend `backend/src/`
+
+Si existe una forma minima:
+- `tenantScope()` compara `tenant_id` consultado contra `req.user.tenant_id`
+- tambien revisa `site_id` contra `req.user.site_ids`
+
+Ese control esta probado.
+
+## CORS y cabeceras
+
+### `src/app.js`
+
+Realidad actual:
+- `cors()` abierto
+- no hay allowlist
+- no hay configuracion de metodos ni headers explicitos
+
+### `backend/src/app.js`
+
+Realidad actual:
+- no aplica `cors()`
+- no aplica `helmet()`
+
+## Secretos y claves
+
+### `src/app.js`
+
+Usa fallback duro:
+- `process.env.JWT_SECRET || 'dev-secret'`
+
+### `backend/src/app.js`
+
+Usa secretos hardcodeados:
+- `ACCESS_SECRET = 'access-secret-rs256-simulated'`
+- `REFRESH_SECRET = 'refresh-secret-rs256-simulated'`
+
+Conclusion:
+- no existe vault
+- no existe rotacion real de claves
+- no existe separacion segura por ambiente dentro de estos prototipos
+
+## Auditoria
+
+### Backend `src/`
+
+No persiste auditoria.
+
+### Backend `backend/src/`
+
+Si registra en memoria:
+- `tenant_id`
+- `actor_user_id`
+- `actor_type`
+- `action`
+- `entity_type`
+- `entity_id`
+- `request_id`
+- `payload`
+- `created_at`
+
+Endpoint real:
+- `GET /api/v1/audit-logs`
+
+## Evidencia y acceso a media
+
+### Frontend
+
+La evidencia es demo:
+- snapshots desde `/demo/*`
+- video en loop desde `/demo/live-feed-loop.mp4`
+
+### Backend `backend/src/`
+
+Implementa:
+- `POST /api/v1/evidence/sign`
+
+Comportamiento real:
+- recibe `object_url`, `checksum_sha256`, `ttl_seconds`
+- devuelve `signed_url` con hash SHA256
+- TTL maximo 300 segundos
+
+No existe validacion posterior de acceso real a object storage en este repo.
+
+## Realtime
+
+### Frontend
+
+Espera:
+- `socket.io`
+- `/realtime`
+
+### Backend real
+
+Ofrece:
+- `ws`
+- `/ws/operations`
+
+Desde seguridad, esto importa porque hoy no hay un canal realtime autenticado y unificado entre UI y backend.
+
+## Controles que faltan hoy
+
+- rate limiting
+- brute force protection
+- allowlist CORS
+- session storage persistente
+- revocacion persistente
+- RBAC backend unificado
+- secretos por ambiente seguros
+- auditoria persistente
+- aislamiento multi-tenant end-to-end
+- autenticacion del canal realtime
+
+## Lectura honesta del estado actual
+
+La seguridad hoy esta repartida asi:
+- frontend: demo UX
+- `src/`: validacion y trazabilidad basica
+- `backend/src/`: PoC de auth y tenant scope
+
+Todavia no existe una historia de seguridad completa y coherente de punta a punta.
+
+---
+Ultima actualizacion basada en codigo: 2026-06-09

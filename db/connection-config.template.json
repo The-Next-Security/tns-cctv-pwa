@@ -1,0 +1,24 @@
+{
+  "_comment": "Copiar como db/connection-config.json y completar localmente. El archivo real esta ignorado por Git.",
+  "environment": 0,
+  "development": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "username": "tns_cctv_app",
+    "password": "CHANGE_ME",
+    "database": "tns_cctv",
+    "pool": {
+      "max_size": 10
+    }
+  },
+  "production": {
+    "host": "YOUR_PROD_HOST",
+    "port": 3306,
+    "username": "YOUR_PROD_USER",
+    "password": "CHANGE_ME",
+    "database": "tns_cctv",
+    "pool": {
+      "max_size": 20
+    }
+  }
+}

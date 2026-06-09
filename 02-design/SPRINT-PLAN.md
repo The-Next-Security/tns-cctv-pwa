@@ -1,158 +1,176 @@
 # SPRINT-PLAN.md
 
-<!-- ARC_TASK:t_57457627 -->
+## Objetivo
 
-## 1. Enfoque
+Este archivo ya no es un plan teorico. Es un tablero de estado basado en el codigo actual del repositorio al 2026-06-09 y una priorizacion realista de los siguientes pasos.
 
-- Sprints de 1 semana.
-- Alcance estricto PRD (M1..M14 + S1..S3 según capacidad) + integración Dahua HTTP API v3.26.
-- Perfiles: dev-back, dev-front, qa, ops.
+## Estado global actual
 
-Estimación:
-- S: 0.5-1d
-- M: 1-2d
-- L: 2-3d
-- XL: 3-5d
+### Lo que si existe hoy
 
-Estado de tareas:
-- ✅ Completado
-- 🔄 En progreso
-- ⬜ Pendiente
+- Frontend demo amplio en App Router con design system consistente.
+- Consola operativa funcional sobre `MOCK_ALERTS`.
+- Login demo con persistencia local.
+- Editor de reglas con CRUD local en memoria.
+- Recepcion de ingresos con estado local.
+- Expedientes con fallback mock.
+- Reportes y salud tecnica a nivel UI.
+- Backend contractual minimo para eventos en `src/`.
+- Backend de seguridad paralelo en `backend/src/`.
+- Bundle SQL completo y bundle SQL simplificado versionados.
+
+### Lo que no existe integrado
+
+- flujo end-to-end frontend -> backend -> base de datos
+- auth real en la UI
+- alineacion de cliente API con backend real
+- realtime compatible entre UI y backend
+- persistencia real de reglas, alertas, ingresos y expedientes
+
+## Estado por workstream
+
+| Workstream | Estado real | Evidencia en codigo |
+|---|---|---|
+| UI dashboard y design system | Implementado | `app/`, `components/`, `styles/` |
+| Auth de frontend | Demo | `components/providers/auth-provider.tsx` |
+| Consola operativa | Implementada en mock | `app/(dashboard)/operacion/page.tsx` |
+| Flujo de escalacion | Parcial/demo | `components/operacion/escalate-sheet.tsx` |
+| Reglas operativas UI | Implementadas en memoria | `app/(dashboard)/reglas/page.tsx` |
+| Recepcion | Implementada en memoria | `app/(dashboard)/recepcion/page.tsx` |
+| Expedientes | Parcial con fallback mock | `app/(dashboard)/expedientes/*`, `lib/mock-case-files-api.ts` |
+| Reportes | UI implementada | `app/(dashboard)/reportes/page.tsx` |
+| Salud tecnica | UI implementada | `app/(dashboard)/salud/page.tsx` |
+| Backend HTTP/WS minimo | Parcial pero probado | `src/` |
+| Backend de hardening | Parcial y paralelo | `backend/src/app.js` |
+| SQL completo | Diseñado y validado estaticamente | `db/sql_files/` |
+| Testing integrado | Inestable | `npm test` falla hoy |
+
+## Backend real: estado por capability
+
+### `src/` contrato MVP
+
+Implementado:
+- login
+- ingest con idempotencia in-memory
+- list de eventos
+- detail de evento
+- patch de estado
+- WS `event.popup`
+
+Faltante:
+- auth en endpoints operativos
+- filtros reales
+- persistencia
+- rules
+- admissions
+- speed cases
+- notifications
+- health
+
+### `backend/src/` hardening PoC
+
+Implementado:
+- login
+- refresh
+- logout
+- ingest autenticado
+- tenant/site scope
+- evidencia firmada
+- audit logs
+
+Faltante:
+- detail de eventos
+- state transitions
+- integracion con UI
+- persistencia real
+
+## Frontend real: estado por modulo
+
+### Operacion
+
+Implementado:
+- tablero, filtros y vistas por estado
+- popup demo
+- dialogo de alerta
+- escalacion UI
+
+Limitacion:
+- opera sobre `MOCK_ALERTS`
+- no usa el backend real
+
+### Reglas
+
+Implementado:
+- listado
+- crear
+- editar
+- clonar
+- eliminar
+- activar/desactivar
+
+Limitacion:
+- todo vive en `useState`
+- no existe backend `/rules`
+
+### Recepcion y expedientes
+
+Implementado:
+- forms y tablas de UI
+- fallback mock para expedientes
+
+Limitacion:
+- no hay persistencia real
+
+## SQL: estado por profundidad
+
+- `db/sql_files/01_CreacionDesdeCero/*`: bundle mas completo
+- `db/sql_files/01_ddl.sql`: bundle core simplificado
+- `db/migrations/001_init.sql`: bootstrap minimo
+
+Limitacion:
+- ningun backend actual usa estos esquemas en runtime
+
+## Estado de pruebas hoy
+
+### Resultado real de `npm test`
+
+Hoy falla por varias razones estructurales:
+- mezcla de tests CommonJS/Jest dentro de un root con `"type": "module"`
+- suites que usan `describe`/`test` sin entorno configurado
+- `supertest` rompe por dependencia faltante de `asynckit`
+- `src/server.js` no corre como CommonJS bajo este runner
+
+Conclusion:
+- la suite root no es hoy un gate confiable
+
+## Plan realista de ejecucion
+
+### Fase 1: unificacion tecnica minima
+
+1. Elegir un solo backend fuente de verdad: `src/` o `backend/src/`.
+2. Alinear `lib/api.ts` con ese backend.
+3. Alinear `hooks/use-realtime.ts` con ese backend.
+4. Hacer pasar una sola suite de pruebas consistente.
+
+### Fase 2: persistencia real
+
+1. Elegir un solo modelo SQL operativo.
+2. Conectar auth, eventos, reglas y admissions a DB.
+3. Reemplazar mutaciones locales por endpoints reales.
+
+### Fase 3: cierre de gaps funcionales
+
+1. Implementar escalacion segun la nueva especificacion.
+2. Implementar rules backend.
+3. Implementar speed cases y correlacion.
+4. Implementar health monitor real.
+
+## Prioridades sugeridas si se continua hoy
+
+1. Resolver la desalineacion frontend/backend.
+2. Consolidar un solo backend.
+3. Consolidar un solo esquema SQL.
+4. Rehabilitar pruebas.
 
 ---
-
-## 2. Estado actual del proyecto (2026-06-08)
-
-**Frontend (Next.js PWA):** Avanzado — consola operativa funcional con mock data, design system integrado, gestión de alertas, reglas, admissions, speed cases, health monitor.
-
-**Backend:** Arquitectura y contratos definidos. Implementación pendiente.
-
-**Base de datos:** DDL completo diseñado. Migración pendiente de ejecución.
-
-**Integración Dahua:** Documentada. Edge Connector pendiente de implementación.
-
----
-
-## 3. Plan por sprint
-
-### Sprint 1: Fundaciones contractuales y seguridad ✅ DISEÑO COMPLETO
-**Semana:** Semana de diseño (completada)
-**Objetivo:** M1 + M13 + M14 base.
-
-| Tarea | Perfil | Tamaño | Estado |
-|---|---|---|---|
-| Auth login/refresh/logout JWT + sesiones refresh | dev-back | XL | ⬜ |
-| Middleware RBAC + tenancy guard | dev-back | L | ⬜ |
-| Error estándar + `X-Request-Id` | dev-back | M | ⬜ |
-| Tablas base tenant/site/users/sessions/audit + migraciones | dev-back | L | ⬜ |
-| Login/logout + refresh handling frontend | dev-front | L | ✅ (mock) |
-| Guardas por rol en rutas | dev-front | M | ✅ (mock) |
-| Manejo global de errores contractuales | dev-front | S | ⬜ |
-| Matriz auth/RBAC y negativas 401/403 | qa | M | ⬜ |
-| Validación envelope de error/request_id | qa | S | ⬜ |
-| Entorno base app+mysql+redis+storage | ops | L | ⬜ |
-| Secretos por ambiente y rotación inicial | ops | M | ⬜ |
-
----
-
-### Sprint 2: Ingesta + cola + detalle
-**Semana objetivo:** 2026-06-09 al 2026-06-13
-**Objetivo:** M2, M4, M5.
-
-| Tarea | Perfil | Tamaño | Estado |
-|---|---|---|---|
-| POST `/ingest/events` idempotente | dev-back | XL | ⬜ |
-| GET `/events` filtros/paginación | dev-back | L | ⬜ |
-| GET `/events/{id}` + timeline + evidencia | dev-back | L | ⬜ |
-| Cola operativa conectada a API real | dev-front | L | 🔄 (mock) |
-| Detalle evento + timeline + evidencia | dev-front | L | 🔄 (mock) |
-| Pruebas idempotencia | qa | M | ⬜ |
-| Pruebas filtros/paginación y detalle | qa | M | ⬜ |
-| Métricas ingest->visible y errores ingest | ops | M | ⬜ |
-| Configuración bucket por tenant | ops | S | ⬜ |
-
----
-
-### Sprint 3: Estados + reglas + WS
-**Semana objetivo:** 2026-06-16 al 2026-06-20
-**Objetivo:** M6, M7, M12.
-
-| Tarea | Perfil | Tamaño | Estado |
-|---|---|---|---|
-| PATCH state con state machine | dev-back | L | ⬜ |
-| CRUD `/rules` + evaluator runtime | dev-back | XL | ⬜ |
-| WS `/ws/operations` server/client events | dev-back | XL | ⬜ |
-| Popup operativo + ack.popup realtime | dev-front | L | 🔄 (mock) |
-| Actualización realtime de cola via WS | dev-front | L | ⬜ |
-| UI admin reglas conectada a API | dev-front | L | 🔄 (mock) |
-| Flujo ESCALAR con prerequisito LLAMAR | dev-front | M | 🔄 (ver escalar.md) |
-| Pruebas transiciones válidas/inválidas | qa | M | ⬜ |
-| Pruebas WS auth+mensajes | qa | L | ⬜ |
-| Redis fanout + monitoreo conexiones WS | ops | M | ⬜ |
-| Alertas de degradación realtime | ops | S | ⬜ |
-
----
-
-### Sprint 4: Admissions + speed cases + Dahua connector
-**Semana objetivo:** 2026-06-23 al 2026-06-27
-**Objetivo:** M3, M8, M9/S2 + Edge Connector Dahua.
-
-| Tarea | Perfil | Tamaño | Estado |
-|---|---|---|---|
-| `/admissions` GET/POST/PATCH con auditoría | dev-back | L | ⬜ |
-| `/ingest/speed-events` + speed_case | dev-back | L | ⬜ |
-| `/speed-cases` + correlación automática | dev-back | XL | ⬜ |
-| `manual-correlation` con justificación | dev-back | M | ⬜ |
-| Edge Connector: auth Dahua + suscripción SSE | dev-back | XL | ⬜ |
-| Edge Connector: normalización de eventos Dahua → ingest API | dev-back | L | ⬜ |
-| UI admissions conectada a API | dev-front | L | 🔄 (mock) |
-| UI speed-cases lista/detalle | dev-front | L | 🔄 (mock) |
-| Flujo manual review correlación | dev-front | M | 🔄 (mock) |
-| Pruebas admissions manual/ANPR/híbrido | qa | M | ⬜ |
-| Pruebas correlación match/no-match/ambiguous | qa | L | ⬜ |
-| Pruebas conector: reintento y heartbeat | qa | M | ⬜ |
-| Jobs correlación diferida + retry seguro | ops | M | ⬜ |
-| Métricas éxito/ambigüedad correlación | ops | S | ⬜ |
-
----
-
-### Sprint 5: Notificaciones + salud + cierre MVP
-**Semana objetivo:** 2026-06-30 al 2026-07-04
-**Objetivo:** M10, M11, S1, S3.
-
-| Tarea | Perfil | Tamaño | Estado |
-|---|---|---|---|
-| `/notifications` + outbox/reintentos + `/test` | dev-back | L | ⬜ |
-| `/health/sources`, `/health/incidents`, `/health/checks/run` | dev-back | L | ⬜ |
-| `/exports/events.csv` | dev-back | M | ⬜ |
-| Hardening final seguridad/performance | dev-back | L | ⬜ |
-| Centro de notificaciones UI | dev-front | M | 🔄 (mock) |
-| Vista OPS salud e incidentes conectada a API | dev-front | L | 🔄 (mock) |
-| Export CSV desde filtros | dev-front | S | 🔄 (mock) |
-| E2E F1..F5 | qa | XL | ⬜ |
-| Validación consistencia REST/WS | qa | L | ⬜ |
-| Regression + checklist release | qa | M | ⬜ |
-| Dashboards KPI y alertas operativas | ops | M | ⬜ |
-| Runbook incidentes + simulacro recuperación | ops | M | ⬜ |
-
----
-
-## 4. Dependencias críticas
-
-1. Contrato API/WS freeze por sprint para no romper frontend.
-2. QA de contrato desde Sprint 1, no al final.
-3. Observabilidad base desde Sprint 1.
-4. Correlación speed depende de calidad admissions y fuente velocidad.
-5. Edge Connector Dahua requiere acceso LAN al NVR físico para pruebas de integración.
-6. Suscripción SSE Dahua debe probarse con NVR real (simulador no disponible).
-
-## 5. Definition of Done transversal
-
-- Endpoint/documento contractual actualizado.
-- RBAC + tenant isolation cubiertos con pruebas negativas.
-- request_id trazable en logs.
-- Sin scope creep fuera PRD aprobado.
-- Frontend desconectado de mocks, conectado a API real.
-
----
-*Última actualización: 2026-06-08*
+Ultima actualizacion basada en codigo: 2026-06-09
