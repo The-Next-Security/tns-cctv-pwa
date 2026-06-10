@@ -68,8 +68,9 @@ class Store {
     if (!event) return { notFound: true };
 
     const transitions = {
-      NEW: ['IN_REVIEW'],
-      IN_REVIEW: ['CLOSED'],
+      NEW: ['IN_REVIEW', 'ESCALATING'],
+      IN_REVIEW: ['ESCALATING', 'CLOSED'],
+      ESCALATING: ['CLOSED'],
       CLOSED: [],
     };
 

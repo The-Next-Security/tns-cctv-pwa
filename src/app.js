@@ -125,7 +125,7 @@ function createApp(deps = {}) {
   });
 
   app.patch('/api/v1/events/:eventId/state', async (req, res) => {
-    const schema = z.object({ to_state: z.enum(['IN_REVIEW', 'CLOSED']), decision: z.string().min(1), comment: z.string().min(1) });
+    const schema = z.object({ to_state: z.enum(['IN_REVIEW', 'ESCALATING', 'CLOSED']), decision: z.string().min(1), comment: z.string().min(1) });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'invalid payload', req.requestId, parsed.error.issues));
@@ -182,6 +182,96 @@ function createApp(deps = {}) {
       return res.status(400).json(errorEnvelope('INVALID_STATE_TRANSITION', result.reason || 'transición inválida', req.requestId));
     }
     return res.status(200).json({ ...result.alert, request_id: req.requestId });
+  });
+
+  // --- Reglas operativas (solo lectura por ahora) ---
+  app.get('/api/v1/rules', async (req, res) => {
+    if (typeof store.listRules !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'rules no disponible en este store', req.requestId));
+    }
+    const items = await store.listRules();
+    const pagination = { page: 1, page_size: items.length, total: items.length, total_pages: 1 };
+    return res.status(200).json({ items, data: items, pagination, request_id: req.requestId });
+  });
+
+  // --- Salud del sistema (indicador del header) ---
+  app.get('/api/v1/health/system', async (req, res) => {
+    if (typeof store.systemHealth !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'health no disponible en este store', req.requestId));
+    }
+    const health = await store.systemHealth();
+    return res.status(200).json({ ...health, request_id: req.requestId });
+  });
+
+  app.get('/api/v1/health/nvrs', async (req, res) => {
+    if (typeof store.listNvrHealth !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'health no disponible en este store', req.requestId));
+    }
+    // El frontend espera un array plano (fetchApi devuelve el JSON sin desempaquetar).
+    return res.status(200).json(await store.listNvrHealth());
+  });
+
+  // --- Ingresos vehiculares (adm_ingreso) ---
+  app.get('/api/v1/vehicle-entries', async (req, res) => {
+    if (typeof store.listVehicleEntries !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'vehicle-entries no disponible en este store', req.requestId));
+    }
+    const items = await store.listVehicleEntries({ plate: req.query.plate });
+    const pagination = { page: 1, page_size: items.length, total: items.length, total_pages: 1 };
+    return res.status(200).json({ items, data: items, pagination, request_id: req.requestId });
+  });
+
+  app.post('/api/v1/vehicle-entries', async (req, res) => {
+    if (typeof store.createVehicleEntry !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'vehicle-entries no disponible en este store', req.requestId));
+    }
+    const schema = z.object({
+      plate: z.string().min(1),
+      declared_driver_name: z.string().optional(),
+      declared_driver_id: z.string().nullish(),
+      tenant_id: z.union([z.string(), z.number()]).optional(),
+      destination_text: z.string().nullish(),
+      vehicle_type: z.string().nullish(),
+      entry_at: z.string().min(1),
+      observations: z.string().nullish(),
+      plate_source: z.string().optional(),
+      anpr_confidence: z.number().nullish(),
+      review_required: z.boolean().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'invalid payload', req.requestId, parsed.error.issues));
+    }
+    const result = await store.createVehicleEntry(parsed.data, req.user?.sub || null);
+    if (result.invalid) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', result.reason || 'ingreso inválido', req.requestId));
+    }
+    return res.status(201).json({ ...result.entry, request_id: req.requestId });
+  });
+
+  app.patch('/api/v1/vehicle-entries/:entryId', async (req, res) => {
+    if (typeof store.updateVehicleEntry !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'vehicle-entries no disponible en este store', req.requestId));
+    }
+    const schema = z.object({
+      exit_at: z.string().nullish(),
+      observations: z.string().nullish(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'invalid payload', req.requestId, parsed.error.issues));
+    }
+    const ingresoId = await store.resolveIngresoId(req.params.entryId);
+    if (!ingresoId) return res.status(404).json(errorEnvelope('NOT_FOUND', 'entry not found', req.requestId));
+    const result = await store.updateVehicleEntry(ingresoId, parsed.data);
+    if (result.notFound) return res.status(404).json(errorEnvelope('NOT_FOUND', 'entry not found', req.requestId));
+    if (result.unsupported) {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', result.reason, req.requestId));
+    }
+    if (result.invalid) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', result.reason || 'payload vacío', req.requestId));
+    }
+    return res.status(200).json({ ...result.entry, request_id: req.requestId });
   });
 
   app.use((_, res) => res.status(404).json(errorEnvelope('NOT_FOUND', 'route not found', `req_${crypto.randomUUID().slice(0, 8)}`)));

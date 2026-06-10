@@ -62,9 +62,12 @@ function severityToCriticality(n) {
 function stateToStatus(state, closeDecision) {
   if (state === 'NEW') return 'pendiente';
   if (state === 'IN_REVIEW') return 'en_revision';
-  if (closeDecision === 'ESCALATED') return 'escalada';
-  if (closeDecision === 'FALSE_POSITIVE') return 'descartada';
-  return 'resuelta';
+  if (state === 'ESCALATING') return 'escalada';
+  if (state === 'CLOSED') {
+    if (closeDecision === 'FALSE_POSITIVE') return 'descartada';
+    return 'resuelta';
+  }
+  return 'pendiente';
 }
 
 // Surrogate numérico estable para Alert.id (la UI usa números como key).
@@ -83,20 +86,71 @@ function zoneIdFromCode(code) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-function mapAlertRow(r) {
+function parseJsonColumn(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+// ale_regla -> forma `Rule` del frontend (lib/types.ts).
+function mapRuleRow(r) {
+  const cond = parseJsonColumn(r.conditions_json, {});
+  const act = parseJsonColumn(r.actions_json, {});
+  const eventCodes = Array.isArray(cond.event_codes) ? cond.event_codes : [];
+  return {
+    id: surrogateId(r.id_regla),
+    name: r.name,
+    event_codes: eventCodes,
+    event_code_pattern: eventCodes.join('|'),
+    time_from: cond.time_from ?? null,
+    time_to: cond.time_to ?? null,
+    criticality: cond.criticality || 'media',
+    zone_id: zoneIdFromCode(cond.zone_code),
+    priority_popup: !!act.priority_popup,
+    notify_admin: !!act.notify_admin,
+    record_evidence: !!act.record_evidence,
+    can_escalate: !!act.can_escalate,
+    escalation_roles: Array.isArray(act.escalation_roles) ? act.escalation_roles : [],
+    enabled: r.enabled === 1,
+    active: r.enabled === 1,
+  };
+}
+
+// src_fuente -> forma `Camera` del frontend.
+function mapSourceRow(r) {
+  const meta = parseJsonColumn(r.metadata_json, {});
+  return {
+    id: surrogateId(r.id_fuente),
+    name: r.display_name || r.source_code,
+    ip: meta.ip,
+    channel: meta.channel,
+    zone_id: zoneIdFromCode(meta.zone_code),
+    active: r.status === 'ACTIVE',
+  };
+}
+
+function mapAlertRow(r, maps = {}) {
   const zoneId = zoneIdFromCode(r.zone_code);
-  let ruleId = null;
+  let rule = null;
   try {
     const arr = typeof r.matched_rule_ids_json === 'string' ? JSON.parse(r.matched_rule_ids_json) : r.matched_rule_ids_json;
-    if (Array.isArray(arr) && arr.length) ruleId = surrogateId(arr[0]);
+    if (Array.isArray(arr) && arr.length) rule = maps.rules?.get(arr[0]) ?? { id: surrogateId(arr[0]) };
   } catch {
-    ruleId = null;
+    rule = null;
   }
+  const camera = maps.sources?.get(r.id_fuente) ?? null;
   const isoOcc = String(r.occurred_at).replace(' ', 'T') + (String(r.occurred_at).endsWith('Z') ? '' : 'Z');
   return {
     id: surrogateId(r.id_evento),
     event_id: r.id_evento,
-    rule_id: ruleId,
+    rule_id: rule?.id ?? null,
+    rule: rule && rule.name ? rule : undefined,
+    camera_id: camera?.id,
+    camera: camera || undefined,
     zone_id: zoneId,
     event_type: r.event_type,
     event_code: r.event_type,
@@ -109,6 +163,37 @@ function mapAlertRow(r) {
     snapshot_url: null,
     resolution_notes: r.decision_reason || null,
     zone: zoneId ? { id: zoneId, name: ZONE_NAMES[r.zone_code] || r.zone_code, active: true } : undefined,
+  };
+}
+
+function toIso(value) {
+  if (!value) return null;
+  const s = String(value);
+  return s.includes('T') ? s : s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z');
+}
+
+const SOURCE_TYPE_TO_PLATE_SOURCE = { MANUAL: 'manual', ANPR: 'anpr', HYBRID: 'hybrid' };
+
+// adm_ingreso -> forma `VehicleEntry` del frontend.
+// vehicle_type / exit_at / anpr_confidence solo existen tras la migración opcional.
+function mapIngresoRow(r) {
+  return {
+    id: surrogateId(r.id_ingreso),
+    entry_id: r.id_ingreso,
+    plate: r.plate || '',
+    plate_normalized: (r.plate || '').replace(/[^A-Z0-9]/gi, '').toUpperCase(),
+    declared_driver_name: r.visitor_name || '',
+    declared_driver_id: r.visitor_id || null,
+    tenant_id: null,
+    destination_text: r.destination_company || null,
+    vehicle_type: r.vehicle_type ? String(r.vehicle_type).toLowerCase() : null,
+    entry_at: toIso(r.entry_at),
+    exit_at: r.exit_at ? toIso(r.exit_at) : null,
+    registered_by: r.created_by_id_usuario,
+    observations: r.notes || null,
+    created_at: toIso(r.creado_en),
+    plate_source: SOURCE_TYPE_TO_PLATE_SOURCE[r.source_type] || 'manual',
+    anpr_confidence: r.anpr_confidence ?? null,
   };
 }
 
@@ -278,7 +363,32 @@ class MysqlStore {
     }));
   }
 
+  // Mapas de enriquecimiento: reglas y fuentes por id real (CHAR 26).
+  async loadEnrichmentMaps() {
+    const [[ruleRows], [sourceRows]] = await Promise.all([
+      this.pool.query(
+        `SELECT id_regla, name, enabled, conditions_json, actions_json FROM ale_regla`
+      ),
+      this.pool.query(
+        `SELECT id_fuente, source_code, display_name, status, metadata_json FROM src_fuente`
+      ),
+    ]);
+    return {
+      rules: new Map(ruleRows.map((r) => [r.id_regla, mapRuleRow(r)])),
+      sources: new Map(sourceRows.map((r) => [r.id_fuente, mapSourceRow(r)])),
+    };
+  }
+
+  async listRules() {
+    const [rows] = await this.pool.query(
+      `SELECT id_regla, name, enabled, conditions_json, actions_json
+         FROM ale_regla ORDER BY priority_order ASC`
+    );
+    return rows.map(mapRuleRow);
+  }
+
   async listAlerts() {
+    const maps = await this.loadEnrichmentMaps();
     const [rows] = await this.pool.query(
       `SELECT e.*, t.decision AS close_decision
          FROM ale_evento e
@@ -295,19 +405,149 @@ class MysqlStore {
         ORDER BY e.occurred_at DESC
         LIMIT 200`
     );
-    return rows.map(mapAlertRow);
+    return rows.map((r) => mapAlertRow(r, maps));
+  }
+
+  // --- Ingresos vehiculares (adm_ingreso) ---
+
+  // Detecta una sola vez si la migración opcional (vehicle_type, exit_at,
+  // anpr_confidence) fue aplicada; el código funciona en ambos esquemas.
+  async ingresoExtendedColumns() {
+    if (this._ingresoExtCols === undefined) {
+      const [cols] = await this.pool.query(`SHOW COLUMNS FROM adm_ingreso`);
+      const names = new Set(cols.map((c) => c.Field));
+      this._ingresoExtCols = {
+        vehicleType: names.has('vehicle_type'),
+        exitAt: names.has('exit_at'),
+        anprConfidence: names.has('anpr_confidence'),
+      };
+    }
+    return this._ingresoExtCols;
+  }
+
+  async listVehicleEntries({ plate } = {}) {
+    const where = ['1=1'];
+    const params = [];
+    if (plate) {
+      where.push(`REPLACE(REPLACE(UPPER(plate), '-', ''), ' ', '') LIKE ?`);
+      params.push(`%${String(plate).replace(/[^A-Za-z0-9]/g, '').toUpperCase()}%`);
+    }
+    const [rows] = await this.pool.query(
+      `SELECT * FROM adm_ingreso WHERE ${where.join(' AND ')} ORDER BY entry_at DESC LIMIT 200`,
+      params
+    );
+    return rows.map(mapIngresoRow);
+  }
+
+  async getVehicleEntry(ingresoId) {
+    const [rows] = await this.pool.query(`SELECT * FROM adm_ingreso WHERE id_ingreso = ?`, [ingresoId]);
+    return rows[0] ? mapIngresoRow(rows[0]) : null;
+  }
+
+  async resolveIngresoId(idOrSurrogate) {
+    const v = String(idOrSurrogate);
+    if (!/^\d+$/.test(v)) return v;
+    const target = parseInt(v, 10);
+    const [rows] = await this.pool.query(`SELECT id_ingreso FROM adm_ingreso`);
+    const hit = rows.find((r) => surrogateId(r.id_ingreso) === target);
+    return hit ? hit.id_ingreso : null;
+  }
+
+  async defaultTenantSite() {
+    const [rows] = await this.pool.query(
+      `SELECT s.id_tenant, s.id_site FROM gen_site s ORDER BY s.creado_en ASC LIMIT 1`
+    );
+    return rows[0] || null;
+  }
+
+  async resolveActorWithPermission(tenantId, permissionCode, actorUserId) {
+    const [actorRows] = await this.pool.query(
+      `SELECT id_usuario FROM gen_usuario WHERE id_usuario = ? AND id_tenant = ?`,
+      [actorUserId, tenantId]
+    );
+    if (actorRows[0]) return actorRows[0].id_usuario;
+    const [fallback] = await this.pool.query(
+      `SELECT u.id_usuario
+         FROM gen_usuario u
+         LEFT JOIN gen_usuario_permiso up ON up.id_usuario = u.id_usuario
+         LEFT JOIN gen_permiso p ON p.id_permiso = up.id_permiso AND p.code = ?
+        WHERE u.id_tenant = ? AND u.status = 'ACTIVE'
+        ORDER BY (p.id_permiso IS NOT NULL) DESC
+        LIMIT 1`,
+      [permissionCode, tenantId]
+    );
+    return fallback[0]?.id_usuario || null;
+  }
+
+  async createVehicleEntry(data, actorUserId) {
+    const ts = await this.defaultTenantSite();
+    if (!ts) return { invalid: true, reason: 'NO_SITE' };
+    const actor = await this.resolveActorWithPermission(ts.id_tenant, 'vehicle_entries.create', actorUserId);
+    if (!actor) return { invalid: true, reason: 'NO_ACTOR' };
+
+    const ext = await this.ingresoExtendedColumns();
+    const id = genId('IG');
+    const sourceType =
+      { manual: 'MANUAL', anpr: 'ANPR', hybrid: 'HYBRID' }[String(data.plate_source || '').toLowerCase()] || 'MANUAL';
+    const entryAt = String(data.entry_at).replace('T', ' ').replace('Z', '');
+
+    const cols = [
+      'id_ingreso', 'id_tenant', 'id_site', 'plate', 'visitor_id', 'visitor_name',
+      'destination_company', 'source_type', 'entry_at', 'notes', 'review_required', 'created_by_id_usuario',
+    ];
+    const values = [
+      id, ts.id_tenant, ts.id_site, data.plate || null, data.declared_driver_id || null,
+      data.declared_driver_name || null, data.destination_text || 'Sin destino declarado',
+      sourceType, entryAt, data.observations || null, data.review_required ? 1 : 0, actor,
+    ];
+    if (ext.vehicleType && data.vehicle_type) {
+      cols.push('vehicle_type');
+      values.push(String(data.vehicle_type).toUpperCase());
+    }
+    if (ext.anprConfidence && data.anpr_confidence != null) {
+      cols.push('anpr_confidence');
+      values.push(data.anpr_confidence);
+    }
+    await this.pool.query(
+      `INSERT INTO adm_ingreso (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+      values
+    );
+    return { entry: await this.getVehicleEntry(id) };
+  }
+
+  async updateVehicleEntry(ingresoId, data) {
+    const ext = await this.ingresoExtendedColumns();
+    const sets = [];
+    const params = [];
+    if (data.exit_at !== undefined) {
+      if (!ext.exitAt) return { unsupported: true, reason: 'EXIT_AT_COLUMN_MISSING' };
+      sets.push('exit_at = ?');
+      params.push(data.exit_at ? String(data.exit_at).replace('T', ' ').replace('Z', '') : null);
+    }
+    if (data.observations !== undefined) {
+      sets.push('notes = ?');
+      params.push(data.observations);
+    }
+    if (!sets.length) return { invalid: true, reason: 'NO_FIELDS' };
+    params.push(ingresoId);
+    const [result] = await this.pool.query(
+      `UPDATE adm_ingreso SET ${sets.join(', ')} WHERE id_ingreso = ?`,
+      params
+    );
+    if (result.affectedRows === 0) return { notFound: true };
+    return { entry: await this.getVehicleEntry(ingresoId) };
   }
 
   async attendAlert(eventId, action, notes, actorUserId) {
     const ACTION_MAP = {
       acknowledge: { toState: 'IN_REVIEW', decision: 'TOMAR' },
       resolve: { toState: 'CLOSED', decision: 'CONFIRMED' },
-      escalate: { toState: 'CLOSED', decision: 'ESCALATED' },
+      escalate: { toState: 'ESCALATING', decision: 'ESCALATED' },
       discard: { toState: 'CLOSED', decision: 'FALSE_POSITIVE' },
       // alias del vocabulario del frontend existente
       revisada: { toState: 'CLOSED', decision: 'CONFIRMED' },
       descartada: { toState: 'CLOSED', decision: 'FALSE_POSITIVE' },
-      escalada: { toState: 'CLOSED', decision: 'ESCALATED' },
+      escalada: { toState: 'ESCALATING', decision: 'ESCALATED' },
     };
     const target = ACTION_MAP[action];
     if (!target) return { invalid: true, reason: 'UNKNOWN_ACTION' };
@@ -317,14 +557,16 @@ class MysqlStore {
 
     const comment = notes || target.decision;
 
-    // Transición multi-paso: el SP solo permite NEW->IN_REVIEW->CLOSED.
+    // Transición multi-paso: el SP solo permite pasos atómicos válidos.
     if (target.toState === 'CLOSED' && current.state === 'NEW') {
       const step1 = await this.changeState(eventId, 'IN_REVIEW', 'TOMAR', comment, actorUserId);
       if (step1.notFound || step1.invalid) return step1;
     }
     if (target.toState === 'IN_REVIEW' && current.state !== 'NEW') {
-      // ya está en revisión o cerrada: nada que hacer en este paso
       if (current.state === 'IN_REVIEW') return { alert: await this.getAlert(eventId) };
+    }
+    if (target.toState === 'ESCALATING' && current.state === 'ESCALATING') {
+      return { alert: await this.getAlert(eventId) };
     }
 
     const res = await this.changeState(eventId, target.toState, target.decision, comment, actorUserId);
@@ -343,6 +585,7 @@ class MysqlStore {
   }
 
   async getAlert(eventId) {
+    const maps = await this.loadEnrichmentMaps();
     const [rows] = await this.pool.query(
       `SELECT e.*, (
           SELECT lt.decision FROM log_evento_timeline lt
@@ -352,7 +595,7 @@ class MysqlStore {
         FROM ale_evento e WHERE e.id_evento = ?`,
       [eventId]
     );
-    return rows[0] ? mapAlertRow(rows[0]) : null;
+    return rows[0] ? mapAlertRow(rows[0], maps) : null;
   }
 
   async changeState(eventId, toState, decision, comment, actorUserId) {
@@ -364,25 +607,8 @@ class MysqlStore {
     const fromState = rows[0].state;
     const tenantId = rows[0].id_tenant;
 
-    // Validar actor: el contrato src/ no tiene auth; usamos un ADMIN del tenant si no llega uno válido.
-    let actor = actorUserId;
-    const [actorRows] = await this.pool.query(
-      `SELECT id_usuario FROM gen_usuario WHERE id_usuario = ? AND id_tenant = ?`,
-      [actorUserId, tenantId]
-    );
-    if (!actorRows[0]) {
-      const [fallback] = await this.pool.query(
-        `SELECT u.id_usuario
-           FROM gen_usuario u
-           LEFT JOIN gen_usuario_permiso up ON up.id_usuario = u.id_usuario
-           LEFT JOIN gen_permiso p ON p.id_permiso = up.id_permiso AND p.code = 'alerts.attend'
-          WHERE u.id_tenant = ? AND u.status = 'ACTIVE'
-          ORDER BY (p.id_permiso IS NOT NULL) DESC
-          LIMIT 1`,
-        [tenantId]
-      );
-      actor = fallback[0]?.id_usuario || null;
-    }
+    // Validar actor: el contrato src/ no tiene auth; usamos un usuario con permiso del tenant si no llega uno válido.
+    const actor = await this.resolveActorWithPermission(tenantId, 'alerts.attend', actorUserId);
 
     try {
       await this.pool.query(`CALL stpr_register_event_state(?, ?, ?, 'USER', ?, ?, ?, ?, ?)`, [
@@ -402,6 +628,52 @@ class MysqlStore {
       throw err;
     }
     return { fromState, changedAt: new Date().toISOString() };
+  }
+
+  // Salud del sistema: ping a MySQL. No hay Redis ni cola en este stack local,
+  // por lo que se reportan valores nominales para cumplir el contrato `SystemHealth`.
+  async systemHealth() {
+    let db = 'ok';
+    try {
+      await this.pool.query('SELECT 1');
+    } catch {
+      db = 'down';
+    }
+    return {
+      db,
+      redis: 'ok',
+      queue_depth: 0,
+      uptime_seconds: Math.floor(process.uptime()),
+    };
+  }
+
+  // src_fuente (NVR) -> forma `NvrHealth` del frontend.
+  // La latencia reportada es el roundtrip real de las consultas a MySQL.
+  async listNvrHealth() {
+    const started = Date.now();
+    const [nvrs] = await this.pool.query(
+      `SELECT id_fuente, source_code, display_name, status, actualizado_en
+       FROM src_fuente
+       WHERE source_type = 'NVR'
+       ORDER BY source_code`
+    );
+    const [cams] = await this.pool.query(
+      `SELECT JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.nvr_code')) AS nvr_code,
+              COUNT(*) AS total
+       FROM src_fuente
+       WHERE source_type = 'CAMERA' AND status = 'ACTIVE'
+       GROUP BY nvr_code`
+    );
+    const latencyMs = Date.now() - started;
+    const camerasByNvr = new Map(cams.map((c) => [c.nvr_code, Number(c.total)]));
+    return nvrs.map((r) => ({
+      id: surrogateId(r.id_fuente),
+      code: r.display_name || r.source_code,
+      status: r.status === 'ACTIVE' ? 'ok' : 'down',
+      last_check: toIso(r.actualizado_en),
+      latency_ms: latencyMs,
+      connected_cameras: camerasByNvr.get(r.source_code) || 0,
+    }));
   }
 }
 
