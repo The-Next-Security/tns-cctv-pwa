@@ -50,7 +50,10 @@ BEGIN
 
   IF NOT (
     (v_from_state = 'NEW' AND p_to_state = 'IN_REVIEW')
+    OR (v_from_state = 'NEW' AND p_to_state = 'ESCALATING')
+    OR (v_from_state = 'IN_REVIEW' AND p_to_state = 'ESCALATING')
     OR (v_from_state = 'IN_REVIEW' AND p_to_state = 'CLOSED')
+    OR (v_from_state = 'ESCALATING' AND p_to_state = 'CLOSED')
   ) THEN
     SIGNAL SQLSTATE '45000'
       SET MESSAGE_TEXT = 'INVALID_EVENT_STATE_TRANSITION';
