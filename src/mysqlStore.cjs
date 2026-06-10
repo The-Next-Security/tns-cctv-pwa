@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { getPool } = require('../db/lib/pool.cjs');
+const { processNvrRawEvent } = require('./nvrPipeline.cjs');
 
 // ID CHAR(26): 2 chars de prefijo + 24 hex en mayúscula.
 function genId(prefix) {
@@ -10,29 +11,99 @@ function genId(prefix) {
 
 const SEVERITY_TO_INT = { LOW: 2, MEDIUM: 3, HIGH: 4, CRITICAL: 5 };
 
-// La BD ya no tiene roles (solo permisos). El frontend actual sigue siendo
-// role-based, asi que el backend deriva una etiqueta `role` SOLO de presentacion:
-// 1) por email para usuarios conocidos; 2) si no, a partir del set de permisos.
+// Fallback legacy: inferir rol desde permisos si gen_usuario.rol no existe o está vacío.
 const EMAIL_TO_APP_ROLE = {
   'admin@agrolivo.cl': 'admin_parque',
   'supervisor@agrolivo.cl': 'supervisor',
   'operador@agrolivo.cl': 'vigilante',
-  'recepcionista@agrolivo.cl': 'recepcion',
-  'tecnico@agrolivo.cl': 'soporte_tns',
+  'recepcionista@agrolivo.cl': 'recepcionista',
+  'tecnico@agrolivo.cl': 'tecnico',
+  'seguridad@agrolivo.cl': 'responsable_seguridad',
   'andres@thenextsecurity.cl': 'admin_parque',
   'felipe@thenextsecurity.cl': 'admin_parque',
   'raimundo@thenextsecurity.cl': 'admin_parque',
 };
-function appRole(email, permissions) {
+
+const VALID_APP_ROLES = new Set([
+  'admin_parque',
+  'supervisor',
+  'responsable_seguridad',
+  'vigilante',
+  'recepcion',
+  'recepcionista',
+  'tecnico',
+  'visualizador',
+]);
+
+function normalizeAppRole(role) {
+  if (role && VALID_APP_ROLES.has(role)) return role;
+  return 'visualizador';
+}
+
+function inferAppRoleFromPermissions(email, permissions) {
   const fromEmail = EMAIL_TO_APP_ROLE[email?.toLowerCase()];
   if (fromEmail) return fromEmail;
   const p = new Set(permissions || []);
   if (p.has('users.manage') && p.has('config.manage')) return 'admin_parque';
-  if (p.has('rules.manage')) return 'responsable_seguridad';
-  if (p.has('vehicle_entries.create') && !p.has('alerts.view')) return 'recepcion';
-  if (p.has('health.view') && !p.has('alerts.view')) return 'soporte_tns';
+  if (p.has('rules.manage') && p.has('case_files.resolve')) return 'responsable_seguridad';
+  if (p.has('rules.manage') && p.has('health.view')) return 'supervisor';
+  if (p.has('vehicle_entries.create') && !p.has('alerts.view')) return 'recepcionista';
+  if (p.has('health.view') && !p.has('alerts.view')) return 'tecnico';
+  if (p.has('alerts.view') && p.has('vehicle_entries.create')) return 'recepcion';
   if (p.has('alerts.view')) return 'vigilante';
   return 'visualizador';
+}
+
+function resolveUserRole(row, permissions) {
+  if (row?.rol && VALID_APP_ROLES.has(row.rol)) return row.rol;
+  return inferAppRoleFromPermissions(row?.email, permissions);
+}
+
+const DEMO_TENANT_ID = 'TN000000000000000000000001';
+const DEMO_SITE_ID = 'ST000000000000000000000001';
+
+/** Permisos asignados al crear/editar usuario por rol de presentación. */
+const PERMISSIONS_BY_ROLE = {
+  admin_parque: [
+    'alerts.view', 'alerts.attend', 'vehicle_entries.create', 'vehicle_entries.view',
+    'case_files.view', 'case_files.resolve', 'rules.manage', 'reports.view',
+    'users.manage', 'nvrs.manage', 'config.manage', 'health.view',
+  ],
+  supervisor: [
+    'alerts.view', 'alerts.attend', 'vehicle_entries.view', 'case_files.view',
+    'case_files.resolve', 'rules.manage', 'reports.view', 'health.view',
+  ],
+  responsable_seguridad: [
+    'alerts.view', 'alerts.attend', 'vehicle_entries.view', 'case_files.view',
+    'case_files.resolve', 'rules.manage', 'reports.view',
+  ],
+  vigilante: ['alerts.view', 'alerts.attend', 'vehicle_entries.create', 'vehicle_entries.view'],
+  recepcion: ['alerts.view', 'alerts.attend', 'vehicle_entries.create', 'vehicle_entries.view'],
+  recepcionista: ['vehicle_entries.create', 'vehicle_entries.view', 'case_files.view'],
+  tecnico: ['health.view', 'nvrs.manage', 'config.manage', 'reports.view', 'vehicle_entries.view'],
+  visualizador: [],
+};
+
+function splitDisplayName(fullName) {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { nombre: 'Usuario', apellido: '' };
+  if (parts.length === 1) return { nombre: parts[0], apellido: '' };
+  return { nombre: parts[0], apellido: parts.slice(1).join(' ') };
+}
+
+function mapUserRow(r, permissions) {
+  const role = resolveUserRole(r, permissions);
+  return {
+    id: r.id_usuario,
+    email: r.email,
+    telefono: r.telefono ?? null,
+    nombre: `${r.nombre} ${r.apellido}`.trim(),
+    role,
+    rol: role,
+    activo: r.status === 'ACTIVE',
+    active: r.status === 'ACTIVE',
+    ultimaConexion: toIso(r.actualizado_en),
+  };
 }
 function severityToWord(n) {
   if (n >= 5) return 'CRITICAL';
@@ -96,6 +167,14 @@ function parseJsonColumn(value, fallback) {
   }
 }
 
+function ruleCodeFromReglaId(idRegla) {
+  const match = String(idRegla).match(/(\d+)$/);
+  if (!match) return null;
+  const n = parseInt(match[1], 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `Regla-${String(n).padStart(4, '0')}`;
+}
+
 // ale_regla -> forma `Rule` del frontend (lib/types.ts).
 function mapRuleRow(r) {
   const cond = parseJsonColumn(r.conditions_json, {});
@@ -103,6 +182,8 @@ function mapRuleRow(r) {
   const eventCodes = Array.isArray(cond.event_codes) ? cond.event_codes : [];
   return {
     id: surrogateId(r.id_regla),
+    rule_id: r.id_regla,
+    rule_code: ruleCodeFromReglaId(r.id_regla),
     name: r.name,
     event_codes: eventCodes,
     event_code_pattern: eventCodes.join('|'),
@@ -111,7 +192,14 @@ function mapRuleRow(r) {
     criticality: cond.criticality || 'media',
     zone_id: zoneIdFromCode(cond.zone_code),
     priority_popup: !!act.priority_popup,
-    notify_admin: !!act.notify_admin,
+    notify_push_roles: Array.isArray(act.notify_push_roles)
+      ? act.notify_push_roles
+      : act.notify_admin
+        ? ['responsable_seguridad', 'admin_parque']
+        : [],
+    notify_admin: Array.isArray(act.notify_push_roles)
+      ? act.notify_push_roles.length > 0
+      : !!act.notify_admin,
     record_evidence: !!act.record_evidence,
     can_escalate: !!act.can_escalate,
     escalation_roles: Array.isArray(act.escalation_roles) ? act.escalation_roles : [],
@@ -146,6 +234,7 @@ function mapAlertRow(r, maps = {}) {
   const isoOcc = String(r.occurred_at).replace(' ', 'T') + (String(r.occurred_at).endsWith('Z') ? '' : 'Z');
   return {
     id: surrogateId(r.id_evento),
+    external_event_id: r.external_event_id ?? null,
     event_id: r.id_evento,
     rule_id: rule?.id ?? null,
     rule: rule && rule.name ? rule : undefined,
@@ -159,7 +248,7 @@ function mapAlertRow(r, maps = {}) {
     timestamp: isoOcc,
     created_at: String(r.creado_en).replace(' ', 'T') + 'Z',
     plate: r.plate,
-    description: r.decision_reason || null,
+    description: rule?.name || r.decision_reason || null,
     snapshot_url: null,
     resolution_notes: r.decision_reason || null,
     zone: zoneId ? { id: zoneId, name: ZONE_NAMES[r.zone_code] || r.zone_code, active: true } : undefined,
@@ -219,9 +308,19 @@ class MysqlStore {
     this.pool = getPool();
   }
 
+  // Detecta columnas opcionales en gen_usuario (migraciones 08_05, 08_06).
+  async usuarioExtendedColumns() {
+    const [cols] = await this.pool.query(`SHOW COLUMNS FROM gen_usuario`);
+    const names = new Set(cols.map((c) => c.Field));
+    return { telefono: names.has('telefono'), rol: names.has('rol') };
+  }
+
   async auth(email, password) {
+    const usuarioCols = await this.usuarioExtendedColumns();
+    const telefonoSelect = usuarioCols.telefono ? 'u.telefono' : 'NULL AS telefono';
+    const rolSelect = usuarioCols.rol ? 'u.rol' : 'NULL AS rol';
     const [rows] = await this.pool.query(
-      `SELECT u.id_usuario, u.id_tenant, u.email, u.nombre, u.apellido, u.password_hash, u.status
+      `SELECT u.id_usuario, u.id_tenant, u.email, ${telefonoSelect}, ${rolSelect}, u.nombre, u.apellido, u.password_hash, u.status
          FROM gen_usuario u
         WHERE u.email = ? LIMIT 1`,
       [email]
@@ -244,15 +343,18 @@ class MysqlStore {
     );
     const permissions = perms.map((r) => r.code);
     const fullName = `${user.nombre} ${user.apellido}`.trim();
+    const role = resolveUserRole(user, permissions);
     return {
       id: user.id_usuario,
       tenant_id: user.id_tenant,
       email: user.email,
+      telefono: user.telefono ?? null,
       nombre: user.nombre,
       apellido: user.apellido,
       full_name: fullName,
       permissions,
-      app_role: appRole(user.email, permissions),
+      role,
+      app_role: role,
       site_ids: sites.map((s) => s.id_site),
     };
   }
@@ -278,38 +380,35 @@ class MysqlStore {
         return { deduplicated: true, event: mapEventRow(ev[0]) };
       }
 
-      const eventId = genId('EV');
-      const sev = SEVERITY_TO_INT[payload.event.severity] ?? 3;
-      const critical = sev >= 4 ? 1 : 0;
-      await conn.query(
-        `INSERT INTO ale_evento
-           (id_evento, id_tenant, id_site, id_fuente, external_event_id, event_type, severity,
-            zone_code, plate, occurred_at, state, critical, priority, payload_version, raw_payload_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NEW', ?, ?, ?, ?)`,
-        [
-          eventId,
-          payload.tenant_id,
-          payload.site_id,
-          payload.source.source_id,
-          payload.event.external_id || null,
-          payload.event.event_type,
-          sev,
-          payload.event.zone_code || null,
-          payload.event.plate || null,
-          payload.event.occurred_at.replace('T', ' ').replace('Z', ''),
-          critical,
-          Math.min(sev * 20, 100),
-          payload.event.payload_version || '1.0',
-          JSON.stringify(payload),
-        ]
+      const [ruleRows] = await conn.query(
+        `SELECT id_regla, name, enabled, priority_order, conditions_json, actions_json, timezone
+           FROM ale_regla
+          WHERE id_tenant = ? AND id_site = ?
+          ORDER BY priority_order ASC`,
+        [payload.tenant_id, payload.site_id]
       );
 
-      await conn.query(
-        `INSERT INTO log_evento_timeline
-           (id_evento_timeline, id_tenant, id_evento, action_type, to_state, actor_type, occurred_at)
-         VALUES (?, ?, ?, 'INGESTED', 'NEW', 'SYSTEM', CURRENT_TIMESTAMP(3))`,
-        [genId('TL'), payload.tenant_id, eventId]
-      );
+      const channel =
+        payload.event.channel ??
+        payload.source.channel ??
+        null;
+
+      const pipelineResult = await processNvrRawEvent(conn, {
+        tenantId: payload.tenant_id,
+        siteId: payload.site_id,
+        sourceId: payload.source.source_id,
+        channel,
+        eventType: payload.event.event_type,
+        zoneCode: payload.event.zone_code || null,
+        plate: payload.event.plate || null,
+        externalId: payload.event.external_id || null,
+        occurredAt: payload.event.occurred_at,
+        rawPayload: payload,
+        ruleRows,
+      });
+
+      const resourceId = pipelineResult.eventId || pipelineResult.rawId;
+      const resourceType = pipelineResult.eventId ? 'EVENTO' : 'RAW_NVR';
 
       const expires = new Date(Date.now() + 24 * 60 * 60 * 1000)
         .toISOString()
@@ -319,13 +418,31 @@ class MysqlStore {
         `INSERT INTO src_idempotencia_ingesta
            (id_idempotencia_ingesta, id_tenant, endpoint_key, idempotency_key, payload_hash,
             resource_type, resource_id, expires_at)
-         VALUES (?, ?, 'ingest_events', ?, ?, 'EVENTO', ?, ?)`,
-        [genId('ID'), payload.tenant_id, idempotencyKey, payloadHash, eventId, expires]
+         VALUES (?, ?, 'ingest_events', ?, ?, ?, ?, ?)`,
+        [genId('ID'), payload.tenant_id, idempotencyKey, payloadHash, resourceType, resourceId, expires]
       );
 
       await conn.commit();
-      const [ev] = await conn.query(`SELECT * FROM ale_evento WHERE id_evento = ?`, [eventId]);
-      return { deduplicated: false, event: mapEventRow(ev[0]) };
+
+      if (!pipelineResult.eventId) {
+        return {
+          deduplicated: false,
+          matched: false,
+          status: 'STORED_RAW',
+          raw_event_id: pipelineResult.rawId,
+          reason: pipelineResult.reason,
+        };
+      }
+
+      const [ev] = await conn.query(`SELECT * FROM ale_evento WHERE id_evento = ?`, [
+        pipelineResult.eventId,
+      ]);
+      return {
+        deduplicated: false,
+        matched: true,
+        matched_rule_ids: pipelineResult.matchedRuleIds,
+        event: mapEventRow(ev[0]),
+      };
     } catch (err) {
       await conn.rollback();
       throw err;
@@ -385,6 +502,150 @@ class MysqlStore {
          FROM ale_regla ORDER BY priority_order ASC`
     );
     return rows.map(mapRuleRow);
+  }
+
+  async listUsers({ tenantId = 'TN000000000000000000000001' } = {}) {
+    const usuarioCols = await this.usuarioExtendedColumns();
+    const telefonoSelect = usuarioCols.telefono ? 'u.telefono' : 'NULL AS telefono';
+    const rolSelect = usuarioCols.rol ? 'u.rol' : 'NULL AS rol';
+    const [rows] = await this.pool.query(
+      `SELECT u.id_usuario, u.email, ${telefonoSelect}, ${rolSelect}, u.nombre, u.apellido, u.status, u.actualizado_en
+         FROM gen_usuario u
+        WHERE u.id_tenant = ?
+        ORDER BY u.nombre, u.apellido`,
+      [tenantId]
+    );
+    const [permRows] = await this.pool.query(
+      `SELECT up.id_usuario, p.code
+         FROM gen_usuario_permiso up
+         JOIN gen_permiso p ON p.id_permiso = up.id_permiso
+         JOIN gen_usuario u ON u.id_usuario = up.id_usuario
+        WHERE u.id_tenant = ?`,
+      [tenantId]
+    );
+    const permsByUser = new Map();
+    for (const row of permRows) {
+      if (!permsByUser.has(row.id_usuario)) permsByUser.set(row.id_usuario, []);
+      permsByUser.get(row.id_usuario).push(row.code);
+    }
+    return rows.map((r) => mapUserRow(r, permsByUser.get(r.id_usuario) ?? []));
+  }
+
+  async syncRolePermissions(conn, userId, role) {
+    const codes = PERMISSIONS_BY_ROLE[role] || [];
+    await conn.query(`DELETE FROM gen_usuario_permiso WHERE id_usuario = ?`, [userId]);
+    if (!codes.length) return;
+    const [permRows] = await conn.query(
+      `SELECT id_permiso, code FROM gen_permiso WHERE code IN (${codes.map(() => '?').join(', ')})`,
+      codes
+    );
+    for (const perm of permRows) {
+      await conn.query(
+        `INSERT INTO gen_usuario_permiso (id_usuario, id_permiso) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE granted_at = granted_at`,
+        [userId, perm.id_permiso]
+      );
+    }
+  }
+
+  async createUser(data) {
+    const { nombre, apellido } = splitDisplayName(data.nombre || data.full_name);
+    const status = data.activo === false || data.active === false ? 'INACTIVE' : 'ACTIVE';
+    const role = normalizeAppRole(data.role);
+    const userId = genId('US');
+    const passwordHash = await bcrypt.hash(String(data.password), 10);
+    const usuarioCols = await this.usuarioExtendedColumns();
+
+    const columns = ['id_usuario', 'id_tenant', 'email'];
+    const values = [userId, DEMO_TENANT_ID, data.email];
+    if (usuarioCols.telefono) {
+      columns.push('telefono');
+      values.push(data.telefono || null);
+    }
+    if (usuarioCols.rol) {
+      columns.push('rol');
+      values.push(role);
+    }
+    columns.push('nombre', 'apellido', 'password_hash', 'status');
+    values.push(nombre, apellido, passwordHash, status);
+
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(
+        `INSERT INTO gen_usuario (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        values
+      );
+      if (data.role) await this.syncRolePermissions(conn, userId, role);
+      await conn.query(
+        `INSERT INTO gen_acceso_sitio (id_usuario, id_site) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE id_site = VALUES(id_site)`,
+        [userId, DEMO_SITE_ID]
+      );
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      if (err?.code === 'ER_DUP_ENTRY') {
+        return { invalid: true, reason: 'El correo ya está registrado' };
+      }
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const users = await this.listUsers({ tenantId: DEMO_TENANT_ID });
+    return { user: users.find((u) => u.id === userId) };
+  }
+
+  async updateUser(userId, data) {
+    const [existing] = await this.pool.query(
+      `SELECT id_usuario FROM gen_usuario WHERE id_usuario = ? AND id_tenant = ? LIMIT 1`,
+      [userId, DEMO_TENANT_ID]
+    );
+    if (!existing[0]) return null;
+
+    const { nombre, apellido } = splitDisplayName(data.nombre || data.full_name);
+    const status = data.activo === false || data.active === false ? 'INACTIVE' : 'ACTIVE';
+    const role = normalizeAppRole(data.role);
+    const usuarioCols = await this.usuarioExtendedColumns();
+    const sets = ['email = ?', 'nombre = ?', 'apellido = ?', 'status = ?'];
+    const params = [data.email, nombre, apellido, status];
+
+    if (usuarioCols.telefono && data.telefono !== undefined) {
+      sets.push('telefono = ?');
+      params.push(data.telefono || null);
+    }
+    if (usuarioCols.rol && data.role) {
+      sets.push('rol = ?');
+      params.push(role);
+    }
+    if (data.password) {
+      sets.push('password_hash = ?');
+      params.push(await bcrypt.hash(String(data.password), 10));
+    }
+    params.push(userId, DEMO_TENANT_ID);
+
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(
+        `UPDATE gen_usuario SET ${sets.join(', ')} WHERE id_usuario = ? AND id_tenant = ?`,
+        params
+      );
+      if (data.role) await this.syncRolePermissions(conn, userId, role);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      if (err?.code === 'ER_DUP_ENTRY') {
+        return { invalid: true, reason: 'El correo ya está registrado' };
+      }
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const users = await this.listUsers({ tenantId: DEMO_TENANT_ID });
+    return { user: users.find((u) => u.id === userId) };
   }
 
   async listAlerts() {
@@ -544,6 +805,8 @@ class MysqlStore {
       resolve: { toState: 'CLOSED', decision: 'CONFIRMED' },
       escalate: { toState: 'ESCALATING', decision: 'ESCALATED' },
       discard: { toState: 'CLOSED', decision: 'FALSE_POSITIVE' },
+      reactivate: { toState: 'NEW', decision: 'REACTIVATED' },
+      activate: { toState: 'NEW', decision: 'REACTIVATED' },
       // alias del vocabulario del frontend existente
       revisada: { toState: 'CLOSED', decision: 'CONFIRMED' },
       descartada: { toState: 'CLOSED', decision: 'FALSE_POSITIVE' },
@@ -554,6 +817,10 @@ class MysqlStore {
 
     const current = await this.getEvent(eventId);
     if (!current) return { notFound: true };
+
+    if (target.toState === 'NEW') {
+      return this.reactivateAlert(eventId, notes, actorUserId);
+    }
 
     const comment = notes || target.decision;
 
@@ -571,6 +838,55 @@ class MysqlStore {
 
     const res = await this.changeState(eventId, target.toState, target.decision, comment, actorUserId);
     if (res.notFound || res.invalid) return res;
+    return { alert: await this.getAlert(eventId) };
+  }
+
+  async reactivateAlert(eventId, notes, actorUserId) {
+    const [rows] = await this.pool.query(
+      `SELECT id_tenant, state FROM ale_evento WHERE id_evento = ?`,
+      [eventId]
+    );
+    if (!rows[0]) return { notFound: true };
+
+    const { id_tenant: tenantId, state: fromState } = rows[0];
+    if (fromState === 'NEW') return { alert: await this.getAlert(eventId) };
+    if (fromState !== 'CLOSED') return { invalid: true, reason: 'NOT_CLOSED' };
+
+    const actor = await this.resolveActorWithPermission(tenantId, 'alerts.attend', actorUserId);
+    const comment = notes || 'Alerta reactivada';
+
+    // Intentar vía SP (instalaciones con 08_07 / SP actualizado); si falla, fallback directo.
+    const spResult = await this.changeState(eventId, 'NEW', 'REACTIVATED', comment, actorUserId);
+    if (!spResult.invalid) {
+      return { alert: await this.getAlert(eventId) };
+    }
+
+    await this.pool.query(
+      `UPDATE ale_evento
+          SET state = 'NEW',
+              decision_reason = NULL,
+              actualizado_en = CURRENT_TIMESTAMP(3)
+        WHERE id_evento = ?
+          AND id_tenant = ?`,
+      [eventId, tenantId]
+    );
+    await this.pool.query(
+      `INSERT INTO log_evento_timeline (
+          id_evento_timeline,
+          id_tenant,
+          id_evento,
+          action_type,
+          from_state,
+          to_state,
+          decision,
+          comment_text,
+          actor_type,
+          actor_id_usuario,
+          occurred_at,
+          request_id
+        ) VALUES (?, ?, ?, 'STATE_CHANGE', 'CLOSED', 'NEW', 'REACTIVATED', ?, 'USER', ?, CURRENT_TIMESTAMP(3), NULL)`,
+      [genId('TL'), tenantId, eventId, comment, actor]
+    );
     return { alert: await this.getAlert(eventId) };
   }
 

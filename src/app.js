@@ -9,6 +9,17 @@ const { errorEnvelope } = require('./errors');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
+const USER_ROLE_VALUES = [
+  'admin_parque',
+  'supervisor',
+  'responsable_seguridad',
+  'vigilante',
+  'recepcion',
+  'recepcionista',
+  'tecnico',
+  'visualizador',
+];
+
 function createApp(deps = {}) {
   const app = express();
   const store = deps.store || new Store();
@@ -96,12 +107,24 @@ function createApp(deps = {}) {
       return res.status(409).json(errorEnvelope('IDEMPOTENCY_CONFLICT', 'same key with different payload', req.requestId));
     }
 
-    if (wsHub) wsHub.publishEventPopup(result.event, req.requestId);
+    if (result.matched === false) {
+      return res.status(202).json({
+        status: 'STORED_RAW',
+        matched: false,
+        raw_event_id: result.raw_event_id,
+        deduplicated: !!result.deduplicated,
+        request_id: req.requestId,
+      });
+    }
+
+    if (wsHub && result.event) wsHub.publishEventPopup(result.event, req.requestId);
 
     return res.status(202).json({
       status: 'RECEIVED',
       event_id: result.event.event_id,
-      deduplicated: result.deduplicated,
+      matched: true,
+      matched_rule_ids: result.matched_rule_ids,
+      deduplicated: !!result.deduplicated,
       request_id: req.requestId,
     });
   });
@@ -163,7 +186,7 @@ function createApp(deps = {}) {
       return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'attend no disponible en este store', req.requestId));
     }
     const schema = z.object({
-      action: z.enum(['acknowledge', 'resolve', 'escalate', 'discard', 'revisada', 'descartada', 'escalada']),
+      action: z.enum(['acknowledge', 'resolve', 'escalate', 'discard', 'reactivate', 'activate', 'revisada', 'descartada', 'escalada']),
       notes: z.string().optional(),
       observation: z.string().optional(),
       discard_note: z.string().optional(),
@@ -182,6 +205,67 @@ function createApp(deps = {}) {
       return res.status(400).json(errorEnvelope('INVALID_STATE_TRANSITION', result.reason || 'transición inválida', req.requestId));
     }
     return res.status(200).json({ ...result.alert, request_id: req.requestId });
+  });
+
+  // --- Usuarios (CRUD parcial; teléfono para escalación) ---
+  app.get('/api/v1/users', async (req, res) => {
+    if (typeof store.listUsers !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'users no disponible en este store', req.requestId));
+    }
+    const items = await store.listUsers();
+    const pagination = { page: 1, page_size: items.length, total: items.length, total_pages: 1 };
+    return res.status(200).json({ items, data: items, pagination, request_id: req.requestId });
+  });
+
+  app.post('/api/v1/users', async (req, res) => {
+    if (typeof store.createUser !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'users no disponible en este store', req.requestId));
+    }
+    const schema = z.object({
+      nombre: z.string().min(1),
+      email: z.string().email(),
+      telefono: z.string().min(1),
+      role: z.enum(USER_ROLE_VALUES),
+      password: z.string().min(8),
+      activo: z.boolean().optional(),
+      active: z.boolean().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'invalid payload', req.requestId, parsed.error.issues));
+    }
+    const result = await store.createUser(parsed.data);
+    if (result?.invalid) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', result.reason || 'usuario inválido', req.requestId));
+    }
+    return res.status(201).json({ ...result.user, request_id: req.requestId });
+  });
+
+  app.patch('/api/v1/users/:userId', async (req, res) => {
+    if (typeof store.updateUser !== 'function') {
+      return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'users no disponible en este store', req.requestId));
+    }
+    const schema = z.object({
+      nombre: z.string().min(1),
+      email: z.string().email(),
+      telefono: z.string().min(1),
+      role: z.enum(USER_ROLE_VALUES),
+      password: z.string().min(8).optional(),
+      activo: z.boolean().optional(),
+      active: z.boolean().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'invalid payload', req.requestId, parsed.error.issues));
+    }
+    const result = await store.updateUser(req.params.userId, parsed.data);
+    if (result?.invalid) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', result.reason || 'usuario inválido', req.requestId));
+    }
+    if (!result?.user) {
+      return res.status(404).json(errorEnvelope('NOT_FOUND', 'usuario no encontrado', req.requestId));
+    }
+    return res.status(200).json({ ...result.user, request_id: req.requestId });
   });
 
   // --- Reglas operativas (solo lectura por ahora) ---
