@@ -1,7 +1,6 @@
 'use client'
 
-import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { RelativeTime } from '@/components/ui/relative-time'
 import { CarFront, AlertTriangle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -49,8 +48,7 @@ export function AnprPendingQueue({ detections, activeId, onSelect }: AnprPending
                     <p className="mt-0.5 truncate text-xs text-ds-ink-muted">{detection.vehicleHint}</p>
                   )}
                   <p className="mt-1 text-[10px] text-ds-ink-muted">
-                    Detectado{' '}
-                    {formatDistanceToNow(new Date(detection.detectedAt), { addSuffix: true, locale: es })}
+                    <RelativeTime date={detection.detectedAt} prefix="Detectado " />
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
