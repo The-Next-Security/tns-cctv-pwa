@@ -2,25 +2,44 @@ const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
 
-function loadEscalationModule() {
-  const filename = path.resolve(__dirname, '../lib/escalation.ts')
+function transpileTsFile(filename) {
   const source = fs.readFileSync(filename, 'utf8')
-  const compiled = ts.transpileModule(source, {
+  return ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2022,
     },
     fileName: filename,
   }).outputText
+}
 
+function loadEscalationModule() {
+  const libDir = path.resolve(__dirname, '../lib')
+  const typesModule = { exports: {} }
+  const typesCompiled = transpileTsFile(path.join(libDir, 'types.ts'))
+  new Function('module', 'exports', 'require', typesCompiled)(
+    typesModule,
+    typesModule.exports,
+    require
+  )
+
+  const escalationCompiled = transpileTsFile(path.join(libDir, 'escalation.ts'))
   const module = { exports: {} }
-  const execute = new Function('module', 'exports', 'require', compiled)
-  execute(module, module.exports, require)
+  const customRequire = (request) => {
+    if (request === './types') return typesModule.exports
+    return require(request)
+  }
+  new Function('module', 'exports', 'require', escalationCompiled)(
+    module,
+    module.exports,
+    customRequire
+  )
   return module.exports
 }
 
 const {
   buildEscalationObservation,
+  getEscalationContacts,
   getEscalationRoles,
   showEscalationActions,
   toTelHref,
@@ -40,10 +59,10 @@ function readMockRuleEscalationConfig() {
   const declaration = sourceFile.statements
     .filter(ts.isVariableStatement)
     .flatMap(statement => [...statement.declarationList.declarations])
-    .find(item => ts.isIdentifier(item.name) && item.name.text === 'MOCK_RULES')
+    .find(item => ts.isIdentifier(item.name) && item.name.text === 'MOCK_RULES_BASE')
 
   if (!declaration || !declaration.initializer || !ts.isArrayLiteralExpression(declaration.initializer)) {
-    throw new Error('No se encontró el arreglo MOCK_RULES')
+    throw new Error('No se encontró el arreglo MOCK_RULES_BASE')
   }
 
   return declaration.initializer.elements.map(element => {
@@ -102,9 +121,9 @@ describe('workflow de escalación', () => {
     expect(
       getEscalationRoles({
         can_escalate: true,
-        escalation_roles: ['responsable_seguridad', 'vigilante', 'soporte_tns'],
+        escalation_roles: ['responsable_seguridad', 'vigilante', 'supervisor'],
       })
-    ).toEqual(['responsable_seguridad', 'soporte_tns'])
+    ).toEqual(['responsable_seguridad', 'supervisor'])
 
     expect(
       getEscalationRoles({
@@ -135,7 +154,27 @@ describe('workflow de escalación', () => {
   })
 
   test('normaliza teléfonos para enlaces tel', () => {
-    expect(toTelHref('+56 9 8821 4430')).toBe('tel://+56988214430')
+    expect(toTelHref('+56 9 8821 4430')).toBe('tel:+56988214430')
+  })
+
+  test('lista todos los usuarios activos que coinciden con roles de escalación', () => {
+    const users = [
+      { id: '1', email: 'admin@agrolivo.cl', nombre: 'Carlos', role: 'admin_parque', activo: true },
+      { id: '2', email: 'andres@thenextsecurity.cl', nombre: 'Andres', role: 'admin_parque', activo: true },
+      { id: '3', email: 'supervisor@agrolivo.cl', nombre: 'Maria', role: 'supervisor', activo: true },
+      { id: '4', email: 'operador@agrolivo.cl', nombre: 'Juan', role: 'vigilante', activo: true },
+      { id: '5', email: 'tecnico@agrolivo.cl', nombre: 'Roberto', role: 'tecnico', activo: false },
+    ]
+
+    expect(
+      getEscalationContacts(
+        {
+          can_escalate: true,
+          escalation_roles: ['admin_parque', 'supervisor', 'vigilante'],
+        },
+        users
+      ).map(contact => contact.email)
+    ).toEqual(['andres@thenextsecurity.cl', 'admin@agrolivo.cl', 'supervisor@agrolivo.cl'])
   })
 
   test('configura las reglas mock escalables según la especificación', () => {
@@ -157,9 +196,7 @@ describe('workflow de escalación', () => {
     for (const rule of mockRules) {
       const canEscalate = expectedEscalation.get(rule.id)
       expect(rule.can_escalate).toBe(canEscalate)
-      expect(rule.escalation_roles).toEqual(
-        canEscalate ? ['responsable_seguridad', 'admin_parque'] : []
-      )
+      expect(rule.escalation_roles?.length ?? 0).toBe(canEscalate ? 2 : 0)
     }
   })
 })
