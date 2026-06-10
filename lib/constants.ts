@@ -176,7 +176,7 @@ export const STATUS_LABELS: Record<AlertStatusType, string> = {
   en_revision: 'En Revisión',
   resuelta: 'Resuelta',
   descartada: 'Descartada',
-  escalada: 'Escalada',
+  escalada: 'En Atención',
   revisada: 'Revisada',
 }
 

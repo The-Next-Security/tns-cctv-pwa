@@ -322,7 +322,7 @@ export const ALERT_STATUS_LABELS: Record<AlertStatus, string> = {
   pendiente: 'Pendiente',
   revisada: 'Revisada',
   descartada: 'Descartada',
-  escalada: 'Escalada',
+  escalada: 'En Atención',
   en_revision: 'En Revision',
   resuelta: 'Resuelta'
 }
