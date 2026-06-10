@@ -152,6 +152,7 @@ const procedure = readFileSync(
 )
 assert.match(procedure, /START TRANSACTION;/)
 assert.match(procedure, /FOR UPDATE;/)
+assert.match(procedure, /ESCALATING/)
 assert.match(procedure, /INSERT INTO log_evento_timeline/)
 assert.match(procedure, /COMMIT;/)
 
