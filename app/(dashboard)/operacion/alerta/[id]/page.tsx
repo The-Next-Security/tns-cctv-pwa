@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { formatDistanceToNow, format } from 'date-fns'
+import { format } from 'date-fns'
+import { RelativeTime } from '@/components/ui/relative-time'
 import { es } from 'date-fns/locale'
 import { 
   ArrowLeft, 
@@ -78,6 +79,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
 
   const isPending = alert?.status === 'pendiente'
   const isInReview = alert?.status === 'en_revision'
+  const isEscalated = alert?.status === 'escalada'
 
   async function handleRevisar() {
     if (!alert) return
@@ -159,11 +161,6 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
     llamada_at: llamadaAt ?? alert.llamada_at ?? null,
   }
 
-  const timeAgo = formatDistanceToNow(new Date(alert.created_at || new Date()), {
-    addSuffix: false,
-    locale: es,
-  })
-
   return (
     <div className="space-y-4">
       {/* Back button */}
@@ -212,7 +209,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
         )}
         <span className="flex items-center gap-1.5">
           <Clock className="h-4 w-4" />
-          hace {timeAgo}
+          <RelativeTime date={alert.created_at} />
         </span>
         <span className="text-xs">
           {format(new Date(alert.pts_timestamp || new Date()), 'dd/MM/yyyy HH:mm:ss', { locale: es })}
@@ -393,6 +390,47 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                   wrapperClassName="w-full"
                   className="w-full"
                 />
+              </CardContent>
+            </Card>
+          )}
+
+          {isEscalated && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Cerrar alerta escalada</CardTitle>
+                <CardDescription>
+                  La alerta está en atención por el supervisor. Resuélvala o descártela cuando corresponda.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button
+                  className="w-full"
+                  onClick={handleRevisar}
+                  disabled={isLoading}
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Marcar como resuelta
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full" disabled={isLoading}>
+                      <X className="h-4 w-4 mr-2" />
+                      Descartar
+                      <ChevronDown className="h-3 w-3 ml-auto" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56">
+                    {discardReasons.map(reason => (
+                      <DropdownMenuItem
+                        key={reason}
+                        onClick={() => handleDescartar(reason)}
+                      >
+                        {DISCARD_REASON_LABELS[reason]}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </CardContent>
             </Card>
           )}

@@ -49,7 +49,7 @@ const STATUS_VIEW_URGENCY: Partial<Record<StatusView, UrgencyLevel>> = {
 
 function resolveListHeadingUrgency(
   view: StatusView,
-  counts: { criticalPending: number; lowPriorityPending: number; inReview: number }
+  counts: { criticalPending: number; lowPriorityPending: number; inReview: number; escalated: number }
 ): UrgencyLevel | null {
   const mapped = STATUS_VIEW_URGENCY[view]
   if (mapped) return mapped
@@ -57,6 +57,7 @@ function resolveListHeadingUrgency(
   if (view === 'activas') {
     if (counts.criticalPending > 0) return 'critical'
     if (counts.inReview > 0) return 'review'
+    if (counts.escalated > 0) return 'escalated'
     if (counts.lowPriorityPending > 0) return 'pending'
   }
 
@@ -79,7 +80,11 @@ function matchesStatusView(alert: Alert, view: StatusView): boolean {
     case 'criticas':
       return alertClass === 'critica' && alert.status === 'pendiente'
     case 'baja_prioridad':
-      return alertClass === 'baja_prioridad' && (alert.status === 'pendiente' || alert.status === 'en_revision')
+      return alertClass === 'baja_prioridad' && (
+        alert.status === 'pendiente' ||
+        alert.status === 'en_revision' ||
+        alert.status === 'escalada'
+      )
     case 'all':
       return true
     default:
@@ -154,9 +159,16 @@ export default function OperacionPage() {
     setLocalAlerts(prev => prev.map(a => a.id === alert.id ? alert : a))
   }, [])
 
+  // El backend emite event.popup con datos mínimos: recargar la lista para
+  // obtener la alerta completa y disparar el popup si corresponde.
+  const handleEventPopup = useCallback(() => {
+    loadAlerts()
+  }, [loadAlerts])
+
   const { connected: isRealtimeConnected } = useRealtime({
     onAlertNew: handleNewAlert,
     onAlertUpdated: handleAlertUpdated,
+    onEventPopup: handleEventPopup,
   })
 
   const filteredAlerts = localAlerts.filter(alert => {

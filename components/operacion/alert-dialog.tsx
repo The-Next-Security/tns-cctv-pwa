@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { RelativeTime } from '@/components/ui/relative-time'
 import { Camera, Clock, MapPin, Check, X, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -61,11 +60,6 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
   const [isLoading, setIsLoading] = useState(false)
 
   if (!alert) return null
-
-  const timeAgo = formatDistanceToNow(new Date(alert.created_at || new Date()), {
-    addSuffix: false,
-    locale: es,
-  })
 
   async function handleRevisar() {
     setIsLoading(true)
@@ -130,7 +124,7 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
             )}
             <span className="flex items-center gap-1 text-live-data font-semibold">
               <Clock className="h-3.5 w-3.5" />
-              hace {timeAgo}
+              <RelativeTime date={alert.created_at} />
             </span>
           </DialogDescription>
         </DialogHeader>

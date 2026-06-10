@@ -81,8 +81,11 @@ export function AlertCard({
     // Actualizar inmediatamente
     updateElapsed()
 
-    // Solo actualizar cada segundo si la alerta esta pendiente o en revision
-    const isPendingOrReview = alert.status === 'pendiente' || alert.status === 'en_revision'
+    // Solo actualizar cada segundo si la alerta esta pendiente, en revision o escalada
+    const isPendingOrReview =
+      alert.status === 'pendiente' ||
+      alert.status === 'en_revision' ||
+      alert.status === 'escalada'
     if (isPendingOrReview) {
       const interval = setInterval(updateElapsed, 1000)
       return () => clearInterval(interval)
@@ -108,8 +111,12 @@ export function AlertCard({
     return elapsedTime
   }
 
-  const timeDisplay = (alert.status === 'pendiente' || alert.status === 'en_revision') 
-    ? formatPreciseTime() 
+  const timeDisplay = (
+    alert.status === 'pendiente' ||
+    alert.status === 'en_revision' ||
+    alert.status === 'escalada'
+  )
+    ? formatPreciseTime()
     : elapsedTime
 
   function handleAcknowledge() {
@@ -143,9 +150,11 @@ export function AlertCard({
 
   const isPending = alert.status === 'pendiente'
   const isInReview = alert.status === 'en_revision'
+  const isEscalated = alert.status === 'escalada'
   const alertClass = getAlertClass(alert.criticality)
   const isCriticalClass = alertClass === 'critica'
   const showReviewActions = useReviewActions || isInReview
+  const showCloseActions = showReviewActions || isEscalated
   const escalationAlert = showReviewActions && alert.status !== 'en_revision'
     ? { ...alert, status: 'en_revision' as const }
     : alert
@@ -221,9 +230,9 @@ export function AlertCard({
               )}
 
               {/* Status for non-pending alerts */}
-              {!isPending && !isInReview && alert.status === 'escalada' && (
+              {!isPending && !isInReview && isEscalated && (
                 <UrgencyBadge level="escalated" className="text-xs">
-                  ↑ Escalada — en manos del supervisor
+                  En atención — escalada al supervisor
                 </UrgencyBadge>
               )}
 
@@ -287,7 +296,7 @@ export function AlertCard({
                   </>
                 )}
 
-                {showReviewActions && (
+                {showReviewActions && !isEscalated && (
                   <>
                     <Button
                       size="sm"
@@ -312,6 +321,40 @@ export function AlertCard({
                       disabled={isLoading}
                       className="h-10 rounded-xl sm:h-9"
                     />
+                  </>
+                )}
+
+                {showCloseActions && isEscalated && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => setResolveDialogOpen(true)}
+                      disabled={isLoading}
+                      className="col-span-2 sm:col-span-1 h-10 sm:h-9 bg-primary hover:bg-primary/90 text-primary-foreground touch-target rounded-xl shadow-soft-sm"
+                    >
+                      <Check className="h-4 w-4 mr-1" />
+                      Resuelta
+                    </Button>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={isLoading} className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl border-0 bg-secondary/80 shadow-none">
+                          <X className="h-4 w-4 mr-1" />
+                          Descartar
+                          <ChevronDown className="h-3 w-3 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        {discardReasons.map(reason => (
+                          <DropdownMenuItem
+                            key={reason}
+                            onClick={() => handleDiscard(reason)}
+                          >
+                            {DISCARD_REASON_LABELS[reason]}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </>
                 )}
               </div>
