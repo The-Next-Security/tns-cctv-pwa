@@ -1,7 +1,6 @@
 'use client'
 
-import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { RelativeTime } from '@/components/ui/relative-time'
 import { Activity, MapPin, Users, TrendingUp } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { CRITICALITY_LABELS, getCriticalityBadgeClass } from '@/lib/constants'
@@ -57,9 +56,7 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
                 {alert.description ?? getEventLabel(alert.event_code)}
               </p>
               <div className="flex items-center justify-between mt-1 gap-2">
-                <span className="text-caption text-live-data">
-                  {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true, locale: es })}
-                </span>
+                <RelativeTime date={alert.timestamp} className="text-caption text-live-data" />
                 <span
                   className={getCriticalityBadgeClass(
                     alert.criticality,
