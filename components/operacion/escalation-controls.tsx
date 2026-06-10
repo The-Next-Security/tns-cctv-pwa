@@ -15,9 +15,10 @@ import {
 import { cn } from '@/lib/utils'
 import type { Alert } from '@/lib/types'
 import { ROLE_LABELS } from '@/lib/types'
+import { useEscalationUsers } from '@/hooks/use-escalation-users'
 import {
+  getEscalationContacts,
   getEscalationRoles,
-  ROLE_CONTACTS,
   showEscalationActions,
   toTelHref,
 } from '@/lib/escalation'
@@ -35,14 +36,20 @@ export function CallContactsPopover({
   className,
   disabled = false,
 }: CallContactsPopoverProps) {
+  const { users: escalationUsers, reload: reloadEscalationUsers } = useEscalationUsers()
+
   if (!showEscalationActions(alert)) return null
 
   const roles = getEscalationRoles(alert.rule)
+  const contacts = getEscalationContacts(alert.rule, escalationUsers)
   const llamadaRealizada = Boolean(alert.llamada_at)
 
   function handleOpenChange(open: boolean) {
-    if (open && !llamadaRealizada) {
-      onLlamar(alert.id)
+    if (open) {
+      void reloadEscalationUsers()
+      if (!llamadaRealizada) {
+        onLlamar(alert.id)
+      }
     }
   }
 
@@ -60,7 +67,7 @@ export function CallContactsPopover({
           ) : (
             <PhoneCall size={16} />
           )}
-          {llamadaRealizada ? 'Llamado' : 'Llamar'}
+          Llamar
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -78,36 +85,52 @@ export function CallContactsPopover({
           </div>
 
           {roles.length > 0 ? (
+            contacts.length > 0 ? (
             <div className="space-y-2">
-              {roles.map(role => {
-                const contact = ROLE_CONTACTS[role]
-                return (
+              {contacts.map(contact => (
                   <div
-                    key={role}
+                    key={String(contact.userId ?? contact.email)}
                     className="flex items-center gap-3 rounded-xl border border-ds-hairline bg-ds-muted p-3"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-ds-ink-display">
                         {contact.name}
                       </p>
-                      <p className="text-xs text-ds-ink-muted">{ROLE_LABELS[role]}</p>
-                      {contact.phone && (
-                        <p className="mt-0.5 font-mono text-xs text-ds-ink-body">
-                          {contact.phone}
-                        </p>
-                      )}
+                      <p className="text-xs text-ds-ink-muted">{ROLE_LABELS[contact.role]}</p>
+                      <p
+                        className={cn(
+                          'mt-0.5 font-mono text-xs',
+                          contact.phone ? 'text-ds-ink-body' : 'text-ds-ink-muted italic'
+                        )}
+                      >
+                        {contact.phone || 'Sin teléfono — configure en /admin/usuarios'}
+                      </p>
                     </div>
-                    {contact.phone && (
+                    {contact.phone ? (
                       <Button asChild size="icon" aria-label={`Llamar a ${contact.name}`}>
                         <a href={toTelHref(contact.phone)}>
                           <Phone size={20} />
                         </a>
                       </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        disabled
+                        aria-label={`${contact.name} sin teléfono configurado`}
+                      >
+                        <Phone size={20} />
+                      </Button>
                     )}
                   </div>
-                )
-              })}
+                ))}
             </div>
+            ) : (
+              <p className="rounded-lg bg-ds-signal-faded p-3 text-xs text-ds-signal">
+                No hay usuarios activos con los roles configurados en esta regla.
+              </p>
+            )
           ) : (
             <p className="rounded-lg bg-ds-signal-faded p-3 text-xs text-ds-signal">
               La regla permite escalar, pero no tiene contactos configurados.

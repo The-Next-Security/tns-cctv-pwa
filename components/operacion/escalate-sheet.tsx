@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -8,6 +8,7 @@ import {
   Check,
   CheckCircle2,
   Loader2,
+  Phone,
   User,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -34,9 +35,11 @@ import { ROLE_LABELS, getEventLabel } from '@/lib/types'
 import {
   buildEscalationObservation,
   ESCALATION_CHECKLIST_ACTIONS,
-  getEscalationRoles,
-  ROLE_CONTACTS,
+  getEscalationContacts,
+  toTelHref,
 } from '@/lib/escalation'
+import { AlertId } from '@/components/ui/alert-id'
+import { useEscalationUsers } from '@/hooks/use-escalation-users'
 
 interface EscalateSheetProps {
   alert: Alert | null
@@ -47,6 +50,7 @@ interface EscalateSheetProps {
 type Phase = 'checklist' | 'preview' | 'sending' | 'done'
 
 interface DeliveryStatus {
+  userId: string | number
   role: Role
   name: string
   state: 'pending' | 'sending' | 'sent'
@@ -57,11 +61,18 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
   const [observation, setObservation] = useState('')
   const [phase, setPhase] = useState<Phase>('checklist')
   const [delivery, setDelivery] = useState<DeliveryStatus[]>([])
+  const { users: escalationUsers, reload: reloadEscalationUsers } = useEscalationUsers()
+
+  useEffect(() => {
+    if (alert) {
+      void reloadEscalationUsers()
+    }
+  }, [alert?.id, reloadEscalationUsers])
 
   if (!alert) return null
 
   const currentAlert = alert
-  const escalationRoles = getEscalationRoles(currentAlert.rule)
+  const escalationContacts = getEscalationContacts(currentAlert.rule, escalationUsers)
   const escalationObservation = buildEscalationObservation(checkedActions, observation)
   const eventLabel = getEventLabel(alert.event_code)
   const zone = alert.zone?.name ?? 'Sin zona'
@@ -101,9 +112,10 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
   async function handleSend() {
     setPhase('sending')
 
-    const initialDelivery: DeliveryStatus[] = escalationRoles.map(role => ({
-      role,
-      name: ROLE_CONTACTS[role]?.name ?? ROLE_LABELS[role],
+    const initialDelivery: DeliveryStatus[] = escalationContacts.map(contact => ({
+      userId: contact.userId ?? contact.email ?? contact.name,
+      role: contact.role,
+      name: contact.name,
       state: 'pending',
     }))
     setDelivery(initialDelivery)
@@ -135,9 +147,9 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
     }
 
     if (permission === 'granted') {
-      const recipients: EscalationRecipient[] = escalationRoles.map(role => ({
-        name: ROLE_CONTACTS[role]?.name ?? ROLE_LABELS[role],
-        role: ROLE_LABELS[role],
+      const recipients: EscalationRecipient[] = escalationContacts.map(contact => ({
+        name: contact.name,
+        role: ROLE_LABELS[contact.role],
       }))
       await sendEscalationNotification(currentAlert, recipients, escalationObservation)
     }
@@ -174,7 +186,10 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
 
         <div className="flex-1 space-y-5 px-4 pt-4">
           <div className="rounded-lg bg-ds-muted p-3 text-sm">
-            <p className="font-medium leading-snug text-ds-ink-display">{eventLabel}</p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-medium leading-snug text-ds-ink-display">{eventLabel}</p>
+              <AlertId externalEventId={alert.external_event_id} fallbackId={alert.id} variant="compact" />
+            </div>
             <p className="mt-0.5 text-ds-ink-muted">{camera} · {zone}</p>
           </div>
 
@@ -230,9 +245,9 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
                 <Button
                   className="h-11 flex-1"
                   onClick={() => setPhase('preview')}
-                  disabled={escalationRoles.length === 0}
+                  disabled={escalationContacts.length === 0}
                 >
-                  Continuar con escalación ({checkedActions.length})
+                  Continuar con escalamiento ({checkedActions.length})
                   <ArrowUpRight size={16} />
                 </Button>
               </div>
@@ -281,11 +296,9 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
                   </p>
                 </div>
                 <div className="space-y-2">
-                  {escalationRoles.map(role => {
-                    const contact = ROLE_CONTACTS[role]
-                    return (
+                  {escalationContacts.map(contact => (
                       <div
-                        key={role}
+                        key={String(contact.userId ?? contact.email)}
                         className="flex items-center gap-3 rounded-xl border border-ds-hairline bg-ds-muted px-3 py-2.5"
                       >
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ds-accent-faded">
@@ -293,21 +306,27 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-ds-ink-display">
-                            {contact?.name ?? ROLE_LABELS[role]}
+                            {contact.name}
                           </p>
-                          <p className="text-xs text-ds-ink-muted">{ROLE_LABELS[role]}</p>
+                          <p className="text-xs text-ds-ink-muted">{ROLE_LABELS[contact.role]}</p>
+                          <p
+                            className={cn(
+                              'mt-0.5 font-mono text-[10px]',
+                              contact.phone ? 'text-ds-ink-body' : 'text-ds-ink-muted italic'
+                            )}
+                          >
+                            {contact.phone || 'Sin teléfono configurado'}
+                          </p>
                         </div>
-                        <div className="shrink-0 text-right">
-                          {contact?.phone && (
-                            <p className="font-mono text-[10px] text-ds-ink-body">
-                              {contact.phone}
-                            </p>
-                          )}
-                          <p className="text-[10px] text-ds-ink-muted">Push · Email</p>
-                        </div>
+                        {contact.phone ? (
+                          <Button asChild size="icon" variant="outline" aria-label={`Llamar a ${contact.name}`}>
+                            <a href={toTelHref(contact.phone)}>
+                              <Phone size={16} />
+                            </a>
+                          </Button>
+                        ) : null}
                       </div>
-                    )
-                  })}
+                    ))}
                 </div>
               </div>
 
@@ -329,7 +348,7 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
                 <Button
                   className="h-11 flex-1"
                   onClick={handleSend}
-                  disabled={escalationRoles.length === 0}
+                  disabled={escalationContacts.length === 0}
                 >
                   <Bell size={16} />
                   Enviar notificaciones
@@ -347,7 +366,7 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
                 <div className="space-y-2">
                   {delivery.map(item => (
                     <div
-                      key={item.role}
+                      key={String(item.userId)}
                       className={cn(
                         'flex items-center gap-3 rounded-xl border border-ds-hairline px-3 py-2.5 transition-colors',
                         item.state === 'sent' ? 'bg-ds-accent-faded' : 'bg-ds-muted'

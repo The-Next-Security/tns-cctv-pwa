@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Camera, Clock, MapPin, ChevronDown, Check, X, Eye } from 'lucide-react'
+import { Camera, Clock, MapPin, ChevronDown, ChevronRight, Check, X, Eye, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -26,9 +26,11 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
-import { DISCARD_REASON_LABELS, getEventLabel, getAlertClass } from '@/lib/types'
+import { DISCARD_REASON_LABELS, getAlertRuleTitle, getAlertClass } from '@/lib/types'
+import { RuleId } from '@/components/ui/rule-id'
 import { CRITICALITY_STYLES, CRITICALITY_LABELS } from '@/lib/constants'
 import { UrgencyBadge } from '@/components/ui/urgency-badge'
+import { AlertId } from '@/components/ui/alert-id'
 import {
   CallContactsPopover,
   EscalateButton,
@@ -36,9 +38,10 @@ import {
 
 interface AlertCardProps {
   alert: Alert
-  onAction: (action: 'acknowledge' | 'resolve' | 'escalate', notes?: string) => void
+  onAction: (action: 'acknowledge' | 'resolve' | 'escalate' | 'discard', notes?: string) => void
   onEscalate: () => void
   onLlamar: (id: number) => void
+  onReactivate?: (id: number) => void
   onShowDetails?: (alert: Alert) => void
   readonly?: boolean
   useReviewActions?: boolean
@@ -59,6 +62,7 @@ export function AlertCard({
   onAction,
   onEscalate,
   onLlamar,
+  onReactivate,
   onShowDetails,
   readonly = false,
   useReviewActions = false,
@@ -142,8 +146,17 @@ export function AlertCard({
   function handleDiscard(reason: DiscardReason) {
     setIsLoading(true)
     setTimeout(() => {
-      onAction('resolve', `Descartado: ${DISCARD_REASON_LABELS[reason]}`)
+      onAction('discard', reason)
       toast.success('Alerta descartada')
+      setIsLoading(false)
+    }, 300)
+  }
+
+  function handleReactivate() {
+    if (!onReactivate) return
+    setIsLoading(true)
+    setTimeout(() => {
+      onReactivate(alert.id)
       setIsLoading(false)
     }, 300)
   }
@@ -151,52 +164,97 @@ export function AlertCard({
   const isPending = alert.status === 'pendiente'
   const isInReview = alert.status === 'en_revision'
   const isEscalated = alert.status === 'escalada'
+  const isClosed = alert.status === 'resuelta' || alert.status === 'descartada'
   const alertClass = getAlertClass(alert.criticality)
   const isCriticalClass = alertClass === 'critica'
+  const isLowPriorityClass = alertClass === 'baja_prioridad'
+  const showAtenderButton = isLowPriorityClass && isPending
   const showReviewActions = useReviewActions || isInReview
   const showCloseActions = showReviewActions || isEscalated
   const escalationAlert = showReviewActions && alert.status !== 'en_revision'
     ? { ...alert, status: 'en_revision' as const }
     : alert
 
+  const critStyles = CRITICALITY_STYLES[alert.criticality]
+
+  function handleCardClick() {
+    onShowDetails?.(alert)
+  }
+
+  function handleCardKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!onShowDetails) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onShowDetails(alert)
+    }
+  }
+
   return (
     <>
-      <Card 
+      <Card
+        role={onShowDetails ? 'button' : undefined}
+        tabIndex={onShowDetails ? 0 : undefined}
+        onKeyDown={handleCardKeyDown}
         className={cn(
-          'soft-card border-0 transition-all duration-200 hover:shadow-soft-md cursor-pointer group overflow-hidden',
-          alert.criticality === 'critica' && isPending && 'ring-2 ring-[var(--urgency-critical)]/35'
+          'soft-card group relative overflow-hidden rounded-2xl py-0',
+          'cursor-pointer transition-all duration-200 ease-out',
+          'border border-ds-hairline shadow-[var(--shadow-soft-sm)]',
+          'hover:-translate-y-0.5 hover:border-ds-accent/45 hover:shadow-soft-md hover:bg-ds-muted/15',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-page',
+          'active:translate-y-0 active:scale-[0.995]',
+          isPending && isCriticalClass && cn('ring-2', critStyles.ring, critStyles.borderSubtle),
+          isPending && alert.criticality === 'alta' && 'ring-1 ring-[var(--criticality-alta)]/20 border-[var(--criticality-alta)]/35',
+          isPending && !isCriticalClass && alert.criticality !== 'alta' && 'ring-1 ring-ds-hairline',
+          !isPending && 'opacity-[0.97] hover:opacity-100'
         )}
-        onClick={() => onShowDetails?.(alert)}
+        onClick={handleCardClick}
       >
-        <CardContent className="p-3 sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
-            {/* Class indicator */}
-            <div className={cn(
-              'flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 flex-col items-center justify-center rounded-lg sm:rounded-xl text-[9px] font-bold uppercase tracking-wide leading-tight gap-0.5',
-              isCriticalClass
-                ? CRITICALITY_STYLES[alert.criticality].bgSubtle
-                : 'bg-ds-muted/60',
-              isCriticalClass
-                ? CRITICALITY_STYLES[alert.criticality].text
-                : 'text-ds-ink-muted',
-              isCriticalClass && isPending && 'badge-urgency-critical-pulse ring-1 ring-[var(--urgency-critical-border)]'
-            )}>
-              {isCriticalClass ? (
-                <span>{alert.criticality === 'critica' ? 'CRÍ' : 'ALT'}</span>
-              ) : (
-                <>
-                  <span>BP</span>
-                  <span className="text-[7px] opacity-70">{CRITICALITY_LABELS[alert.criticality].slice(0, 3)}</span>
-                </>
-              )}
-            </div>
+        <CardContent className="p-3 sm:p-4">
+          <div
+            className={cn(
+              'relative rounded-xl border border-ds-hairline/80 bg-ds-muted/20 p-3 sm:p-4 transition-colors duration-200',
+              'group-hover:border-ds-accent/30 group-hover:bg-ds-muted/30',
+              isPending && isCriticalClass && 'border-[var(--urgency-critical-border)]/50 bg-[var(--urgency-critical-bg)]/25'
+            )}
+          >
+            {onShowDetails && (
+              <ChevronRight
+                aria-hidden
+                className="pointer-events-none absolute right-3 top-3 z-10 h-4 w-4 text-ds-ink-muted opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100"
+              />
+            )}
+            <div className="flex gap-3 sm:gap-4">
+              {/* Class indicator */}
+              <div className={cn(
+                'flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 flex-col items-center justify-center rounded-lg sm:rounded-xl text-[9px] font-bold uppercase tracking-wide leading-tight gap-0.5',
+                isCriticalClass
+                  ? CRITICALITY_STYLES[alert.criticality].bgSubtle
+                  : 'bg-ds-muted/60',
+                isCriticalClass
+                  ? CRITICALITY_STYLES[alert.criticality].text
+                  : 'text-ds-ink-muted',
+                isCriticalClass && isPending && 'badge-urgency-critical-pulse ring-1 ring-[var(--urgency-critical-border)]'
+              )}>
+                {isCriticalClass ? (
+                  <span>{alert.criticality === 'critica' ? 'CRÍ' : 'ALT'}</span>
+                ) : (
+                  <>
+                    <span>BP</span>
+                    <span className="text-[7px] opacity-70">{CRITICALITY_LABELS[alert.criticality].slice(0, 3)}</span>
+                  </>
+                )}
+              </div>
 
-            {/* Content */}
-            <div className="flex-1 min-w-0 space-y-1.5 sm:space-y-2">
+              {/* Content — dentro del marco clickeable */}
+              <div className="flex-1 min-w-0 space-y-1.5 sm:space-y-2 pr-5">
               <div>
-                <h3 className="font-medium text-sm sm:text-base leading-snug line-clamp-2">
-                  {alert.description || getEventLabel(alert.event_code)}
-                </h3>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <h3 className="font-medium text-sm sm:text-base leading-snug line-clamp-2">
+                    {getAlertRuleTitle(alert)}
+                  </h3>
+                  <RuleId rule={alert.rule} variant="compact" />
+                  <AlertId externalEventId={alert.external_event_id} fallbackId={alert.id} variant="compact" />
+                </div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs sm:text-sm text-ds-ink-muted mt-1">
                   {alert.camera && (
                     <span className="flex items-center gap-1">
@@ -254,112 +312,157 @@ export function AlertCard({
                   {isCriticalClass ? 'Crítica — atención inmediata' : 'Baja prioridad — pendiente'}
                 </UrgencyBadge>
               )}
+              </div>
             </div>
+          </div>
 
-            {/* Actions */}
-            {!readonly && (
-              <div
-                className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:flex-wrap sm:justify-end sm:shrink-0"
-                onClick={e => e.stopPropagation()}
-              >
-                {isPending && !showReviewActions && (
-                  <>
+          {/* Acciones — fuera del marco de contenido */}
+          {!readonly && (
+            <div
+              className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end"
+              onClick={e => e.stopPropagation()}
+            >
+              {isClosed && onReactivate && (
+                <Button
+                  size="sm"
+                  onClick={handleReactivate}
+                  disabled={isLoading}
+                  className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl shadow-soft-sm"
+                >
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                  Activar
+                </Button>
+              )}
+
+              {!isClosed && isPending && !showReviewActions && (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={handleAcknowledge}
+                    disabled={isLoading}
+                    className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl shadow-soft-sm"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    Atender
+                  </Button>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" disabled={isLoading} className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl border-ds-hairline bg-ds-surface shadow-none">
+                        <X className="h-4 w-4 mr-1" />
+                        Descartar
+                        <ChevronDown className="h-3 w-3 ml-1" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 border-ds-hairline bg-ds-surface">
+                      {discardReasons.map(reason => (
+                        <DropdownMenuItem
+                          key={reason}
+                          onClick={() => handleDiscard(reason)}
+                        >
+                          {DISCARD_REASON_LABELS[reason]}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
+
+              {!isClosed && showReviewActions && !isEscalated && (
+                <>
+                  {showAtenderButton && (
                     <Button
                       size="sm"
                       onClick={handleAcknowledge}
                       disabled={isLoading}
-                      className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl shadow-soft-sm"
+                      className="h-10 sm:h-9 touch-target rounded-xl shadow-soft-sm"
                     >
                       <Eye className="h-4 w-4 mr-1" />
                       Atender
                     </Button>
+                  )}
 
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={isLoading} className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl border-0 bg-secondary/80 shadow-none">
-                          <X className="h-4 w-4 mr-1" />
-                          Descartar
-                          <ChevronDown className="h-3 w-3 ml-1" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        {discardReasons.map(reason => (
-                          <DropdownMenuItem
-                            key={reason}
-                            onClick={() => handleDiscard(reason)}
-                          >
-                            {DISCARD_REASON_LABELS[reason]}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </>
-                )}
+                  <Button
+                    size="sm"
+                    onClick={() => setResolveDialogOpen(true)}
+                    disabled={isLoading}
+                    className="h-10 sm:h-9 bg-primary hover:bg-primary/90 text-primary-foreground touch-target rounded-xl shadow-soft-sm"
+                  >
+                    <Check className="h-4 w-4 mr-1" />
+                    Marcar como Revisada
+                  </Button>
 
-                {showReviewActions && !isEscalated && (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={() => setResolveDialogOpen(true)}
-                      disabled={isLoading}
-                      className="h-10 sm:h-9 bg-primary hover:bg-primary/90 text-primary-foreground touch-target rounded-xl shadow-soft-sm"
-                    >
-                      <Check className="h-4 w-4 mr-1" />
-                      Resuelta
-                    </Button>
+                  <CallContactsPopover
+                    alert={escalationAlert}
+                    onLlamar={onLlamar}
+                    disabled={isLoading}
+                    className="h-10 rounded-xl sm:h-9"
+                  />
 
-                    <CallContactsPopover
-                      alert={escalationAlert}
-                      onLlamar={onLlamar}
-                      disabled={isLoading}
-                      className="h-10 rounded-xl sm:h-9"
-                    />
+                  <EscalateButton
+                    alert={escalationAlert}
+                    onEscalate={onEscalate}
+                    disabled={isLoading}
+                    className="h-10 rounded-xl sm:h-9"
+                  />
 
-                    <EscalateButton
-                      alert={escalationAlert}
-                      onEscalate={onEscalate}
-                      disabled={isLoading}
-                      className="h-10 rounded-xl sm:h-9"
-                    />
-                  </>
-                )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" disabled={isLoading} className="h-10 sm:h-9 touch-target rounded-xl border-ds-hairline bg-ds-surface shadow-none">
+                        <X className="h-4 w-4 mr-1" />
+                        Descartar
+                        <ChevronDown className="h-3 w-3 ml-1" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 border-ds-hairline bg-ds-surface">
+                      {discardReasons.map(reason => (
+                        <DropdownMenuItem
+                          key={reason}
+                          onClick={() => handleDiscard(reason)}
+                        >
+                          {DISCARD_REASON_LABELS[reason]}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
 
-                {showCloseActions && isEscalated && (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={() => setResolveDialogOpen(true)}
-                      disabled={isLoading}
-                      className="col-span-2 sm:col-span-1 h-10 sm:h-9 bg-primary hover:bg-primary/90 text-primary-foreground touch-target rounded-xl shadow-soft-sm"
-                    >
-                      <Check className="h-4 w-4 mr-1" />
-                      Resuelta
-                    </Button>
+              {!isClosed && showCloseActions && isEscalated && (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => setResolveDialogOpen(true)}
+                    disabled={isLoading}
+                    className="col-span-2 sm:col-span-1 h-10 sm:h-9 bg-primary hover:bg-primary/90 text-primary-foreground touch-target rounded-xl shadow-soft-sm"
+                  >
+                    <Check className="h-4 w-4 mr-1" />
+                    Marcar como Revisada
+                  </Button>
 
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={isLoading} className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl border-0 bg-secondary/80 shadow-none">
-                          <X className="h-4 w-4 mr-1" />
-                          Descartar
-                          <ChevronDown className="h-3 w-3 ml-1" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        {discardReasons.map(reason => (
-                          <DropdownMenuItem
-                            key={reason}
-                            onClick={() => handleDiscard(reason)}
-                          >
-                            {DISCARD_REASON_LABELS[reason]}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" disabled={isLoading} className="col-span-2 sm:col-span-1 h-10 sm:h-9 touch-target rounded-xl border-ds-hairline bg-ds-surface shadow-none">
+                        <X className="h-4 w-4 mr-1" />
+                        Descartar
+                        <ChevronDown className="h-3 w-3 ml-1" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 border-ds-hairline bg-ds-surface">
+                      {discardReasons.map(reason => (
+                        <DropdownMenuItem
+                          key={reason}
+                          onClick={() => handleDiscard(reason)}
+                        >
+                          {DISCARD_REASON_LABELS[reason]}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -367,7 +470,10 @@ export function AlertCard({
       <Dialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Resolver Alerta</DialogTitle>
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              Resolver alerta
+              <AlertId externalEventId={alert.external_event_id} fallbackId={alert.id} variant="compact" />
+            </DialogTitle>
             <DialogDescription>
               Agregue notas sobre como se resolvio esta alerta
             </DialogDescription>
