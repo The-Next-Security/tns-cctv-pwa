@@ -145,6 +145,18 @@ export const STATUS_STYLES = {
   },
 } as const
 
+/** Zonas del parque (alineadas con zone_code en BD y mysqlStore.ZONE_NAMES). */
+export const PARK_ZONES = [
+  { id: 1, code: 'zone-1', name: 'Entrada Principal' },
+  { id: 2, code: 'zone-2', name: 'Zona Industrial A' },
+  { id: 3, code: 'zone-3', name: 'Zona Industrial B' },
+  { id: 4, code: 'zone-4', name: 'Zona Logistica' },
+  { id: 5, code: 'zone-5', name: 'Estacionamiento' },
+  { id: 6, code: 'zone-6', name: 'Perimetro Norte' },
+  { id: 7, code: 'zone-7', name: 'Perimetro Sur' },
+  { id: 8, code: 'zone-8', name: 'Area Administrativa' },
+] as const
+
 export type AlertStatusType = keyof typeof STATUS_STYLES
 
 /** Mapeo estado de alerta → nivel de urgencia visual */
