@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:verify": "node db/tests/verify-sql.mjs",
+    "db:seed-nvr": "node db/seed/simulate-nvr-ingest.mjs",
+    "demo:clean": "bash scripts/demo-clean.sh",
     "api:mysql": "STORE=mysql node src/server.js"
   },
   "dependencies": {
