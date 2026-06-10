@@ -46,6 +46,8 @@ import {
   CallContactsPopover,
   EscalateButton,
 } from '@/components/operacion/escalation-controls'
+import { AlertId } from '@/components/ui/alert-id'
+import { RuleId } from '@/components/ui/rule-id'
 
 const criticalityStyles: Record<Criticality, string> = {
   baja: 'bg-criticality-baja/20 text-criticality-baja border-criticality-baja/30',
@@ -186,6 +188,11 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
         <h1 className="text-2xl font-bold tracking-tight">
           {getEventLabel(alert.event_code)}
         </h1>
+        <AlertId
+          externalEventId={alert.external_event_id}
+          fallbackId={alert.id}
+          className="text-base text-ds-ink-body"
+        />
         {!isPending && (
           <Badge variant="secondary">
             {ALERT_STATUS_LABELS[alert.status]}
@@ -296,21 +303,29 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                 <CardContent className="pt-0">
                   <dl className="grid gap-2 text-sm">
                     <div className="flex justify-between">
-                      <dt className="text-ds-ink-muted">ID Alerta</dt>
-                      <dd className="font-mono">{alert.id}</dd>
+                      <dt className="text-ds-ink-muted">ID NVR</dt>
+                      <dd>
+                        <AlertId
+                          externalEventId={alert.external_event_id}
+                          fallbackId={alert.id}
+                        />
+                      </dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-ds-ink-muted">ID Evento</dt>
-                      <dd className="font-mono">{alert.event_raw_id}</dd>
+                      <dt className="text-ds-ink-muted">ID Evento (BD)</dt>
+                      <dd className="font-mono text-xs">{alert.event_id || '-'}</dd>
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-ds-ink-muted">Codigo Evento</dt>
                       <dd className="font-mono">{alert.event_code || '-'}</dd>
                     </div>
                     {alert.rule && (
-                      <div className="flex justify-between">
-                        <dt className="text-ds-ink-muted">Regla aplicada</dt>
-                        <dd>{alert.rule.name}</dd>
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-ds-ink-muted shrink-0">Regla aplicada</dt>
+                        <dd className="text-right">
+                          <span className="block">{alert.rule.name}</span>
+                          <RuleId rule={alert.rule} variant="compact" className="justify-end" />
+                        </dd>
                       </div>
                     )}
                     <div className="flex justify-between">
