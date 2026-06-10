@@ -181,6 +181,7 @@ Esta modelado de tres formas:
 Los tres modelos convergen en lo esencial:
 - `NEW`
 - `IN_REVIEW`
+- `ESCALATING`
 - `CLOSED`
 
 ### Idempotencia
@@ -199,7 +200,7 @@ Archivo:
 
 Funcion:
 - bloquea `ale_evento` con `FOR UPDATE`
-- valida solo `NEW -> IN_REVIEW` y `IN_REVIEW -> CLOSED`
+- valida `NEW -> IN_REVIEW`, `NEW -> ESCALATING`, `IN_REVIEW -> ESCALATING`, `IN_REVIEW -> CLOSED`, `ESCALATING -> CLOSED`
 - actualiza `ale_evento`
 - inserta en `log_evento_timeline`
 
@@ -245,7 +246,7 @@ Si hay que documentar "el modelo de datos del proyecto" sin inventar nada, hoy l
 - Fix aplicado al DDL prefijado: `dah_snapshot.trigger` → `` `trigger` `` (palabra reservada).
 - Mapeos usados por el runtime (frontend ↔ BD), implementados en `src/mysqlStore.cjs`:
   - Rol app↔ENUM: `admin_parque/supervisor/vigilante/recepcion/soporte_tns` ↔ `ADMIN/OPS/GUARD/SUPERADMIN_TNS`.
-  - Estado↔status: `NEW/IN_REVIEW/CLOSED` ↔ `pendiente/en_revision/(resuelta|descartada|escalada según decision)`.
+  - Estado↔status: `NEW`→`pendiente`, `IN_REVIEW`→`en_revision`, `ESCALATING`→`escalada` (activo, en atención), `CLOSED`→`resuelta`/`descartada` según decisión de cierre.
   - Severidad↔criticidad: 5/4/3/≤2 ↔ critica/alta/media/baja.
 - Las **zonas** no tienen tabla propia: se modelan como `zone_code` (`zone-1`…`zone-8`) en `ale_evento` y en `metadata_json` de `src_fuente`.
 
@@ -259,4 +260,4 @@ Si hay que documentar "el modelo de datos del proyecto" sin inventar nada, hoy l
 - Usuarios: 5 demo Agrolivo + 3 reales TNS (admin completa). El backend deriva un `role` de presentación; la autoridad real son los `permissions`.
 
 ---
-Ultima actualizacion basada en codigo: 2026-06-09
+Ultima actualizacion basada en codigo: 2026-06-10

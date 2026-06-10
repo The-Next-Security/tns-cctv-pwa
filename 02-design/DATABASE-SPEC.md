@@ -119,7 +119,10 @@ Contrato real:
 - bloquea fila con `FOR UPDATE`
 - valida:
   - `NEW -> IN_REVIEW`
+  - `NEW -> ESCALATING`
+  - `IN_REVIEW -> ESCALATING`
   - `IN_REVIEW -> CLOSED`
+  - `ESCALATING -> CLOSED`
 - actualiza `decision_reason`
 - inserta fila de timeline
 - usa transaccion explicita con `START TRANSACTION` y `COMMIT`

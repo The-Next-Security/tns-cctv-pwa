@@ -191,7 +191,10 @@ Payload real:
 
 Transiciones reales permitidas:
 - `NEW -> IN_REVIEW`
+- `NEW -> ESCALATING`
+- `IN_REVIEW -> ESCALATING`
 - `IN_REVIEW -> CLOSED`
+- `ESCALATING -> CLOSED`
 
 Errores reales:
 - `404 NOT_FOUND` si no existe el evento
@@ -326,11 +329,12 @@ La superficie `src/` ahora puede correr con persistencia real (`STORE=mysql` →
 ### `GET /api/v1/alerts` (nuevo)
 - Mapea `ale_evento` (+ última decisión de `log_evento_timeline`) a la forma `Alert` del frontend.
 - Responde ambas formas: `{ items }` (estilo `src`) y `{ data, pagination }` (`PaginatedResponse` del frontend).
+- Mapeo de estados: `NEW`→`pendiente`, `IN_REVIEW`→`en_revision`, `ESCALATING`→`escalada` (activo), `CLOSED`→`resuelta`/`descartada`.
 
 ### `POST /api/v1/alerts/:eventId/attend` (nuevo)
 - Acciones: `acknowledge | resolve | escalate | discard` **y** alias del frontend `revisada | descartada | escalada`.
 - Acepta el `event_id` real (`CHAR(26)`) o el surrogate numérico de la UI (`resolveEventId`).
-- Ejecuta transiciones con el stored procedure `stpr_register_event_state` (multi-paso `NEW→IN_REVIEW→CLOSED`).
+- Ejecuta transiciones con el stored procedure `stpr_register_event_state` (multi-paso cuando cierra desde `NEW`: `NEW→IN_REVIEW→CLOSED`; escalado activo: `→ESCALATING`; cierre desde escalado: `ESCALATING→CLOSED`).
 
 ### Conexión frontend
 - `next.config.mjs` agrega `rewrites()`: `/api/v1/*` → `http://127.0.0.1:4000` (var `API_PROXY_TARGET`).
