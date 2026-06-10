@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS gen_usuario (
   id_usuario      CHAR(26)     PRIMARY KEY,
   id_tenant       CHAR(26)     NOT NULL,
   email           VARCHAR(190) NOT NULL,
+  telefono        VARCHAR(32)  NULL,
+  rol             VARCHAR(32)  NOT NULL DEFAULT 'visualizador',
   nombre          VARCHAR(120) NOT NULL,
   apellido        VARCHAR(120) NOT NULL,
   password_hash   VARCHAR(255) NOT NULL,
@@ -39,10 +41,11 @@ CREATE TABLE IF NOT EXISTS gen_usuario (
   CONSTRAINT fk_gen_usuario_id_tenant_gen_tenant_id_tenant
     FOREIGN KEY (id_tenant) REFERENCES gen_tenant(id_tenant),
   CONSTRAINT uk_usuario_tenant_email UNIQUE (id_tenant, email),
-  INDEX idx_usuario_tenant_status (id_tenant, status)
+  INDEX idx_usuario_tenant_status (id_tenant, status),
+  INDEX idx_usuario_tenant_rol (id_tenant, rol, status)
 ) ENGINE=InnoDB;
 
--- Autorizacion basada en permisos (sin concepto de roles).
+-- Rol de presentación (`rol`) + permisos granulares (gen_usuario_permiso).
 -- gen_permiso: catalogo de permisos del software.
 -- gen_usuario_permiso: relacion N:M usuario <-> permiso.
 CREATE TABLE IF NOT EXISTS gen_permiso (
