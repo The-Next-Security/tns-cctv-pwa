@@ -6,8 +6,9 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { CRITICALITY_LABELS, getCriticalityBadgeClass } from '@/lib/constants'
 import { countAlertsToday, groupAlertsByHourSlot } from '@/lib/alert-stats'
 import type { Alert } from '@/lib/types'
-import { getEventLabel } from '@/lib/types'
+import { getAlertRuleTitle } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { AlertId } from '@/components/ui/alert-id'
 
 interface OperacionContextPanelProps {
   alerts: Alert[]
@@ -52,9 +53,12 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
         <ul className="space-y-0 divide-y divide-border">
           {recentActivity.map(alert => (
             <li key={alert.id} className="py-3 first:pt-0 last:pb-0">
-              <p className="text-body font-medium line-clamp-1">
-                {alert.description ?? getEventLabel(alert.event_code)}
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-body font-medium line-clamp-1 min-w-0">
+                  {getAlertRuleTitle(alert)}
+                </p>
+                <AlertId externalEventId={alert.external_event_id} fallbackId={alert.id} variant="compact" />
+              </div>
               <div className="flex items-center justify-between mt-1 gap-2">
                 <RelativeTime date={alert.timestamp} className="text-caption text-live-data" />
                 <span
