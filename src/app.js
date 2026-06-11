@@ -197,6 +197,10 @@ function createApp(deps = {}) {
       return res.status(409).json(errorEnvelope('IDEMPOTENCY_CONFLICT', 'same key with different payload', req.requestId));
     }
 
+    if (result.invalidSource) {
+      return res.status(400).json(errorEnvelope('UNKNOWN_SOURCE', 'source.source_id no corresponde a ninguna fuente registrada (id_fuente o source_code)', req.requestId));
+    }
+
     if (result.matched === false) {
       return res.status(202).json({
         status: 'STORED_RAW',

@@ -395,10 +395,23 @@ class MysqlStore {
         payload.source.channel ??
         null;
 
+      // El conector puede identificar la fuente por id_fuente o por source_code:
+      // dah_evento_crudo exige el id_fuente real (FK), así que se resuelve aquí.
+      const [fuenteRows] = await conn.query(
+        `SELECT id_fuente FROM src_fuente
+          WHERE id_tenant = ? AND (id_fuente = ? OR source_code = ?)
+          LIMIT 1`,
+        [payload.tenant_id, payload.source.source_id, payload.source.source_id]
+      );
+      if (!fuenteRows[0]) {
+        await conn.rollback();
+        return { invalidSource: true };
+      }
+
       const pipelineResult = await processNvrRawEvent(conn, {
         tenantId: payload.tenant_id,
         siteId: payload.site_id,
-        sourceId: payload.source.source_id,
+        sourceId: fuenteRows[0].id_fuente,
         channel,
         eventType: payload.event.event_type,
         zoneCode: payload.event.zone_code || null,

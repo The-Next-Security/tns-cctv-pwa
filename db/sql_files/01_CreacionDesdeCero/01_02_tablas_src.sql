@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS src_idempotencia_ingesta (
   endpoint_key             VARCHAR(64)  NOT NULL,
   idempotency_key          VARCHAR(128) NOT NULL,
   payload_hash             CHAR(64)     NOT NULL,
-  resource_type            ENUM('EVENTO','EVENTO_VELOCIDAD') NOT NULL,
+  resource_type            ENUM('EVENTO','EVENTO_VELOCIDAD','RAW_NVR') NOT NULL,
   resource_id              CHAR(26)     NOT NULL,
   first_seen_at            DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   expires_at               DATETIME(3)  NOT NULL,
