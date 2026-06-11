@@ -26,11 +26,12 @@ export const metadata: Metadata = {
   description: 'Consola de operaciones de seguridad para Parque Industrial Agrolivo. Monitoreo en tiempo real, gestion de alertas y registro vehicular.',
   generator: 'The Next Security',
   applicationName: 'TNS Track',
+  manifest: '/manifest.webmanifest',
   keywords: ['seguridad', 'monitoreo', 'alertas', 'CCTV', 'vigilancia', 'TNS', 'The Next Security'],
   authors: [{ name: 'The Next Security' }],
   icons: {
-    icon: '/brand/tns-logo.png',
-    apple: '/brand/tns-logo.png',
+    icon: '/brand/pwa/icon-192.png',
+    apple: '/brand/pwa/icon-192.png',
   },
 }
 
