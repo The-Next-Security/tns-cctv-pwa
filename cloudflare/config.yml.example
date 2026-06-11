@@ -1,0 +1,10 @@
+# Plantilla — copiar a ~/.cloudflared/config.yml (NO commitear credenciales).
+# Generar con: ./scripts/setup-cloudflare-tunnel.sh cctv-dev.tudominio.cl
+
+tunnel: <TUNNEL-UUID>
+credentials-file: /Users/<tu-usuario>/.cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: cctv-dev.tudominio.cl
+    service: http://localhost:3000
+  - service: http_status:404
