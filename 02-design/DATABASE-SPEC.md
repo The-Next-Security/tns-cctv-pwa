@@ -18,7 +18,7 @@ db/
   sql_files/
     crear_base_datos.sql            # Orquestador principal
     eliminar_base_datos.sql
-    01_CreacionDesdeCero/           # DDL prefijado (36 tablas)
+    01_CreacionDesdeCero/           # DDL prefijado (37 tablas)
     02_Funciones/
     04_StoredProcedures/
     05_Eventos/
@@ -171,7 +171,7 @@ Verificar README en subcarpetas antes de aplicar en BD existente.
 npm run db:verify   # node db/tests/verify-sql.mjs
 ```
 
-Valida: 36 tablas, constraints, índices, SP, evento, orden del orquestador.
+Valida: 37 tablas, constraints, índices, SP, evento, orden del orquestador.
 
 ---
 

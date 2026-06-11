@@ -33,6 +33,7 @@ const expectedTables = [
   'ale_evento',
   'ale_evidencia',
   'ale_notificacion',
+  'ale_push_suscripcion',
   'log_evento_timeline',
   'log_auditoria_api',
   'sal_estado_fuente',

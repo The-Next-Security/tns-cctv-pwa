@@ -52,9 +52,15 @@ async function fetchApi<T>(
 // Auth
 export const auth = {
   login: (email: string, password: string) =>
-    fetchApi<{ token: string; user: import('./types').User }>('/auth/login', {
+    fetchApi<{ token: string; refresh_token: string; expires_in: number; user: import('./types').User }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    }),
+  // D10: refresh rotativo — el token usado queda invalidado y llega uno nuevo.
+  refresh: (refreshToken: string) =>
+    fetchApi<{ token: string; refresh_token: string; expires_in: number; user: import('./types').User }>('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: refreshToken }),
     }),
   logout: () => fetchApi<void>('/auth/logout', { method: 'POST' }),
   me: () => fetchApi<import('./types').User>('/auth/me'),
@@ -84,29 +90,26 @@ export const alerts = {
     )
   },
   get: (id: number) => fetchApi<import('./types').Alert>(`/alerts/${id}`),
-  attend: (
-    id: number,
-    data: {
-      action: 'revisada' | 'descartada' | 'escalada'
-      discard_reason?: string
-      discard_note?: string
-      escalated_to?: number
-      observation?: string
-    }
-  ) =>
-    fetchApi<import('./types').Alert>(`/alerts/${id}/attend`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  // Atiende una alerta por su event_id real (CHAR(26)) usando el vocabulario del backend MySQL.
+  // Vocabulario canónico único (decisión D2). Acepta el event_id real (CHAR(26))
+  // o el id numérico de UI: el backend resuelve ambos vía resolveEventId.
   attendEvent: (
-    eventId: string,
-    action: 'acknowledge' | 'resolve' | 'escalate' | 'discard' | 'reactivate' | 'activate',
+    eventId: string | number,
+    action: 'acknowledge' | 'resolve' | 'escalate' | 'discard' | 'reactivate' | 'activate' | 'register_call',
     notes?: string
   ) =>
     fetchApi<import('./types').Alert>(`/alerts/${eventId}/attend`, {
       method: 'POST',
       body: JSON.stringify({ action, notes }),
+    }),
+}
+
+// Web Push (D9)
+export const push = {
+  publicKey: () => fetchApi<{ enabled: boolean; public_key: string | null }>('/push/public-key'),
+  subscribe: (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    fetchApi<{ status: string }>('/push/subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(subscription),
     }),
 }
 

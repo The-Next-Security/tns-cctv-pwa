@@ -25,6 +25,45 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   return result
 }
 
+// D9: suscripción Web Push real (VAPID). Se registra contra el backend para
+// que el servidor pueda notificar aunque la PWA esté cerrada.
+export async function registerPushSubscription(): Promise<boolean> {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return false
+  }
+  if (!canNotify()) return false
+
+  try {
+    const { push: pushApi } = await import('./api')
+    const { enabled, public_key } = await pushApi.publicKey()
+    if (!enabled || !public_key) return false
+
+    const registration = await navigator.serviceWorker.ready
+    const subscription =
+      (await registration.pushManager.getSubscription()) ??
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(public_key),
+      }))
+
+    await pushApi.subscribe(subscription.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = atob(base64)
+  const output = new Uint8Array(new ArrayBuffer(rawData.length))
+  for (let i = 0; i < rawData.length; i++) {
+    output[i] = rawData.charCodeAt(i)
+  }
+  return output
+}
+
 export interface EscalationRecipient {
   name: string
   role: string

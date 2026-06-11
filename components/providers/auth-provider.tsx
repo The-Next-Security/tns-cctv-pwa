@@ -44,6 +44,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const res = await authApi.login(email, password)
       localStorage.setItem('tns_token', res.token)
+      localStorage.setItem('tns_refresh_token', res.refresh_token)
       authedUser = {
         id: res.user.id,
         email: res.user.email,
@@ -66,8 +67,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, 100)
   }, [router])
 
+  // D10: renovación silenciosa cada 50 min (access dura 60) durante el turno de 8 h.
+  // El backend rota el refresh token y corta la sesión a las 10 h absolutas.
+  useEffect(() => {
+    if (!user) return
+    const interval = setInterval(async () => {
+      const refreshToken = localStorage.getItem('tns_refresh_token')
+      if (!refreshToken) return
+      try {
+        const res = await authApi.refresh(refreshToken)
+        localStorage.setItem('tns_token', res.token)
+        localStorage.setItem('tns_refresh_token', res.refresh_token)
+      } catch {
+        // Sesión expirada (10 h) o token rotado en otra pestaña: cerrar sesión.
+        await logout()
+      }
+    }, 50 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const logout = useCallback(async () => {
     localStorage.removeItem('tns_token')
+    localStorage.removeItem('tns_refresh_token')
     localStorage.removeItem('tns_user_email')
     localStorage.removeItem('tns_user_role')
     localStorage.removeItem('tns_user_id')
