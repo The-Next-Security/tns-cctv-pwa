@@ -1,0 +1,190 @@
+'use client'
+
+import { useState, useEffect, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import { LogOut, User, Monitor, Moon, Contrast, Sun, RotateCcw, Check } from 'lucide-react'
+import { useTheme } from 'next-themes'
+import { setConsoleThemeManual } from '@/components/layout/console-theme-applier'
+import {
+  CONSOLE_THEME_IDS,
+  CONSOLE_THEMES,
+  DEFAULT_CONSOLE_THEME,
+  isConsoleThemeId,
+  type ConsoleThemeId,
+} from '@/lib/console-themes'
+import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from '@/components/ui/dropdown-menu'
+import { useAuth } from '@/lib/auth'
+import { ROLE_LABELS } from '@/lib/types'
+import { SystemHealthIndicator } from './system-health-indicator'
+import { BrandLogo } from '@/components/brand/brand-logo'
+import { SidebarTrigger } from './app-sidebar'
+import { cn } from '@/lib/utils'
+import { resetDemoState } from '@/lib/reset-demo'
+import { toast } from 'sonner'
+
+interface TopBarProps {
+  onMobileMenuClick: () => void
+  sidebarCollapsed: boolean
+}
+
+export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
+  const { user, logout } = useAuth()
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  function getInitials(name: string | undefined): string {
+    if (!name) return 'U'
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .filter(Boolean)
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  async function handleLogout() {
+    await logout()
+    router.push('/login')
+  }
+
+  function handleResetDemo() {
+    toast.success('Demo reiniciada', {
+      description: 'Alertas, zonas, cámaras y expedientes vuelven a los datos de ejemplo.',
+    })
+    window.setTimeout(() => resetDemoState(), 120)
+  }
+
+  const activeTheme: ConsoleThemeId =
+    mounted && isConsoleThemeId(theme ?? '') ? theme : DEFAULT_CONSOLE_THEME
+
+  const themeIcons: Record<ConsoleThemeId, ReactNode> = {
+    consola: <Monitor className="h-5 w-5" />,
+    'sala-control': <Moon className="h-5 w-5" />,
+    'alto-contraste': <Contrast className="h-5 w-5" />,
+    'admin-claro': <Sun className="h-5 w-5" />,
+  }
+
+  return (
+    <header
+        className={cn(
+          'fixed top-0 right-0 z-30 flex items-center justify-between bg-card/95 backdrop-blur-md border-b border-border safe-top',
+          'h-[var(--topbar-height-mobile)] px-3 lg:h-[var(--topbar-height)] lg:px-6',
+          'transition-all duration-300 ease-out',
+          'left-0 lg:left-[var(--sidebar-width)]',
+          sidebarCollapsed && 'lg:left-[68px]'
+        )}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+        <SidebarTrigger onClick={onMobileMenuClick} />
+        <div className="min-w-0 flex-1 lg:hidden">
+          <BrandLogo
+            variant="full"
+            subtitle={null}
+            href="/operacion"
+            className="max-w-[140px] sm:max-w-[180px]"
+            imageClassName="!h-7 !w-auto"
+          />
+        </div>
+        <SystemHealthIndicator />
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        {/* Presets de consola — desktop/tablet */}
+        {mounted && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="hidden sm:inline-flex rounded-xl touch-target h-9 w-9">
+                {themeIcons[activeTheme]}
+                <span className="sr-only">Cambiar apariencia de consola</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="glass-strong w-64">
+              <DropdownMenuLabel className="text-xs text-muted-foreground font-medium">
+                Apariencia de consola
+              </DropdownMenuLabel>
+              {CONSOLE_THEME_IDS.map(themeId => {
+                const preset = CONSOLE_THEMES[themeId]
+                const isActive = activeTheme === themeId
+                return (
+                  <DropdownMenuItem
+                    key={themeId}
+                    onClick={() => setConsoleThemeManual(themeId, setTheme)}
+                    className="rounded-lg flex flex-col items-start gap-0.5 py-2.5"
+                  >
+                    <span className="flex w-full items-center gap-2 font-medium">
+                      {themeIcons[themeId]}
+                      <span className="flex-1">{preset.label}</span>
+                      {isActive && <Check className="h-4 w-4 text-[var(--cctv-accent-blue)]" />}
+                    </span>
+                    <span className="pl-7 text-xs text-muted-foreground font-normal leading-snug">
+                      {preset.description}
+                    </span>
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* User menu */}
+        {user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="flex items-center gap-2 px-1.5 sm:px-2 rounded-xl touch-target h-9 sm:h-10">
+                <Avatar className="h-8 w-8 sm:h-9 sm:w-9 ring-2 ring-primary/20">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
+                    {getInitials(user.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden flex-col items-start text-left md:flex">
+                  <span className="text-sm font-medium text-zinc-200 antialiased">{user.full_name}</span>
+                  <span className="text-xs text-zinc-400 font-medium antialiased">
+                    {ROLE_LABELS[user.role]}
+                  </span>
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 glass-strong">
+              <DropdownMenuLabel>
+                <div className="flex flex-col">
+                  <span>{user.full_name}</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {user.email}
+                  </span>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleResetDemo} className="rounded-lg">
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reiniciar demo
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="rounded-lg text-destructive focus:text-destructive">
+                <LogOut className="mr-2 h-4 w-4" />
+                Cerrar sesion
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+    </header>
+  )
+}
