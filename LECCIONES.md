@@ -1,0 +1,76 @@
+# LECCIONES.md — Memoria del proyecto (outer loop)
+
+> Formato según HANDOFF §1.2.4: `RULE: [principio general aplicable]`.
+> Leer al inicio de cada sesión de código, después de HANDOFF.md.
+
+## Reglas destiladas
+
+- **RULE:** Verificar que un documento referenciado existe antes de depender de él.
+  `PRD-V2.md` y `REVISION-ARQUITECTO.md` se citan como documentos maestros en
+  `HANDOFF.md` pero **no están en el repo** (2026-06-11). La precedencia efectiva
+  hoy es: HANDOFF.md > docs de `02-design/`.
+
+- **RULE:** En parsers streaming por chunks, consumir un delimitador debe transicionar
+  el estado de inmediato; si el byte siguiente aún no llegó, se necesita un estado
+  intermedio explícito (`after-boundary`), no un `return` que olvide lo consumido.
+  (Bug real del parser multipart con chunks de 1 byte.)
+
+- **RULE:** Constantes derivadas de `process.env` se leen DENTRO de la función
+  factory, no al cargar el módulo — si no, los tests no pueden configurarlas
+  (`WS_AUTH_TIMEOUT_MS` en `src/server.js`).
+
+- **RULE:** El repo raíz es `"type": "module"`, pero `src/` y `connector/` son
+  CommonJS vía `package.json` local `{"type":"commonjs"}`. Todo directorio CJS
+  nuevo necesita ese archivo o Node lo interpretará como ESM.
+
+- **RULE:** `db/tests/verify-sql.mjs` valida un set EXACTO de tablas y el orden
+  SOURCE del orquestador. Agregar una tabla = tocar 3 lugares: DDL en
+  `01_CreacionDesdeCero/`, `expectedTables` del verificador y conteos en
+  `02-design/DATABASE-SPEC.md` (hoy 37 tablas).
+
+- **RULE:** `ale_notificacion.id_site` es NOT NULL: al registrar notificaciones
+  derivar el site desde el evento, y si no hay evento, desde el primer site del
+  tenant.
+
+- **RULE:** Migración aditiva = archivo en `08_Migraciones/` (para BDs existentes)
+  **y** reflejo en `01_CreacionDesdeCero/` (para instalaciones desde cero). El
+  patrón ya estaba establecido (08_01, 08_05) — seguirlo siempre.
+
+- **RULE:** Los alias de vocabulario "temporales" se fosilizan. El test de contrato
+  `tests/alert-vocabulary.contract.spec.js` falla si `revisada/descartada/escalada`
+  reaparecen como acciones API — no eliminarlo.
+
+## Estado al cierre de sesión 2026-06-11
+
+**Verificación:** `npm test` 76/76 verde (×2 desde cero) · `tsc --noEmit` limpio ·
+`npm run build` OK · `npm run db:verify` OK (37 tablas).
+
+**Completado (HANDOFF §2):**
+- Paso 0: suite verde y repetible.
+- Paso 1: D1 (backend PoC → `docs/poc-security/`), D2 (`attendEvent` único + test
+  de contrato), D3 (cero `.catch(() => {})` silenciosos; reconciliación + toasts),
+  `GET /alerts/:id`, D7 (fail-fast `JWT_SECRET`).
+- Paso 2: JWT en todo el API (salvo login/refresh/health), `req.user` real,
+  API key `x-api-key` en ingest (hash en `src_conector_edge.api_key_hash`,
+  migración 08_08), auth WS por frame con timeout 5 s.
+- Paso 3: `connector/` completo (parser multipart, Digest RFC 7616, mapper +
+  idempotencia, cliente ingest con reintentos, reconexión backoff) — desarrollado
+  contra fixtures sintéticos de la spec.
+- Paso 4: D10 (`/auth/me` + refresh rotativo 60 min/10 h, renovación silenciosa en
+  el AuthProvider), D4 (`CALL_REGISTERED` en timeline vía `register_call`),
+  M6 (heartbeat por fuente + umbrales en `gen_configuracion_*`, migración 08_09),
+  D9 (Web Push VAPID: `public/sw.js`, suscripciones, envío al escalar, registro en
+  `ale_notificacion`, migración 08_10).
+
+**Pendiente — siguiente paso exacto:**
+1. **Aplicar migraciones 08_08, 08_09 y 08_10 a la BD local** (requiere aprobación
+   del protocolo de BD; son ALTER/CREATE aditivos) y validar E2E con
+   `STORE=mysql npm run dev`.
+2. Generar claves VAPID (`npx web-push generate-vapid-keys`) y definirlas en el
+   entorno (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`).
+3. **Spike de 1 día contra NVR físico** (≈antes del 25-jun): validar endpoints,
+   grabar golden files que reemplacen los fixtures sintéticos, registrar
+   desviaciones firmware-vs-spec aquí.
+4. Migración mocks→seed (D11, tanda 1: `GET /tenants` + zonas) — no iniciada.
+5. Snapshots reales → `dah_snapshot` + `ale_evidencia` (hoy: `file://` local).
+6. Rotar credenciales demo y actualizar `INSTRUCCIONES_ACCESO.md` antes del go-live.
