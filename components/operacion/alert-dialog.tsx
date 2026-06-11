@@ -74,11 +74,12 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
   async function handleRevisar() {
     setIsLoading(true)
     try {
-      await alertsApi.attend(alert!.id, { action: 'revisada' })
+      await alertsApi.attendEvent(alert!.id, 'resolve')
       toast.success('Alerta marcada como revisada')
       onAction('resolve')
     } catch (error) {
-      onAction('resolve')
+      // La BD es la fuente de verdad (D3): no se simula éxito si el servidor rechaza.
+      toast.error('No se pudo registrar la revisión en el servidor.')
     } finally {
       setIsLoading(false)
     }
@@ -87,14 +88,12 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
   async function handleDescartar(reason: DiscardReason) {
     setIsLoading(true)
     try {
-      await alertsApi.attend(alert!.id, {
-        action: 'descartada',
-        discard_reason: reason,
-      })
+      await alertsApi.attendEvent(alert!.id, 'discard', `Descartado: ${reason}`)
       toast.success('Alerta descartada')
       onAction('resolve', `Descartado: ${reason}`)
     } catch (error) {
-      onAction('resolve', `Descartado: ${reason}`)
+      // La BD es la fuente de verdad (D3): no se simula éxito si el servidor rechaza.
+      toast.error('No se pudo descartar la alerta en el servidor.')
     } finally {
       setIsLoading(false)
     }

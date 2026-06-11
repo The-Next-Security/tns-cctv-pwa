@@ -227,8 +227,11 @@ export default function OperacionPage() {
       }
       return a
     }))
-    // Persistencia best-effort en el backend (no bloquea la UX optimista).
-    alertsApi.attendEvent(eventId, action, notes).catch(() => {})
+    // UX optimista con reconciliación (D3): la BD es la fuente de verdad.
+    alertsApi.attendEvent(eventId, action, notes).catch(() => {
+      toast.error('No se pudo registrar la acción en el servidor. Sincronizando estado real...')
+      loadAlerts()
+    })
     setPriorityAlert(null)
 
     if (action === 'acknowledge') {
@@ -258,7 +261,10 @@ export default function OperacionPage() {
           }
         : a
     ))
-    alertsApi.attendEvent(eventId, 'reactivate').catch(() => {})
+    alertsApi.attendEvent(eventId, 'reactivate').catch(() => {
+      toast.error('No se pudo reactivar la alerta en el servidor. Sincronizando estado real...')
+      loadAlerts()
+    })
     toast.success('Alerta reactivada — vuelve al inicio del flujo')
 
     if (!alert) {
@@ -283,6 +289,12 @@ export default function OperacionPage() {
     setPriorityAlert(prev => prev ? markCalled(prev) : prev)
     setSelectedAlert(prev => prev ? markCalled(prev) : prev)
     setEscalateAlert(prev => prev ? markCalled(prev) : prev)
+
+    // D4: la llamada se persiste como acción CALL_REGISTERED en el timeline.
+    alertsApi.attendEvent(resolveEventId(alertId), 'register_call').catch(() => {
+      toast.error('No se pudo registrar la llamada en el servidor. Sincronizando estado real...')
+      loadAlerts()
+    })
   }
 
   function handleShowDetails(alert: Alert) {

@@ -87,10 +87,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
     if (!alert) return
     setIsLoading(true)
     try {
-      await alertsApi.attend(alert.id, { 
-        action: 'revisada',
-        observation: observation || undefined,
-      })
+      await alertsApi.attendEvent(alert.id, 'resolve', observation || undefined)
       toast.success('Alerta marcada como revisada')
       mutate()
       router.push('/operacion')
@@ -105,11 +102,8 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
     if (!alert) return
     setIsLoading(true)
     try {
-      await alertsApi.attend(alert.id, {
-        action: 'descartada',
-        discard_reason: reason,
-        observation: observation || undefined,
-      })
+      const notes = [DISCARD_REASON_LABELS[reason], observation].filter(Boolean).join(' — ')
+      await alertsApi.attendEvent(alert.id, 'discard', notes)
       toast.success('Alerta descartada')
       mutate()
       router.push('/operacion')
@@ -394,7 +388,14 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
               <CardContent className="space-y-2">
                 <CallContactsPopover
                   alert={operationalAlert}
-                  onLlamar={() => setLlamadaAt(new Date().toISOString())}
+                  onLlamar={() => {
+                    setLlamadaAt(new Date().toISOString())
+                    // D4: la llamada se persiste como CALL_REGISTERED en el timeline.
+                    alertsApi.attendEvent(alert.id, 'register_call').catch(() => {
+                      toast.error('No se pudo registrar la llamada en el servidor.')
+                      setLlamadaAt(null)
+                    })
+                  }}
                   disabled={isLoading}
                   className="w-full"
                 />

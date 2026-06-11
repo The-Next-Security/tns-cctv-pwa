@@ -22,10 +22,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { alerts as alertsApi } from '@/lib/api'
 import {
   canNotify,
+  registerPushSubscription,
   requestNotificationPermission,
   sendEscalationNotification,
   type EscalationRecipient,
@@ -120,16 +122,22 @@ export function EscalateSheet({ alert, onClose, onSuccess }: EscalateSheetProps)
     }))
     setDelivery(initialDelivery)
 
-    alertsApi
-      .attend(currentAlert.id, {
-        action: 'escalada',
-        observation: escalationObservation,
-      })
-      .catch(() => {
-        // El flujo mock continúa aunque el backend no esté disponible.
-      })
+    try {
+      await alertsApi.attendEvent(currentAlert.id, 'escalate', escalationObservation)
+    } catch {
+      // La BD es la fuente de verdad (D3): si el backend rechaza la escalación,
+      // no simulamos envíos — informamos y volvemos a la vista previa.
+      toast.error('No se pudo registrar la escalación. Intente nuevamente.')
+      setPhase('preview')
+      setDelivery([])
+      return
+    }
 
     const permission = await requestNotificationPermission()
+    if (permission === 'granted') {
+      // D9: con permiso otorgado, asegurar la suscripción push en el backend.
+      void registerPushSubscription()
+    }
 
     for (let index = 0; index < initialDelivery.length; index++) {
       await delay(300)
