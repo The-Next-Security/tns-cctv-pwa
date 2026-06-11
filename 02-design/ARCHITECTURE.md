@@ -2,185 +2,194 @@
 
 ## Objetivo
 
-Este documento describe la arquitectura que realmente existe hoy en el repositorio. No describe la arquitectura objetivo del PRD ni una topologia futura.
+Describe la arquitectura **que realmente existe hoy** en el repositorio. No describe la arquitectura objetivo del PRD de negocio (`01-prd/PRD.md`).
+
+**Punto de entrada recomendado para terceros:** `PRD-PRODUCTO.md`.
+
+---
+
+## Vista general
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Next.js 16 (App Router) — :3000                                │
+│  app/, components/, hooks/, lib/                                │
+│  Proxy rewrites: /api/v1/* → :4000                              │
+│  WS directo: ws://hostname:4000/ws/operations                   │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ HTTP + WS
+┌───────────────────────────▼─────────────────────────────────────┐
+│  Express 5 — src/ — :4000                                       │
+│  STORE=mysql → mysqlStore.cjs  |  else → store.js (in-memory)   │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ mysql2 pool
+┌───────────────────────────▼─────────────────────────────────────┐
+│  MySQL 9.x — base tns_cctv (36 tablas, esquema prefijado)       │
+└─────────────────────────────────────────────────────────────────┘
+
+Paralelo (NO integrado): backend/src/ — PoC hardening
+```
+
+---
 
 ## Capas reales del repositorio
 
-### 1. Frontend demo en App Router
+### 1. Frontend — Next.js App Router
 
-Archivos principales:
-- `app/`
-- `components/`
-- `hooks/`
-- `lib/`
+**Archivos:** `app/`, `components/`, `hooks/`, `lib/`, `styles/`
 
-Estado real:
-- La UI esta construida con estructura de Next.js App Router.
-- Usa design system propio y componentes `components/ui/`.
-- La mayor parte de la experiencia opera con datos mock en memoria.
-- El login es demo y persiste un token falso en `localStorage`.
-- Las vistas principales ya existen: operacion, recepcion, expedientes, reglas, reportes, salud y admin.
+**Estado real (2026-06-11):**
+- UI madura con design system (`/admin/design-system`, tokens `ds-*`).
+- **Integrado con backend MySQL:** login, consola operativa (alertas), recepción (parcial), admin usuarios (parcial), health en top bar.
+- **Sigue en mock:** reglas UI, expedientes, reportes, salud detallada, admin zonas/cámaras/NVR, media CCTV, ANPR.
+- Auth: login real vía API; restauración de sesión solo desde `localStorage` (sin `/auth/me`).
 
-### 2. Backend contractual minimo en `src/`
+**Scripts de arranque (`package.json`):**
+- `npm run dev` → `concurrently` API (:4000) + Next (:3000)
+- `npm run demo:clean` → reset pipeline alertas + seed + dev
 
-Archivos principales:
-- `src/app.js`
-- `src/server.js`
-- `src/wsHub.js`
-- `src/store.js`
+### 2. Backend activo — `src/`
 
-Estado real:
-- Express + WebSocket nativo.
-- Persistencia solo in-memory.
-- Sirve como contrato backend mas consistente bajo prueba para ingest, list/detail de eventos y transiciones de estado.
-- No esta integrado con el frontend actual.
+**Archivos clave:**
 
-### 3. Backend de hardening en `backend/src/`
+| Archivo | Rol |
+|---------|-----|
+| `src/server.js` | HTTP + WSS; selecciona store según `STORE` |
+| `src/app.js` | Rutas Express |
+| `src/mysqlStore.cjs` | Persistencia MySQL (producción dev) |
+| `src/store.js` | Store in-memory (tests/contrato ingest) |
+| `src/wsHub.js` | Pub/sub WebSocket |
+| `src/nvrPipeline.cjs` | Motor reglas en ingest |
+| `db/lib/pool.cjs` | Pool MySQL desde `db/connection-config.json` |
 
-Archivos principales:
-- `backend/src/app.js`
-- `backend/tests/security.test.js`
+**Estado real:**
+- `dev:api` fija `STORE=mysql PORT=4000` — **MySQL es el modo estándar de desarrollo**.
+- Sin MySQL configurado, la API falla al arrancar o al conectar.
+- Endpoints implementados: auth, ingest, events (contrato interno), alerts, users, rules (GET), health, vehicle-entries.
+- **No hay middleware JWT** en rutas protegidas; `req.user` casi nunca está poblado.
 
-Estado real:
-- Es un PoC paralelo.
-- Implementa auth con refresh rotation, tenant scope, evidencia firmada y auditoria.
-- No comparte contrato exacto con `src/`.
-- No esta integrado con el frontend actual.
+### 3. Backend PoC — `backend/src/` (huérfano)
+
+**Archivos:** `backend/src/app.js`, `backend/tests/security.test.js`
+
+**Estado real:**
+- PoC paralelo de hardening: refresh rotation, tenant scope, evidencia firmada, auditoría.
+- Contrato distinto (`/ingestion/events` vs `/ingest/events`).
+- **No es el backend de `npm run dev`.** Genera confusión arquitectónica.
 
 ### 4. Capa de datos SQL
 
-Archivos principales:
-- `db/sql_files/01_ddl.sql`
-- `db/sql_files/01_CreacionDesdeCero/*`
-- `db/sql_files/crear_base_datos.sql`
-- `db/migrations/001_init.sql`
+**Archivos:** `db/sql_files/01_CreacionDesdeCero/*`, `crear_base_datos.sql`, `db/migrations/001_init.sql`
 
-Estado real:
-- Coexisten tres modelos SQL distintos.
-- No hay una sola ruta runtime en la aplicacion que hoy consuma esas tablas.
-- La mayor consistencia esta en el bundle prefijado de `db/sql_files/01_CreacionDesdeCero/*`, porque es el mas completo y el que valida `db/tests/verify-sql.mjs`.
+**Estado real:**
+- **Modelo operativo:** bundle prefijado (36 tablas) — único mantenido y consumido por `mysqlStore.cjs`.
+- Bootstrap mínimo `001_init.sql` permanece como artefacto de referencia, no consumido en runtime.
+- Bundle core legacy en inglés **eliminado** (2026-06-09).
 
-## Flujo real de la aplicacion frontend
+---
 
-### Auth actual
+## Flujo real de la aplicación
 
-1. `app/(auth)/login/page.tsx` captura email y password.
-2. `components/providers/auth-provider.tsx` acepta cualquier combinacion no vacia.
-3. Se persiste:
-   - `tns_token`
-   - `tns_user_email`
-   - `tns_user_role`
-   - `tns_user_id`
-   - `tns_user_name`
-4. La navegacion posterior se decide con `lib/auth.ts`.
+### Auth
 
-No hay llamada real a backend para autenticacion en la experiencia de UI.
+1. `app/(auth)/login/page.tsx` captura credenciales.
+2. `AuthProvider.login()` → `POST /api/v1/auth/login`.
+3. Backend valida `gen_usuario.password_hash` (bcrypt).
+4. Persiste en localStorage: `tns_token`, datos de usuario vía `persistDemoUser()`.
+5. Navegación según `lib/auth.ts` (`canAccessRoute`, `getDefaultRoute`).
 
-### Consola operativa real
+**Gap:** `checkAuthStatus()` solo lee localStorage; no revalida JWT. `logout()` no llama API (endpoint inexistente).
 
-1. `app/(dashboard)/operacion/page.tsx` inicializa `localAlerts` desde `MOCK_ALERTS`.
-2. Las acciones de atender, resolver y escalar mutan solo estado local.
-3. `EscalateSheet` dispara una llamada best-effort a `alertsApi.attend(...)`, pero la UI no depende de esa respuesta.
-4. El popup prioritario es demo y se basa en `sessionStorage`.
+### Consola operativa
 
-### Realtime esperado vs realtime existente
+1. `operacion/page.tsx` → `GET /api/v1/alerts` → `ale_evento`.
+2. Acciones optimistas en React + `POST /alerts/:eventId/attend` best-effort.
+3. Transiciones vía `stpr_register_event_state`.
+4. Realtime: `useRealtime()` → `event.popup` → refetch lista.
 
-Frontend:
-- `hooks/use-realtime.ts` usa `socket.io-client`
-- endpoint esperado: `/realtime`
-- eventos esperados: `alert:new`, `alert:updated`, `case:new`, `nvr:status_changed`, `system:degraded`
+Ver flujos detallados en `PRD-PRODUCTO.md` §5.
 
-Backend real en `src/`:
-- usa `ws`
-- endpoint real: `/ws/operations`
-- evento real: `event.popup`
+### Realtime
 
-Arquitectonicamente hoy eso significa que no existe una linea end-to-end unificada entre UI y backend realtime.
+| Capa | Protocolo | Endpoint | Eventos emitidos |
+|------|-----------|----------|------------------|
+| Frontend (`use-realtime.ts`) | WebSocket nativo | `:4000/ws/operations` | Escucha `event.popup`, `alert:new`, etc. |
+| Backend (`wsHub.js`) | `ws` | `/ws/operations` | Solo emite `event.popup` tras ingest |
+
+**Virtud:** el hook ya usa WebSocket nativo alineado con el backend (no Socket.IO en runtime, aunque `socket.io-client` sigue en dependencias).
+
+**Defecto:** token no se envía al WS; canal sin autenticación. Eventos `alert:new`/`alert:updated` preparados en frontend pero no emitidos por backend.
+
+---
 
 ## Fuente de verdad por subsistema
 
 | Subsistema | Fuente de verdad actual |
 |---|---|
-| UI y estados de demo | `app/`, `components/`, `lib/mock-data.ts` |
-| Contrato HTTP/WS minimo bajo prueba | `src/` + `tests/api.contract.spec.js` + `tests/ws.operations.spec.js` |
-| Controles de seguridad explorados | `backend/src/app.js` + `backend/tests/security.test.js` |
-| Modelo SQL mas completo | `db/sql_files/01_CreacionDesdeCero/*` + `db/sql_files/crear_base_datos.sql` |
-| Bundle SQL core simplificado | `db/sql_files/01_ddl.sql` + `02_indices.sql` + `06_events.sql` + `07_logs.sql` |
-| Bootstrap SQL minimo | `db/migrations/001_init.sql` |
-
-## Divergencias estructurales importantes
-
-### Frontend vs package root
-
-El repo tiene estructura de Next.js en `app/`, pero `package.json` root hoy declara:
-- `"type": "module"`
-- scripts con `vite`
-
-Eso vuelve ambiguo el runtime principal del proyecto.
-
-### Dos backends con contratos distintos
-
-`src/` y `backend/src/` no son variantes del mismo servicio. Tienen:
-- distintas rutas
-- distintas decisiones de auth
-- distintas capacidades
-- distintas pruebas
-
-### Tres modelos SQL coexistiendo
-
-Hoy existen en paralelo:
-- modelo core en ingles sin prefijos
-- modelo completo con prefijos `gen_/src_/ale_/log_/sal_/adm_/dah_`
-- migracion bootstrap de 8 tablas
-
-No hay un unico consumidor runtime que obligue a escoger uno.
-
-### Cliente API no alineado
-
-`lib/api.ts` consume rutas tipo:
-- `/alerts`
-- `/rules`
-- `/vehicle-entries`
-- `/case-files`
-
-Ninguna de esas rutas esta implementada en `src/` ni en `backend/src/` con ese contrato.
-
-## Lectura pragmatica del estado actual
-
-Hoy el repositorio funciona mas como combinacion de:
-- frontend de demostracion bastante avanzado
-- backend contractual minimo para eventos
-- backend de seguridad paralelo
-- bundle SQL de diseño muy completo
-
-No funciona todavia como un sistema unico desplegable de punta a punta sin trabajo de consolidacion.
-
-## Prioridades naturales si se quiere unificar la arquitectura
-
-1. Elegir un unico backend fuente de verdad: `src/` o `backend/src/`.
-2. Alinear `lib/api.ts` y `hooks/use-realtime.ts` con ese backend.
-3. Elegir un unico modelo SQL operativo.
-4. Conectar auth, eventos, reglas y escalacion a persistencia real.
+| UI operación alertas | `app/(dashboard)/operacion/` + API `/alerts` |
+| UI mock (reglas, expedientes, etc.) | `lib/mock-data.ts`, `lib/mock-case-files-api.ts` |
+| Backend HTTP/WS activo | `src/` + `src/mysqlStore.cjs` |
+| Controles seguridad explorados (no activos) | `backend/src/` |
+| Modelo SQL operativo | `db/sql_files/01_CreacionDesdeCero/*` |
+| Design system | `styles/design-system.css`, `components/ui/` |
 
 ---
 
-## Actualización 2026-06-09 — Integración real Frontend ↔ Backend ↔ MySQL
+## Matriz integración frontend ↔ backend ↔ BD
 
-> El diagnóstico anterior describe el punto de partida. Esta sección refleja los cambios aplicados en la sesión del 2026-06-09. Detalle completo en `01-prd/HANDOFF_2026-06-09_BASE_DATOS_E_INTEGRACION.md`.
-
-Cambios que actualizan el estado del arte:
-
-- **La capa de datos SQL ya está creada y se consume en runtime.** Se ejecutó el bundle prefijado contra MySQL 9.6 local (base `tns_cctv`, 34 tablas + función + SP + evento). Es el modelo vivo.
-- **`src/` ahora puede correr contra MySQL.** Con `STORE=mysql` usa `src/mysqlStore.cjs` (pool `db/lib/pool.cjs`) en lugar del store in-memory. Misma interfaz, persistencia real.
-- **Auth real en la UI.** `components/providers/auth-provider.tsx` llama a `/api/v1/auth/login` y valida contra `gen_usuario` (bcrypt). Ya no acepta cualquier credencial.
-- **Cliente API parcialmente alineado.** `lib/api.ts` (`/alerts`, `/auth/login`) ya tiene contraparte real en `src/app.js`. El frontend llega al backend mediante el **proxy** `rewrites()` de `next.config.mjs` (`/api/v1/*` → `:4000`).
-- **Consola operativa conectada.** `app/(dashboard)/operacion/page.tsx` lee alertas reales (`ale_evento`) y persiste atender/escalar/descartar vía el stored procedure de transición de estados.
-
-Lo que sigue divergente (sin cambios):
-- Realtime UI (`socket.io` `/realtime`) vs backend (`ws` `/ws/operations`).
-- `backend/src/` (hardening PoC) sigue sin integrar.
-- Recepción, reglas, expedientes, reportes, salud y admin siguen en mock.
-- Coexisten aún los 3 modelos SQL; el operativo es el prefijado.
+| Módulo | Frontend | Backend | MySQL | Notas |
+|--------|----------|---------|-------|-------|
+| Login | Real | Real | `gen_usuario` | Sin refresh/logout |
+| Alertas list/attend | Real | Real | `ale_evento`, SP | UX optimista |
+| Alertas detalle `/alerta/[id]` | Llama API | **No existe** | — | Roto |
+| Ingest NVR | — | Real | Pipeline completo | `db:seed-nvr` |
+| Reglas UI | Mock | GET real | `ale_regla` | UI no consume API |
+| Recepción | Real + fallback | Real | `adm_ingreso` | Tenants mock |
+| Usuarios admin | Real + fallback | Real | `gen_usuario` | — |
+| Health header | Real | Real | Ping DB | — |
+| Salud página | Estático | — | — | — |
+| Expedientes | Mock fallback | — | — | — |
+| Reportes | Estático | — | — | — |
+| Media/streaming | Demo assets | — | `dah_*` sin consumidor | — |
 
 ---
-Ultima actualizacion basada en codigo: 2026-06-09
+
+## Virtudes arquitectónicas
+
+1. **Separación clara frontend/backend** con proxy Next en dev.
+2. **Dual store** (`store.js` / `mysqlStore.cjs`) permite tests sin BD y dev con BD real.
+3. **Stored procedure** centraliza transiciones de estado — consistencia transaccional.
+4. **Motor de reglas en ingest** desacoplado de la UI.
+5. **Design system token-first** — base sólida para evolución UI.
+6. **Scripts operativos** (`demo:clean`, `db:verify`, `db:seed-nvr`).
+
+---
+
+## Defectos y divergencias estructurales
+
+1. **Dos backends** (`src/` vs `backend/src/`) con contratos incompatibles.
+2. **`backend/src/` huérfano** — riesgo de que un tercero integre el backend equivocado.
+3. **Auth incompleta** — JWT emitido pero no enforced en API ni revalidado en UI.
+4. **Realtime parcial** — un solo evento emitido; WS sin auth.
+5. **Mocks coexistiendo** con datos reales — fallbacks silenciosos (`withMockFallback`, `.catch(() => {})`).
+6. **Dos vocabularios API alertas** — `attend()` legacy vs `attendEvent()` canónico.
+7. **`package.json` `"type": "module"`** con módulos `.cjs` — funciona pero mezcla estilos.
+8. **`socket.io-client` en deps** sin uso en runtime — deuda de dependencia.
+9. **Documentación externa desactualizada** — `INSTRUCCIONES_ACCESO.md` describe auth mock.
+
+---
+
+## Prioridades naturales de consolidación
+
+1. Eliminar o fusionar `backend/src/` con `src/` (elegir uno).
+2. Implementar middleware auth + `/auth/me` + refresh.
+3. Unificar vocabulario `attend` / `attendEvent`; implementar `GET /alerts/:id`.
+4. Conectar UI reglas a `GET /rules`; CRUD backend.
+5. Persistir `llamada_at` o equivalente en timeline.
+6. Emitir `alert:new`/`alert:updated` desde backend o documentar solo refetch.
+7. Autenticar WebSocket.
+8. Reemplazar mocks restantes o documentar explícitamente como out-of-scope.
+
+---
+
+**Última actualización basada en código:** 2026-06-11

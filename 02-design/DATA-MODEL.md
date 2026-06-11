@@ -2,262 +2,216 @@
 
 ## Objetivo
 
-Este documento resume el modelo de datos que realmente vive hoy en el repositorio. La conclusion principal es que no existe un unico modelo SQL: hoy conviven tres superficies distintas.
+Resume el modelo de datos **que realmente vive y se consume hoy** en el repositorio, más los artefactos legacy que permanecen versionados pero inactivos.
+
+---
 
 ## Resumen ejecutivo
 
-### Modelo A: bundle core simplificado
+| Modelo | Archivos | Tablas | ¿Consumido en runtime? |
+|--------|----------|--------|------------------------|
+| **Prefijado (vivo)** | `db/sql_files/01_CreacionDesdeCero/*` | 36 | **Sí** — `src/mysqlStore.cjs` |
+| Bootstrap mínimo | `db/migrations/001_init.sql` | 8 | No — referencia / pruebas iniciales |
+| Core legacy inglés | `01_ddl.sql`, etc. | — | **Eliminado** (2026-06-09) |
 
-Archivos:
-- `db/sql_files/01_ddl.sql`
-- `db/sql_files/02_indices.sql`
-- `db/sql_files/06_events.sql`
-- `db/sql_files/07_logs.sql`
+**Decisión práctica:** el modelo prefijado es la única fuente de verdad operativa.
 
-Perfil:
-- nombres en ingles
-- sin prefijos de modulo
-- 19 tablas core en `01_ddl.sql`
-- 1 tabla de auditoria extra en `07_logs.sql`
+---
 
-Tablas core detectadas hoy:
-- `tenants`
-- `sites`
-- `users`
-- `user_site_access`
-- `auth_sessions`
-- `sources`
-- `ingress_idempotency`
-- `rules`
-- `events`
-- `event_evidence`
-- `event_timeline`
-- `admissions`
-- `speed_events`
-- `speed_event_evidence`
-- `speed_cases`
-- `notifications`
-- `edge_connectors`
-- `device_health_status`
-- `health_incidents`
+## Modelo prefijado — módulos y tablas
 
-Tabla adicional separada:
-- `api_audit_log`
+### `gen_` — General / multi-tenant
 
-### Modelo B: bundle completo prefijado
+| Tabla | Propósito |
+|-------|-----------|
+| `gen_tenant` | Tenant (parque) |
+| `gen_site` | Sitio dentro del tenant |
+| `gen_usuario` | Usuarios (`nombre`, `apellido`, sin columna `role`) |
+| `gen_permiso` | Catálogo de permisos (12 alineados con `lib/auth.ts`) |
+| `gen_usuario_permiso` | N:M usuario ↔ permiso |
+| `gen_acceso_sitio` | Usuario ↔ sitios autorizados |
+| `gen_sesion` | Sesiones (modeladas, no usadas en runtime Node hoy) |
+| `gen_configuracion_grupos` | Grupos de config runtime |
+| `gen_configuracion_parametros` | Parámetros |
+| `gen_configuracion_valores` | Valores por tenant/sitio |
 
-Archivos:
-- `db/sql_files/01_CreacionDesdeCero/01_01_tablas_gen.sql`
-- `db/sql_files/01_CreacionDesdeCero/01_02_tablas_src.sql`
-- `db/sql_files/01_CreacionDesdeCero/01_03_tablas_ale.sql`
-- `db/sql_files/01_CreacionDesdeCero/01_04_tablas_log.sql`
-- `db/sql_files/01_CreacionDesdeCero/01_05_tablas_sal.sql`
-- `db/sql_files/01_CreacionDesdeCero/01_06_tablas_adm.sql`
-- `db/sql_files/01_CreacionDesdeCero/01_07_tablas_dah.sql`
-- `db/sql_files/crear_base_datos.sql`
+### `src_` — Fuentes e ingesta
 
-Perfil:
-- nombres prefijados por modulo
-- enfoque mas cercano al diseño funcional del producto
-- 34 tablas
-- incluye Dahua, salud, correlacion y configuracion runtime
-- es el modelo mas completo del repo
+| Tabla | Propósito |
+|-------|-----------|
+| `src_fuente` | NVR, cámaras, conectores |
+| `src_conector_edge` | Conectores edge |
+| `src_idempotencia_ingesta` | Claves idempotencia ingest |
 
-Tablas por modulo:
+### `ale_` — Alertas y reglas
 
-#### `gen_`
-- `gen_tenant`
-- `gen_site`
-- `gen_usuario`
-- `gen_acceso_sitio`
-- `gen_sesion`
-- `gen_configuracion_grupos`
-- `gen_configuracion_parametros`
-- `gen_configuracion_valores`
+| Tabla | Propósito |
+|-------|-----------|
+| `ale_regla` | Reglas operativas (motor ingest + escalación) |
+| `ale_evento` | **Eventos/alertas** — núcleo operativo |
+| `ale_evidencia` | Evidencia asociada |
+| `ale_notificacion` | Notificaciones (modelada, sin consumidor runtime) |
 
-#### `src_`
-- `src_fuente`
-- `src_conector_edge`
-- `src_idempotencia_ingesta`
+### `log_` — Trazabilidad
 
-#### `ale_`
-- `ale_regla`
-- `ale_evento`
-- `ale_evidencia`
-- `ale_notificacion`
+| Tabla | Propósito |
+|-------|-----------|
+| `log_evento_timeline` | Timeline append-only de decisiones |
+| `log_auditoria_api` | Auditoría API (modelada, sin writer runtime) |
 
-#### `log_`
-- `log_evento_timeline`
-- `log_auditoria_api`
+### `sal_` — Salud técnica
 
-#### `sal_`
-- `sal_estado_fuente`
-- `sal_incidente`
-- `sal_chequeo`
+| Tabla | Propósito |
+|-------|-----------|
+| `sal_estado_fuente` | Estado de fuentes |
+| `sal_incidente` | Incidentes de salud |
+| `sal_chequeo` | Chequeos programados |
 
-#### `adm_`
-- `adm_ingreso`
-- `adm_evento_velocidad`
-- `adm_evidencia_velocidad`
-- `adm_caso_velocidad`
-- `adm_candidato_correlacion`
+### `adm_` — Admisiones y velocidad
 
-#### `dah_`
-- `dah_evento_crudo`
-- `dah_deteccion_facial`
-- `dah_reconocimiento_facial`
-- `dah_deteccion_vehiculo`
-- `dah_evento_ivs`
-- `dah_evento_audio`
-- `dah_archivo_grabacion`
-- `dah_snapshot`
-- `dah_suscripcion`
+| Tabla | Propósito |
+|-------|-----------|
+| `adm_ingreso` | Ingresos vehiculares (recepción) |
+| `adm_evento_velocidad` | Eventos de velocidad |
+| `adm_evidencia_velocidad` | Evidencia velocidad |
+| `adm_caso_velocidad` | Casos de infracción |
+| `adm_candidato_correlacion` | Correlación ingreso ↔ evento |
 
-### Modelo C: migracion bootstrap minima
+### `dah_` — Dahua (detalle NVR)
 
-Archivo:
-- `db/migrations/001_init.sql`
+| Tabla | Propósito |
+|-------|-----------|
+| `dah_evento_crudo` | Eventos crudos NVR |
+| `dah_deteccion_facial` | Detecciones faciales |
+| `dah_reconocimiento_facial` | Reconocimientos |
+| `dah_deteccion_vehiculo` | Detecciones vehículo |
+| `dah_evento_ivs` | IVS |
+| `dah_evento_audio` | Audio |
+| `dah_archivo_grabacion` | Grabaciones |
+| `dah_snapshot` | Snapshots (columna `` `trigger` `` escapada) |
+| `dah_suscripcion` | Suscripciones push NVR |
 
-Perfil:
-- 8 tablas
-- ids `BIGINT AUTO_INCREMENT`
-- naming distinto
-- alcance mucho menor
+**Nota:** tablas `dah_*` existen en DDL; no hay servicio runtime que las pueble desde conector Dahua real en este repo.
 
-Tablas:
-- `tenants`
-- `sites`
-- `users`
-- `sources`
-- `security_events`
-- `event_state_history`
-- `idempotency_keys`
-- `audit_logs`
+---
 
-## Que valida realmente el repo
-
-### Validacion del bundle prefijado
-
-`db/tests/verify-sql.mjs` valida:
-- existencia de las 34 tablas del bundle prefijado
-- orden de `SOURCE` en `crear_base_datos.sql`
-- constraints e indices dentro del limite de MySQL
-- presencia del stored procedure de transicion de estados
-- presencia del evento de purga de idempotencia
-
-Conclusion:
-- si hay que elegir el modelo mas defendible desde el codigo, hoy es el bundle prefijado
-
-### Validacion del bundle core simplificado
-
-`tests/data-model-sql.spec.js` valida solo de forma ligera:
-- layout de `db/sql_files`
-- presencia de `01_ddl.sql`
-- presencia de algunas tablas base como `tenants`, `events`, `speed_cases`
-- presencia de `api_audit_log`
-
-Conclusion:
-- el bundle core simplificado sigue vivo en pruebas, pero no es el modelo mas rico del repo
-
-## Convenciones reales de modelado
+## Convenciones de modelado
 
 ### Identificadores
 
-Bundle core y bundle prefijado:
-- usan `CHAR(26)` como PK
-
-Bootstrap:
-- usa `BIGINT UNSIGNED AUTO_INCREMENT`
+- PKs `CHAR(26)` en modelo prefijado.
+- Bootstrap usa `BIGINT AUTO_INCREMENT` (no operativo).
 
 ### Multi-tenant
 
-Esta modelado de tres formas:
-- core: `tenant_id`
-- prefijado: `id_tenant`
-- bootstrap: `tenant_id`
+- Columna `id_tenant` / FK a `gen_tenant`.
+- Aislamiento **modelado en SQL**; enforcement en API **incompleto**.
 
-### Estado de eventos
+### Estados de evento (`ale_evento.state`)
 
-Los tres modelos convergen en lo esencial:
-- `NEW`
-- `IN_REVIEW`
-- `ESCALATING`
-- `CLOSED`
+```
+NEW → IN_REVIEW → CLOSED
+NEW → ESCALATING → CLOSED
+NEW → ESCALATING (activo)
+CLOSED → NEW (reactivate)
+```
 
-### Idempotencia
+Validado por `stpr_register_event_state`.
 
-Existe en los tres niveles:
-- `ingress_idempotency` en el core
-- `src_idempotencia_ingesta` en el prefijado
-- `idempotency_keys` en bootstrap
+### Zonas
 
-## Routines y objetos programables reales
+No hay tabla `zonas`. Se modelan como:
+- `zone_code` en `ale_evento` (`zone-1` … `zone-8`)
+- `metadata_json` en `src_fuente`
 
-### Stored procedure implementado
-
-Archivo:
-- `db/sql_files/04_StoredProcedures/04_01_stpr_register_event_state.sql`
-
-Funcion:
-- bloquea `ale_evento` con `FOR UPDATE`
-- valida `NEW -> IN_REVIEW`, `NEW -> ESCALATING`, `IN_REVIEW -> ESCALATING`, `IN_REVIEW -> CLOSED`, `ESCALATING -> CLOSED`
-- actualiza `ale_evento`
-- inserta en `log_evento_timeline`
-
-### Eventos programados
-
-Bundle core:
-- `ev_purge_expired_idempotency`
-- `ev_purge_old_health_incidents`
-
-Bundle prefijado:
-- `evt_purge_idempotencia`
-
-## Riesgos de verdad actual
-
-1. No existe una sola nomenclatura.
-2. No existe un solo orquestador runtime usado por la aplicacion.
-3. La app frontend no consume ninguna tabla directamente.
-4. Los backends actuales no estan cableados a MySQL.
-
-## Fuente de verdad recomendada por uso
-
-| Uso | Fuente mas fiel hoy |
-|---|---|
-| Modelo funcional completo del producto | bundle prefijado `01_CreacionDesdeCero/*` |
-| Resumen core corto para contratos legacy | `01_ddl.sql` |
-| Bootstrap local rapido | `001_init.sql` |
-
-## Decision practica
-
-Si hay que documentar "el modelo de datos del proyecto" sin inventar nada, hoy la mejor lectura es:
-- el bundle prefijado es la especificacion mas completa
-- el bundle core simplificado es una vista reducida del mismo dominio
-- la migracion bootstrap es un artefacto aparte, util para pruebas iniciales
+Frontend usa `PARK_ZONES` / `MOCK_ZONES` para UX.
 
 ---
 
-## Actualización 2026-06-09 — El modelo prefijado pasó a ser el modelo vivo
+## Mapeos runtime (frontend ↔ BD)
 
-> Ver hand-off completo en `01-prd/HANDOFF_2026-06-09_BASE_DATOS_E_INTEGRACION.md`.
+Implementados en `src/mysqlStore.cjs`:
 
-- De los 3 modelos que coexisten, el **bundle prefijado** (`01_CreacionDesdeCero/*`) fue el ejecutado en MySQL y el que ahora consume el backend (`src/mysqlStore.cjs`). Es el modelo operativo de facto.
-- Los modelos **core** (`01_ddl.sql`) y **bootstrap** (`001_init.sql`) siguen versionados pero **no** se ejecutaron ni se consumen.
-- Fix aplicado al DDL prefijado: `dah_snapshot.trigger` → `` `trigger` `` (palabra reservada).
-- Mapeos usados por el runtime (frontend ↔ BD), implementados en `src/mysqlStore.cjs`:
-  - Rol app↔ENUM: `admin_parque/supervisor/vigilante/recepcion/soporte_tns` ↔ `ADMIN/OPS/GUARD/SUPERADMIN_TNS`.
-  - Estado↔status: `NEW`→`pendiente`, `IN_REVIEW`→`en_revision`, `ESCALATING`→`escalada` (activo, en atención), `CLOSED`→`resuelta`/`descartada` según decisión de cierre.
-  - Severidad↔criticidad: 5/4/3/≤2 ↔ critica/alta/media/baja.
-- Las **zonas** no tienen tabla propia: se modelan como `zone_code` (`zone-1`…`zone-8`) en `ale_evento` y en `metadata_json` de `src_fuente`.
+| Concepto BD | Concepto UI |
+|-------------|-------------|
+| `state: NEW` | `status: pendiente` |
+| `state: IN_REVIEW` | `status: en_revision` |
+| `state: ESCALATING` | `status: escalada` |
+| `state: CLOSED` + decisión | `resuelta` / `descartada` |
+| Severidad 5/4 | `criticality: critica/alta` |
+| Severidad 3/≤2 | `media/baja` |
+| Permisos en `gen_usuario_permiso` | `user.permissions[]` |
+| Inferencia permisos/email | `user.role` (presentación) |
 
-### Rediseño 2026-06-09 (tarde) — usuarios y autorización por permisos
-- `gen_usuario`: `full_name` → **`nombre` + `apellido`**; **sin columna `role`**.
-- **Autorización basada en permisos (no roles)**:
-  - `gen_permiso` (catálogo, 12 permisos alineados con `lib/auth.ts`).
-  - `gen_usuario_permiso` (N:M usuario↔permiso).
-- Total de tablas del modelo prefijado: **36**.
-- Se **eliminó** el bundle core legacy en inglés (era el "Modelo A"). Ya no coexisten 3 modelos: el bootstrap `001_init.sql` permanece solo como artefacto mínimo; el modelo vivo y único mantenido es el **prefijado**.
-- Usuarios: 5 demo Agrolivo + 3 reales TNS (admin completa). El backend deriva un `role` de presentación; la autoridad real son los `permissions`.
+**Gap:** `snapshot_url` mapeado a `null` — UI usa assets demo.
 
 ---
-Ultima actualizacion basada en codigo: 2026-06-10
+
+## Objetos programables
+
+### Stored procedure
+
+**Archivo:** `db/sql_files/04_StoredProcedures/04_01_stpr_register_event_state.sql`
+
+- Bloquea `ale_evento` con `FOR UPDATE`.
+- Valida transiciones permitidas.
+- Inserta en `log_evento_timeline`.
+- Usado por `mysqlStore.attendAlert()`.
+
+### Función
+
+**Archivo:** `db/sql_files/02_Funciones/02_01_fun_normalize_plate.sql`  
+Normalización de patentes.
+
+### Evento scheduler
+
+**Archivo:** `db/sql_files/05_Eventos/05_01_evt_purge_idempotencia.sql`  
+Purga `src_idempotencia_ingesta` expirada.
+
+---
+
+## Validación en repo
+
+| Herramienta | Qué valida |
+|-------------|------------|
+| `db/tests/verify-sql.mjs` | 36 tablas, SP, evento, orden `crear_base_datos.sql` |
+| `npm run db:verify` | Wrapper del script anterior |
+
+---
+
+## Datos demo (seed)
+
+**Archivo:** `db/sql_files/07_DatosIniciales/07_01_datos_iniciales.sql`
+
+- Idempotente (`ON DUPLICATE KEY UPDATE`).
+- 1 tenant, 1 site, 8 usuarios, 10 fuentes, 9 reglas, 12 eventos, 24 timeline, 5 ingresos.
+- Password demo: `password123` (bcrypt fijo en seed).
+
+**Scripts adicionales:**
+- `npm run db:seed-nvr` — simula ingest NVR → reglas → alertas nuevas.
+- `npm run demo:clean` — reset pipeline alertas + seed + dev.
+
+---
+
+## Virtudes del modelo
+
+1. **Modularidad por prefijo** — dominios claros (gen, ale, adm, dah).
+2. **Timeline append-only** — auditoría de decisiones operativas.
+3. **Idempotencia persistente** — ingest seguro.
+4. **Autorización por permisos** — flexible vs roles fijos.
+5. **Soporte Dahua estructural** — preparado para integración NVR profunda.
+6. **SP transaccional** — consistencia en transiciones de estado.
+
+---
+
+## Defectos y riesgos
+
+1. **`llamada_at` no modelado** — requisito UI de escalación sin columna/timeline dedicada.
+2. **Tablas sin consumidor** — `dah_*`, `ale_notificacion`, `log_auditoria_api`, correlación.
+3. **Bootstrap `001_init.sql` divergente** — puede confundir si alguien lo ejecuta pensando que es el modelo vivo.
+4. **`SOURCE` en batch** — orquestador requiere cliente MySQL interactivo (ver `DATABASE-SPEC.md`).
+5. **Case sensitivity** — referencias históricas a `SQL_FILES` vs `sql_files` (Linux).
+
+---
+
+**Última actualización basada en código:** 2026-06-11
