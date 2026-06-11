@@ -1,198 +1,176 @@
-# Sprint Plan — MVP CCTV (sprints de 1 semana)
+# SPRINT-PLAN.md
 
-Horizonte: 6 sprints (1 semana c/u)
-Objetivo: entregar M1..M8 del PRD con control de riesgo y gate de aprobación por diseño.
+## Objetivo
 
-Suposiciones de capacidad por sprint (referencial):
-- dev-back: 25 pts
-- dev-front: 20 pts
-- qa: 15 pts
-- ops: 15 pts
+Tablero de estado basado en el **código actual** (2026-06-11) y priorización realista para un tercero que continúe el proyecto. No es un plan teórico de sprints futuros.
 
-Convención de tamaño:
-- S (1-2 pts), M (3-5 pts), L (8 pts)
+**Documento de entrada:** `PRD-PRODUCTO.md`.
 
-## Sprint 1 — Fundación técnica y M1 base
+---
 
-Meta:
-- Plataforma mínima operativa: auth, modelo base, ingesta normalizada y cola inicial.
+## Estado global
 
-dev-back:
-- [L-8] Bootstrap API + módulos auth, events, audit.
-- [M-5] Endpoint /ingestion/events con idempotency + persistencia.
-- [M-5] Modelo MySQL inicial (tenants/sites/zones/cameras/events/evidence).
-- [M-5] Logs estructurados + request_id + tenant scoping.
+### Lo que SÍ existe e integra
 
-dev-front:
-- [M-5] Shell PWA (login, layout por rol).
-- [M-5] Vista cola eventos básica (tabla + refresh).
-- [S-2] Estado vacío/error/reintento.
+- Frontend Next.js 16 maduro con design system.
+- **Login real** → MySQL (`gen_usuario`, bcrypt, JWT).
+- **Consola operativa E2E** → `GET/POST /alerts` → `ale_evento` + SP.
+- Backend Express + MySQL (`STORE=mysql` en dev estándar).
+- Ingest NVR + motor reglas + WS `event.popup`.
+- Recepción vehicular parcial (`adm_ingreso`).
+- Admin usuarios parcial (`gen_usuario` CRUD).
+- Health en top bar (ping MySQL + NVRs).
+- Bundle SQL prefijado (36 tablas) verificado con `db:verify`.
+- Scripts demo: `demo:clean`, `db:seed-nvr`.
 
-qa:
-- [M-5] Plan de pruebas API auth + ingestión.
-- [M-5] Casos de validación esquema y errores 4xx/5xx.
-- [S-2] Smoke e2e login->evento visible.
+### Lo que NO está integrado o está incompleto
 
-ops:
-- [M-5] Entorno dev/stage + MySQL + Redis + object storage.
-- [M-5] Pipeline CI básico + variables seguras.
-- [S-2] Observabilidad mínima (logs centralizados).
+- Auth session revalidation (`/auth/me`, refresh, logout).
+- Middleware JWT en API.
+- `GET /alerts/:id` (detalle roto).
+- Reglas UI ↔ backend (UI en mock, backend solo GET).
+- Expedientes, reportes, salud página — mock/estático.
+- Streaming CCTV real.
+- Notificaciones push server-side.
+- `llamada_at` persistente.
+- Unificación `src/` vs `backend/src/`.
+- Suite `npm test` como gate CI confiable.
 
-DoD sprint 1:
-- Evento ingestado aparece en cola y queda auditado.
+---
 
-## Sprint 2 — M2 reglas + M3 popup real-time
+## Matriz por workstream
 
-Meta:
-- Priorización configurable y popup automático al guardia.
+| Workstream | Estado | Evidencia | Virtud | Defecto principal |
+|------------|--------|-----------|--------|-------------------|
+| UI / design system | ✅ Implementado | `app/`, `components/ui/`, `styles/` | Consistencia visual | Algunos mocks visuales mezclados con real |
+| Auth login | ✅ Real | `auth-provider.tsx`, `POST /auth/login` | Bcrypt + JWT | Sesión no revalidada |
+| Auth enforcement API | ❌ | `src/app.js` sin middleware | JWT emitido | Endpoints abiertos |
+| Consola operativa | ✅ E2E | `operacion/page.tsx`, `mysqlStore` | UX optimista + SP | Errores silenciados |
+| Escalación UI | ⚠️ Parcial | `escalate-sheet.tsx`, `escalation.ts` | Checklist + contactos | Notificaciones simuladas; `llamada_at` local |
+| Realtime | ⚠️ Parcial | `use-realtime.ts`, `wsHub.js` | WS nativo alineado | Solo `event.popup`; sin auth |
+| Reglas | ⚠️ Divergente | `reglas/page.tsx` vs `GET /rules` | Backend lee BD | UI 100% mock |
+| Recepción | ⚠️ Parcial | `recepcion/page.tsx` | CRUD real ingresos | Tenants/ANPR mock |
+| Expedientes | ❌ Mock | `mock-case-files-api.ts` | UI completa | Sin backend |
+| Reportes | ❌ Estático | `reportes/page.tsx` | Layout listo | Sin datos reales |
+| Salud técnica | ⚠️ Mixto | header real / página estática | Ping DB funciona | `/salud` no usa API |
+| Admin usuarios | ⚠️ Parcial | `admin/usuarios/page.tsx` | CRUD real | Fallback mock silencioso |
+| Admin zonas/cámaras/NVR | ❌ Mock | `admin/*/page.tsx` | UI scaffold | Sin API |
+| Streaming/media | ❌ Demo | `demo-media.ts`, `live-camera-panel` | UX validada | Cero CCTV real |
+| SQL / BD | ✅ Operativo | `crear_base_datos.sql`, verify | Modelo completo | SOURCE no batch-friendly |
+| Backend PoC seguridad | ⚠️ Huérfano | `backend/src/` | Patrones probados | No integrado |
+| Tests CI | ⚠️ Inestable | `vitest`, `tests/*.spec.js` | Contratos escritos | Mezcla CJS/ESM, deps |
 
-dev-back:
-- [L-8] Rule Engine (zona/horario/tipo/severidad + acciones).
-- [M-5] CRUD reglas (/rules).
-- [M-5] WS /ws/operations (event.created + event.popup).
-- [S-2] Timeline de estado inicial en event_state_history.
+---
 
-dev-front:
-- [L-8] Popup operativo con evidencia/cámara y acciones confirmar/descartar.
-- [M-5] UI de gestión de reglas (admin).
-- [S-2] Notificación visual de eventos críticos.
+## Backend `src/` — capabilities
 
-qa:
-- [M-5] Matriz reglas (dentro/fuera horario, zona, severidad).
-- [M-5] Pruebas tiempo real WS + reconexión.
-- [S-2] Verificación trazabilidad de acciones guardia.
+| Capability | Estado |
+|------------|--------|
+| Login | ✅ |
+| Ingest + idempotencia | ✅ |
+| Motor reglas → alertas | ✅ |
+| List/attend alertas | ✅ |
+| CRUD usuarios | ✅ |
+| GET reglas | ✅ |
+| CRUD ingresos | ✅ |
+| Health system/nvrs | ✅ |
+| Events list/detail/state (interno) | ✅ |
+| Auth middleware | ❌ |
+| GET alert by id | ❌ |
+| CRUD reglas | ❌ |
+| Case files / reports | ❌ |
+| Evidence sign | ❌ |
+| Audit logs API | ❌ |
 
-ops:
-- [M-5] Despliegue WS escalable (sticky o pub/sub Redis).
-- [M-5] Config TLS y políticas CORS iniciales.
+---
 
-DoD sprint 2:
-- Evento crítico dispara popup automático y acción queda registrada.
+## Frontend — módulos
 
-## Sprint 3 — M4 ingresos ANPR/manual/híbrido
+| Módulo | Fuente datos | Persiste acciones |
+|--------|--------------|-------------------|
+| `/operacion` | API MySQL | ✅ (best-effort) |
+| `/login` | API MySQL | ✅ token local |
+| `/recepcion` | API + mock fallback | ✅ parcial |
+| `/reglas` | `MOCK_RULES` local | ❌ solo React state |
+| `/expedientes` | mock fallback | ❌ |
+| `/reportes` | hardcoded | ❌ |
+| `/salud` | hardcoded | ❌ |
+| `/admin/usuarios` | API + mock fallback | ✅ |
+| `/admin/*` resto | mock | ❌ |
+| `/operacion/alerta/[id]` | API (404) | ❌ roto |
 
-Meta:
-- Registro de ingresos usable y auditable, con casos conflictivos.
+---
 
-dev-back:
-- [M-5] CRUD admissions + validaciones.
-- [M-5] Soporte source_type y review_required.
-- [M-5] Endpoint actualización/corrección manual.
+## Deuda técnica priorizada
 
-dev-front:
-- [M-5] Form ingreso rápido guardia (ANPR/manual/híbrido).
-- [M-5] Bandeja “requiere revisión manual”.
-- [S-2] UX de corrección de patente parcial.
+### P0 — Bloquea evaluación honesta / demo estable
 
-qa:
-- [M-5] Casos ANPR correcto/parcial/conflictivo.
-- [M-5] Pruebas de permisos (GUARD vs ADMIN).
+1. Implementar `GET /alerts/:id` o redirigir detalle a popup existente.
+2. Unificar `attend()` vs `attendEvent()` en todos los componentes.
+3. Mostrar errores API en operación (no `.catch` vacío).
+4. Actualizar `INSTRUCCIONES_ACCESO.md` y texto login ("cualquier password").
 
-ops:
-- [M-5] Hardening de túnel conector->core (si ya disponible en entorno).
-- [S-2] Métricas de latencia ingestión->cola.
+### P1 — Camino a staging
 
-DoD sprint 3:
-- Ingreso queda almacenado con fuente explícita y marca de revisión cuando aplica.
+5. Middleware JWT + `/auth/me`.
+6. Conectar UI reglas a `GET /rules`; implementar CRUD backend.
+7. Persistir `llamada_at` en timeline o columna.
+8. Autenticar WebSocket.
+9. Decidir destino de `backend/src/` (fusionar o archivar).
 
-## Sprint 4 — M5 historial + S2 estados + S3 export
+### P2 — Producción
 
-Meta:
-- Historial consultable robusto con filtros y bitácora.
+10. Streaming real o integración snapshots desde `dah_snapshot`.
+11. Notificaciones push server-side.
+12. Expedientes + reportes backend.
+13. RBAC por endpoint desde `gen_permiso`.
+14. Rehabilitar `npm test` en CI.
+15. CORS allowlist + secretos por ambiente.
 
-dev-back:
-- [L-8] /events filtros avanzados (fecha/zona/tipo/patente/estado).
-- [M-5] PATCH estado evento + bitácora obligatoria.
-- [M-5] Export CSV filtrado (/exports/events.csv).
+---
 
-dev-front:
-- [L-8] Vista historial con filtros persistentes + detalle.
-- [M-5] Timeline visual de decisiones.
-- [S-2] Descarga CSV.
+## Plan de ejecución sugerido (fases)
 
-qa:
-- [M-5] Pruebas de filtros combinados y paginación.
-- [M-5] Validación export CSV contra resultados UI.
+### Fase 1 — Consolidación API operativa (1–2 semanas)
 
-ops:
-- [M-5] Índices DB y tuning consultas p95.
-- [S-2] Dashboards iniciales de KPIs operación.
+- P0 completo
+- Auth middleware mínimo
+- `GET /alerts/:id`
 
-DoD sprint 4:
-- Administración puede consultar historial y exportar CSV coherente.
+### Fase 2 — Módulos admin y reglas (2–3 semanas)
 
-## Sprint 5 — M6 expediente velocidad + correlación S1 + M7 notificación
+- Reglas UI ↔ backend CRUD
+- Reducir mocks admin (zonas, fuentes)
+- Persistir escalación (`llamada_at`, observaciones)
 
-Meta:
-- Expediente de velocidad completo con correlación y notificación interna.
+### Fase 3 — Media y notificaciones (3+ semanas)
 
-dev-back:
-- [L-8] Ingesta speed_events + creación speed_cases.
-- [L-8] Correlation Engine (ventana configurable + confidence + ambiguous).
-- [M-5] Notification Service interno (in-app/email interno/webhook opcional).
+- Pipeline evidencia NVR
+- Push real
+- Streaming MVP (HLS o WebRTC)
 
-dev-front:
-- [M-5] Vista expedientes velocidad + estado correlación.
-- [M-5] Flujo de correlación manual asistida.
-- [M-5] Centro de notificaciones internas.
+### Fase 4 — Hardening producción
 
-qa:
-- [L-8] Casos de correlación: match único, ambiguo, sin match.
-- [M-5] Pruebas de trazabilidad notificación enviada/fallida.
+- Fusionar patrones de `backend/src/`
+- CI verde
+- Auditoría API persistente
+- Multi-tenant enforcement
 
-ops:
-- [M-5] Config proveedor notificación interno + retries.
-- [M-5] Alertas de error rate de notificaciones.
+---
 
-DoD sprint 5:
-- Exceso de velocidad genera expediente y notificación interna en casos configurados.
+## Cómo verificar avance
 
-## Sprint 6 — M8 salud técnica + hardening + UAT
+```bash
+npm run db:verify          # esquema OK
+npm run demo:clean         # demo repetible
+npm run dev                # API + web
+npm test                   # contratos (hoy inestable — tratar como objetivo)
+```
 
-Meta:
-- Monitoreo técnico operativo + cierre de brechas para salida MVP.
+Login demo: `admin@agrolivo.cl` / `password123`  
+Flujo crítico a probar: login → `/operacion` → atender → escalar → resolver.
 
-dev-back:
-- [L-8] Health monitor scheduler (cámaras/NVR/conector) + incidentes.
-- [M-5] Endpoints /health/sources y /health/incidents.
-- [M-5] Reconexión y manejo estados OFFLINE/DEGRADED.
+---
 
-dev-front:
-- [M-5] Panel salud técnica para OPS.
-- [S-2] Alertas visuales y filtros por severidad.
-
-qa:
-- [L-8] E2E M1..M8 completo + pruebas de regresión.
-- [M-5] Pruebas no funcionales básicas (latencia objetivo, carga moderada).
-- [S-2] UAT checklist con guardia/admin.
-
-ops:
-- [M-5] Backups/restores y runbook incidentes.
-- [M-5] SLOs + alertas definitivas (latencia, disponibilidad, MTTR).
-- [S-2] Preparación go-live controlado.
-
-DoD sprint 6:
-- Salud técnica visible, alertas activas y aceptación operacional MVP.
-
-## Dependencias clave
-
-- Reemplazo NVR3: riesgo externo que puede limitar cobertura total; no bloquea avance parcial en NVR1/NVR2.
-- Fuente confiable de velocidad/patente: necesaria para M6 productivo.
-- Definición temprana de umbrales y destinatarios para M2/M7.
-
-## Riesgos de ejecución y mitigación
-
-- Riesgo: reglas mal calibradas generan ruido.
-  - Mitigación: semana de calibración + tablero de falsas alarmas.
-
-- Riesgo: latencia por red variable.
-  - Mitigación: buffer/retry edge + monitoreo p95 continuo.
-
-- Riesgo: baja adopción cierre de eventos.
-  - Mitigación: UX mínima fricción + capacitación por turno.
-
-## Criterio de salida a implementación
-
-- Gate de diseño aprobado (label approved-design).
-- Evidencia de cumplimiento M1..M8 en staging con UAT base.
-- Observabilidad y seguridad mínima activas (JWT, tenancy, auditoría, CORS controlado).
+**Última actualización basada en código:** 2026-06-11  
+**Rama:** `integracion/funcionalidad-escalar-ddbb_inicial`

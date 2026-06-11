@@ -1,373 +1,280 @@
-# API Contracts — MVP CCTV (REST + WebSocket)
+# API.md
 
-Base URL (MVP):
-- REST: /api/v1
-- WebSocket: /ws/operations
+## Objetivo
 
-Formato estándar de errores:
+Describe la API **que realmente existe hoy** en el repositorio, qué consume el frontend, y las divergencias pendientes. No documenta endpoints aspiracionales del PRD de negocio.
+
+**Backend activo:** `src/app.js` (Express 5, puerto 4000, `STORE=mysql` en dev estándar).
+
+---
+
+## Convenciones
+
+| Aspecto | Valor |
+|---------|-------|
+| Base URL HTTP | `/api/v1` |
+| Proxy dev | `next.config.mjs` rewrites → `http://127.0.0.1:4000` (`API_PROXY_TARGET`) |
+| WebSocket | `ws://hostname:4000/ws/operations` (directo, no pasa por Next) |
+| Request ID | Header `x-request-id`; respuestas incluyen `request_id` |
+| Auth header | `Authorization: Bearer <jwt>` — enviado por frontend, **no validado en backend hoy** |
+
+### Envelope de error
+
 ```json
 {
   "error": {
     "code": "VALIDATION_ERROR",
-    "message": "plate is required",
-    "details": {"field": "plate"},
-    "request_id": "req_01J..."
+    "message": "invalid payload",
+    "details": [],
+    "request_id": "req_xxxxx"
   }
 }
 ```
 
-Headers comunes:
-- Authorization: Bearer <jwt>
-- X-Tenant-Id: <tenant_slug> (si aplica multi-tenant en gateway)
-- X-Request-Id: <uuid>
+---
 
-## 1) Auth y sesión
+## Endpoints implementados en `src/app.js`
 
-POST /auth/login
-Request:
+### Autenticación
+
+| Método | Ruta | Store | Estado |
+|--------|------|-------|--------|
+| `POST` | `/api/v1/auth/login` | `auth()` | Implementado — bcrypt contra `gen_usuario` |
+
+**Request:**
 ```json
-{"email":"guardia@agrolivo.cl","password":"***"}
+{ "email": "admin@agrolivo.cl", "password": "password123" }
 ```
-Response 200:
+
+**Response (campos relevantes para frontend):**
 ```json
 {
-  "access_token":"eyJ...",
-  "refresh_token":"eyJ...",
-  "expires_in":3600,
-  "user":{"id":"u_123","role":"GUARD"}
-}
-```
-
-POST /auth/refresh
-Request:
-```json
-{"refresh_token":"eyJ..."}
-```
-Response 200:
-```json
-{"access_token":"eyJ...","expires_in":3600}
-```
-
-POST /auth/logout
-Response 204
-
-## 2) Ingesta de eventos (Edge -> Core)
-
-Autenticación de conector: token de servicio (JWT machine-to-machine) + firma HMAC opcional del payload.
-
-POST /ingestion/events
-Idempotencia: header X-Idempotency-Key obligatorio.
-
-Request:
-```json
-{
-  "source": {
-    "connector_id": "edge_agrolivo_01",
-    "device_id": "cam_045",
-    "nvr_id": "nvr_02"
+  "access_token": "<jwt>",
+  "token": "<jwt>",
+  "expires_in": 3600,
+  "user": {
+    "id": "usr_...",
+    "email": "admin@agrolivo.cl",
+    "nombre": "Admin",
+    "apellido": "Parque",
+    "role": "admin_parque",
+    "permissions": ["..."],
+    "site_ids": ["..."],
+    "activo": true
   },
-  "event": {
-    "external_event_id": "dahua-9834201",
-    "type": "LINE_CROSSING",
-    "severity": "MEDIUM",
-    "occurred_at": "2026-05-27T18:40:22Z",
-    "zone_code": "PERIMETRO_PONIENTE"
-  },
-  "evidence": {
-    "snapshot_url": "s3://evidence/tmp/abc.jpg",
-    "clip_url": null
-  },
-  "raw_payload": {"vendor":"dahua","...":"..."}
+  "request_id": "req_xxxxx"
 }
 ```
-Response 202:
+
+**No implementados:** `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` (definidos en `lib/api.ts` pero sin contraparte).
+
+---
+
+### Ingesta de eventos (NVR / pipeline)
+
+| Método | Ruta | Auth | Estado |
+|--------|------|------|--------|
+| `POST` | `/api/v1/ingest/events` | No | Implementado — idempotencia + motor reglas + WS popup |
+
+**Headers:** `x-idempotency-key` obligatorio.
+
+**Comportamiento:**
+- Deduplicación en `src_idempotencia_ingesta`.
+- Motor `nvrPipeline.cjs` evalúa `ale_regla`; si match, crea `ale_evento`.
+- Emite `event.popup` vía `WsHub`.
+
+---
+
+### Eventos (contrato interno / tests)
+
+| Método | Ruta | Estado |
+|--------|------|--------|
+| `GET` | `/api/v1/events` | Lista sin filtros reales |
+| `GET` | `/api/v1/events/:eventId` | Detalle + timeline |
+| `PATCH` | `/api/v1/events/:eventId/state` | State machine mínima |
+
+Usado principalmente por tests de contrato. La UI operativa consume `/alerts`, no `/events`.
+
+---
+
+### Alertas (consumido por consola operativa)
+
+| Método | Ruta | Store | Estado |
+|--------|------|-------|--------|
+| `GET` | `/api/v1/alerts` | `listAlerts()` | Implementado — mapea `ale_evento` → `Alert` UI |
+| `POST` | `/api/v1/alerts/:eventId/attend` | `attendAlert()` | Implementado — SP transiciones |
+
+**`GET /alerts` — respuesta dual:**
 ```json
 {
-  "event_id": "evt_01JV...",
-  "status": "RECEIVED"
+  "items": [ /* Alert[] */ ],
+  "data": [ /* mismo contenido */ ],
+  "pagination": { "page": 1, "page_size": 50, "total": N },
+  "request_id": "..."
 }
 ```
 
-POST /ingestion/speed-events
-Request:
-```json
-{
-  "device_id": "itc_01",
-  "plate": "ABCD11",
-  "speed_kmh": 78.4,
-  "speed_limit_kmh": 50,
-  "occurred_at": "2026-05-27T18:41:10Z",
-  "evidence": {
-    "snapshot_url": "s3://evidence/speed/abc.jpg"
-  }
-}
-```
-Response 202:
-```json
-{"speed_event_id":"spd_01JV...","status":"RECEIVED"}
-```
+**Mapeo estado BD → UI:**
 
-## 3) Cola operativa y eventos
+| BD (`ale_evento.state`) | UI (`Alert.status`) |
+|-------------------------|---------------------|
+| `NEW` | `pendiente` |
+| `IN_REVIEW` | `en_revision` |
+| `ESCALATING` | `escalada` |
+| `CLOSED` + decisión | `resuelta` / `descartada` |
 
-GET /events
-Query params:
-- from, to (ISO8601)
-- zone_code
-- event_type
-- plate
-- state (NEW|IN_REVIEW|CLOSED)
-- critical_only (true/false)
-- page, page_size
+**`POST /alerts/:eventId/attend` — acciones:**
 
-Response 200:
-```json
-{
-  "items": [
-    {
-      "event_id": "evt_01JV...",
-      "type": "LINE_CROSSING",
-      "zone_code": "PERIMETRO_PONIENTE",
-      "severity": "HIGH",
-      "is_critical": true,
-      "state": "NEW",
-      "occurred_at": "2026-05-27T18:40:22Z",
-      "camera": {"id":"cam_045","name":"Poniente 3"},
-      "evidence": {"snapshot_url":"https://...signed"}
-    }
-  ],
-  "page": 1,
-  "page_size": 20,
-  "total": 1452
-}
-```
+| Acción API | Efecto BD | Alias legacy |
+|------------|-----------|--------------|
+| `acknowledge` | `NEW` → `IN_REVIEW` | — |
+| `resolve` | → `CLOSED` (CONFIRMED) | `revisada` |
+| `discard` | → `CLOSED` (FALSE_POSITIVE) | `descartada` |
+| `escalate` | → `ESCALATING` | `escalada` |
+| `reactivate` | `CLOSED` → `NEW` | — |
 
-GET /events/{event_id}
-Response 200 incluye bitácora:
-```json
-{
-  "event_id":"evt_01JV...",
-  "state":"IN_REVIEW",
-  "timeline":[
-    {"at":"2026-05-27T18:40:23Z","action":"CREATED","by":"system"},
-    {"at":"2026-05-27T18:40:25Z","action":"POPUP_DISPATCHED","by":"system"},
-    {"at":"2026-05-27T18:41:02Z","action":"CONFIRMED","by":"u_123"}
-  ]
-}
-```
+Acepta `event_id` (`CHAR(26)`) o surrogate numérico de UI (`resolveEventId`).
 
-PATCH /events/{event_id}/state
-Request:
-```json
-{
-  "new_state": "CLOSED",
-  "decision": "DESCARTADO_FALSA_ALARMA",
-  "comment": "Reflejo en vidrio"
-}
-```
-Response 200:
-```json
-{"event_id":"evt_01JV...","state":"CLOSED"}
-```
+**No implementado:** `GET /api/v1/alerts/:id` — la UI lo llama desde `/operacion/alerta/[id]` y falla con backend real.
 
-## 4) Reglas de priorización (M2)
+---
 
-GET /rules
-POST /rules
-Request:
-```json
-{
-  "name": "Perímetro nocturno crítico",
-  "enabled": true,
-  "zone_codes": ["PERIMETRO_PONIENTE", "PERIMETRO_SUR"],
-  "event_types": ["LINE_CROSSING", "INTRUSION"],
-  "time_window": {"from": "20:00", "to": "06:00", "timezone": "America/Santiago"},
-  "severity_threshold": "MEDIUM",
-  "actions": {
-    "mark_critical": true,
-    "dispatch_popup": true,
-    "notify_internal": true
-  },
-  "priority": 90
-}
-```
-Response 201:
-```json
-{"rule_id":"rul_01JV..."}
-```
+### Usuarios
 
-PATCH /rules/{rule_id}
-DELETE /rules/{rule_id}
+| Método | Ruta | Estado |
+|--------|------|--------|
+| `GET` | `/api/v1/users` | Lista |
+| `POST` | `/api/v1/users` | Crear |
+| `PATCH` | `/api/v1/users/:userId` | Actualizar |
 
-## 5) Registro de ingresos (M4)
+Consumido por `app/(dashboard)/admin/usuarios/page.tsx` con fallback mock.
 
-POST /admissions
-Request:
-```json
-{
-  "plate": "ABCD11",
-  "visitor_identifier": "12.345.678-9",
-  "visitor_name": "Juan Pérez",
-  "destination_company": "Bodega Norte Ltda",
-  "source_type": "HYBRID",
-  "anpr_confidence": 0.82,
-  "entry_at": "2026-05-27T18:35:00Z",
-  "notes": "Ingreso proveedor"
-}
-```
-Response 201:
-```json
-{"admission_id":"adm_01JV...","review_required":false}
-```
+---
 
-GET /admissions
-Query: from,to,plate,destination_company,review_required
+### Reglas
 
-PATCH /admissions/{admission_id}
+| Método | Ruta | Estado |
+|--------|------|--------|
+| `GET` | `/api/v1/rules` | Solo lectura desde `ale_regla` |
 
-## 6) Expedientes de velocidad (M6)
+**Gap:** UI `/reglas` usa `MOCK_RULES` — no consume este endpoint.  
+**No implementados:** POST/PATCH/DELETE `/rules` (definidos en `lib/api.ts`).
 
-GET /speed-cases
-Query: from,to,plate,status,correlation_status
+---
 
-GET /speed-cases/{case_id}
-Response 200:
-```json
-{
-  "case_id":"spdcase_01JV...",
-  "plate":"ABCD11",
-  "speed_kmh":78.4,
-  "speed_limit_kmh":50,
-  "occurred_at":"2026-05-27T18:41:10Z",
-  "status":"OPEN",
-  "correlation": {
-    "status":"MATCHED",
-    "confidence":0.91,
-    "admission_id":"adm_01JV...",
-    "destination_company":"Bodega Norte Ltda"
-  },
-  "evidence":{"snapshot_url":"https://...signed"}
-}
-```
+### Salud
 
-POST /speed-cases/{case_id}/manual-correlation
-Request:
-```json
-{
-  "admission_id":"adm_01JV...",
-  "reason":"Validado por guardia en bitácora"
-}
-```
+| Método | Ruta | Estado |
+|--------|------|--------|
+| `GET` | `/api/v1/health/system` | Ping MySQL + simulación redis/queue |
+| `GET` | `/api/v1/health/nvrs` | Desde `src_fuente` |
 
-## 7) Notificaciones internas (M7)
+Consumido por `SystemHealthIndicator` en top bar. Página `/salud` no usa estos endpoints.
 
-GET /notifications
-Query: from,to,status,channel,type
+---
 
-POST /notifications/test
-Request:
-```json
-{"channel":"IN_APP","recipient_user_ids":["u_200"]}
-```
+### Ingresos vehiculares
 
-## 8) Salud técnica (M8)
+| Método | Ruta | Estado |
+|--------|------|--------|
+| `GET` | `/api/v1/vehicle-entries` | Lista `adm_ingreso` |
+| `POST` | `/api/v1/vehicle-entries` | Crear |
+| `PATCH` | `/api/v1/vehicle-entries/:entryId` | Actualizar (ej. `exit_at`) |
 
-GET /health/sources
-Response 200:
-```json
-{
-  "items":[
-    {
-      "source_id":"cam_045",
-      "source_type":"CAMERA",
-      "status":"DEGRADED",
-      "last_seen_at":"2026-05-27T18:39:40Z",
-      "consecutive_failures":3
-    }
-  ]
-}
-```
+Consumido por `/recepcion` con fallback a `MOCK_VEHICLE_ENTRIES`.
 
-GET /health/incidents
-POST /health/checks/run (solo ops role)
+**No implementado:** `GET /vehicle-entries/search`.
 
-## 9) Exportación CSV (S3)
+---
 
-GET /exports/events.csv?from=...&to=...&zone_code=...&state=...
-Response 200: text/csv
+## WebSocket — `src/wsHub.js`
 
-## 10) WebSocket contrato (/ws/operations)
+**Ruta:** `ws://<host>:4000/ws/operations`
 
-Auth:
-- Bearer token en handshake o query param secure token.
+### Cliente → servidor
 
-Eventos server -> client:
-1) event.created
-```json
-{
-  "type":"event.created",
-  "payload":{
-    "event_id":"evt_01JV...",
-    "is_critical":true,
-    "zone_code":"PERIMETRO_PONIENTE",
-    "occurred_at":"2026-05-27T18:40:22Z"
-  }
-}
-```
+| Tipo | Payload |
+|------|---------|
+| `subscribe.filters` | `{ site_ids?, event_states?, critical_only? }` |
+| `presence.heartbeat` | — |
 
-2) event.popup
-```json
-{
-  "type":"event.popup",
-  "payload":{
-    "event_id":"evt_01JV...",
-    "camera_id":"cam_045",
-    "stream_hint":"webrtc",
-    "snapshot_url":"https://...signed"
-  }
-}
-```
+### Servidor → cliente
 
-3) event.state.changed
-```json
-{
-  "type":"event.state.changed",
-  "payload":{
-    "event_id":"evt_01JV...",
-    "new_state":"CLOSED",
-    "by":"u_123",
-    "at":"2026-05-27T18:42:11Z"
-  }
-}
-```
+| Tipo | Cuándo | Payload |
+|------|--------|---------|
+| `event.popup` | Tras ingest con match | `{ event_id, tenant_id, site_id, severity, is_critical, occurred_at }` |
+| `subscribed` | Respuesta a subscribe | — |
+| `presence.ack` | Respuesta heartbeat | — |
+| `error` | JSON inválido | `{ code: INVALID_JSON }` |
 
-4) health.alert
-```json
-{
-  "type":"health.alert",
-  "payload":{
-    "incident_id":"hinc_01JV...",
-    "source_id":"nvr_02",
-    "severity":"HIGH",
-    "message":"NVR sin respuesta por 120s"
-  }
-}
-```
+**No emitidos hoy (pero escuchados en frontend):** `alert:new`, `alert:updated`, `case:new`, `nvr:status_changed`, `system:degraded`.
 
-Cliente -> server:
-- ack.popup
-- subscribe.filters
-- presence.heartbeat
+---
 
-## 11) RBAC resumido
+## Superficie B — `backend/src/` (NO activa)
 
-Roles MVP:
-- GUARD: ver/atender eventos, registrar ingresos, cierre básico.
-- ADMIN: reglas, historial, expedientes, exportación.
-- OPS: salud técnica, reintentos, diagnósticos.
-- SUPERADMIN_TNS: multi-tenant administración.
+PoC paralelo con contrato distinto:
 
-## 12) Compatibilidad y versionado
+| Diferencia vs `src/` |
+|---------------------|
+| `/api/v1/ingestion/events` (no `/ingest/events`) |
+| Auth obligatoria en ingest |
+| Refresh/logout con rotación |
+| `POST /evidence/sign`, `GET /audit-logs` |
+| Sin `GET /events/:id`, sin `PATCH state`, sin `/alerts` |
 
-- Versionado URI: /api/v1
-- Cambios breaking => /api/v2
-- Contratos de eventos WS versionados por campo payload_version cuando aplique.
+**No usar para integración frontend** salvo evaluación de patrones de seguridad.
+
+---
+
+## Cliente frontend — `lib/api.ts`
+
+### Módulos y estado de conexión
+
+| Módulo | Endpoints usados | ¿Backend existe? |
+|--------|------------------|------------------|
+| `auth` | login | login sí; logout/me no |
+| `alerts` | list, attend, attendEvent | list + attend sí; get no |
+| `rules` | list, get, create, update, delete | solo list |
+| `vehicleEntries` | list, create, update | sí |
+| `users` | list, create, update | sí |
+| `health` | system, nvrs | sí |
+| `caseFiles` | * | no — `withMockFallback` |
+| `tenants` | list | no — mock fallback |
+| `zones`, `cameras`, `nvrs` | * | no |
+| `reports` | * | no |
+
+### Dualidad en alertas
+
+- `alerts.attend(id, { action: 'revisada'|'descartada'|'escalada' })` — usado por `EscalateSheet`
+- `alerts.attendEvent(eventId, 'acknowledge'|...)` — usado por `operacion/page.tsx`
+
+Ambos llegan al mismo endpoint backend; el riesgo es inconsistencia de parámetros entre componentes.
+
+---
+
+## Virtudes de la API actual
+
+1. Envelope de error consistente con `request_id`.
+2. Validación Zod en payloads críticos.
+3. Idempotencia en ingest.
+4. Mapeo robusto BD → tipos frontend en `mysqlStore.cjs`.
+5. Respuesta dual en `/alerts` (compatibilidad `items` y `PaginatedResponse`).
+6. Tests de contrato en `tests/api.contract.spec.js`, `tests/ws.operations.spec.js`.
+
+---
+
+## Defectos y gaps
+
+1. **Sin auth middleware** — endpoints mutables accesibles sin JWT válido.
+2. **`GET /alerts/:id` ausente** — detalle de alerta roto.
+3. **CRUD reglas incompleto** — UI no conectada.
+4. **Auth session endpoints ausentes** — refresh, logout, me.
+5. **Filtros en GET /alerts** — params aceptados en cliente, no implementados en servidor.
+6. **Dos superficies backend** — confusión para integradores.
+7. **WS sin autenticación** — token requerido en frontend para conectar pero no enviado al servidor.
+8. **Actor hardcoded** en algunos paths (`usr_01` en PATCH events legacy).
+
+---
+
+**Última actualización basada en código:** 2026-06-11

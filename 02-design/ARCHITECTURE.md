@@ -1,209 +1,195 @@
-# Arquitectura técnica MVP — CCTV Parque Agrolivo (TNS Track)
+# ARCHITECTURE.md
 
-## 1. Objetivo de diseño
+## Objetivo
 
-Diseñar un MVP que transforme eventos Dahua/ANPR en operación de seguridad activa para cumplir M1..M8 del PRD, manteniendo alcance controlado y sin rediseñar la infraestructura física existente.
+Describe la arquitectura **que realmente existe hoy** en el repositorio. No describe la arquitectura objetivo del PRD de negocio (`01-prd/PRD.md`).
 
-Principios:
-- Reutilizar base instalada (NVR1/NVR2 + reglas IA existentes).
-- Diseñar para latencia operativa (objetivo: <10s desde recepción en backend a cola operativa).
-- Priorizar trazabilidad (cada evento, decisión, notificación y evidencia con auditoría).
-- Falla segura: si algo no se puede correlacionar automáticamente, se marca para revisión manual.
-- Multi-tenant desde el inicio para separar parque/sitio/usuarios de forma estricta.
+**Punto de entrada recomendado para terceros:** `PRD-PRODUCTO.md`.
 
-## 2. Alcance funcional traducido a módulos
+---
 
-Cobertura Must-have:
-- M1 Ingesta normalizada: módulo Event Ingestion + Normalization.
-- M2 Reglas de priorización: módulo Rule Engine.
-- M3 Popup operativo: módulo Realtime Dispatch + Front Guardia.
-- M4 Registro ingresos ANPR/manual/híbrido: módulo Admissions.
-- M5 Historial con filtros: módulo History & Search.
-- M6 Expediente velocidad: módulo Speed Case Builder + Correlation.
-- M7 Notificación interna: módulo Notification Service.
-- M8 Salud técnica: módulo Health Monitor.
+## Vista general
 
-Cobertura Should en MVP (si entra por capacidad):
-- S1 correlación automática con confianza: incluida como modo “best effort + manual review”.
-- S2 estados del evento: incluido.
-- S3 export CSV: incluido en Sprint 4 si no afecta M6/M8.
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Next.js 16 (App Router) — :3000                                │
+│  app/, components/, hooks/, lib/                                │
+│  Proxy rewrites: /api/v1/* → :4000                              │
+│  WS directo: ws://hostname:4000/ws/operations                   │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ HTTP + WS
+┌───────────────────────────▼─────────────────────────────────────┐
+│  Express 5 — src/ — :4000                                       │
+│  STORE=mysql → mysqlStore.cjs  |  else → store.js (in-memory)   │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ mysql2 pool
+┌───────────────────────────▼─────────────────────────────────────┐
+│  MySQL 9.x — base tns_cctv (36 tablas, esquema prefijado)       │
+└─────────────────────────────────────────────────────────────────┘
 
-Fuera de alcance MVP (no implementar):
-- Reemplazo masivo de cámaras/red.
-- ML predictivo avanzado.
-- Integraciones ERP/CRM.
-- Automatización legal/sancionatoria.
+Paralelo (NO integrado): backend/src/ — PoC hardening
+```
 
-## 3. Arquitectura lógica
+---
 
-## 3.1 Componentes principales
+## Capas reales del repositorio
 
-1) Edge Connector (on-site en parque)
-- Conecta con NVR/cámaras/ANPR en red local.
-- Extrae eventos compatibles (IVS/IA, snapshots, metadata, health pings).
-- Abre túnel saliente seguro a cloud TNS (sin exponer NVR públicamente).
-- Entrega eventos firmados al backend vía HTTPS.
+### 1. Frontend — Next.js App Router
 
-2) Backend API (Core)
-- API REST para operaciones, configuración y consulta.
-- WebSocket para cola en tiempo real y popup operativo.
-- Orquesta persistencia, reglas, correlación, notificaciones y auditoría.
+**Archivos:** `app/`, `components/`, `hooks/`, `lib/`, `styles/`
 
-3) Rule Engine
-- Evalúa criticidad por zona/horario/tipo.
-- Decide si evento se marca crítico, si dispara popup y/o notificación.
-- Guarda rationale de decisión para auditoría.
+**Estado real (2026-06-11):**
+- UI madura con design system (`/admin/design-system`, tokens `ds-*`).
+- **Integrado con backend MySQL:** login, consola operativa (alertas), recepción (parcial), admin usuarios (parcial), health en top bar.
+- **Sigue en mock:** reglas UI, expedientes, reportes, salud detallada, admin zonas/cámaras/NVR, media CCTV, ANPR.
+- Auth: login real vía API; restauración de sesión solo desde `localStorage` (sin `/auth/me`).
 
-4) Correlation Engine
-- Cruza velocidad/patente con ingresos por ventana horaria configurable.
-- Asigna confidence score y marca revisión manual cuando hay ambigüedad.
+**Scripts de arranque (`package.json`):**
+- `npm run dev` → `concurrently` API (:4000) + Next (:3000)
+- `npm run demo:clean` → reset pipeline alertas + seed + dev
 
-5) Notification Service
-- Notificaciones internas (in-app/websocket y webhook/email interno según configuración del parque).
-- Registro de intentos, estado de entrega y timestamp.
+### 2. Backend activo — `src/`
 
-6) Health Monitor
-- Jobs periódicos para disponibilidad de cámaras/NVR/sesión conector.
-- Detección de degradación + incidentes técnicos + reconexión automática.
+**Archivos clave:**
 
-7) Frontend PWA
-- Vista guardia: cola, popup, validación/descarta, revisión manual.
-- Vista administración: historial, filtros, expedientes de velocidad, reglas.
-- Vista operaciones TNS: salud técnica y alertas de conectividad.
+| Archivo | Rol |
+|---------|-----|
+| `src/server.js` | HTTP + WSS; selecciona store según `STORE` |
+| `src/app.js` | Rutas Express |
+| `src/mysqlStore.cjs` | Persistencia MySQL (producción dev) |
+| `src/store.js` | Store in-memory (tests/contrato ingest) |
+| `src/wsHub.js` | Pub/sub WebSocket |
+| `src/nvrPipeline.cjs` | Motor reglas en ingest |
+| `db/lib/pool.cjs` | Pool MySQL desde `db/connection-config.json` |
 
-8) Data Layer
-- MySQL 8 (transaccional y auditable).
-- Object Storage S3-compatible para evidencia (snapshot/clip).
-- Redis para fanout realtime, presencia de sesiones y locks livianos.
+**Estado real:**
+- `dev:api` fija `STORE=mysql PORT=4000` — **MySQL es el modo estándar de desarrollo**.
+- Sin MySQL configurado, la API falla al arrancar o al conectar.
+- Endpoints implementados: auth, ingest, events (contrato interno), alerts, users, rules (GET), health, vehicle-entries.
+- **No hay middleware JWT** en rutas protegidas; `req.user` casi nunca está poblado.
 
-## 3.2 Topología de despliegue
+### 3. Backend PoC — `backend/src/` (huérfano)
 
-Zona parque (edge):
-- host connector + acceso LAN a NVR/cámaras/ANPR.
-- túnel saliente TLS hacia cloud.
+**Archivos:** `backend/src/app.js`, `backend/tests/security.test.js`
 
-Zona cloud TNS:
-- API/WS (stateless, escalable horizontal).
-- workers (reglas, correlación, notificaciones, health checks).
-- MySQL primary + réplicas lectura (opcional fase 2).
-- Redis.
-- almacenamiento evidencia.
-- observabilidad (logs, métricas, trazas).
+**Estado real:**
+- PoC paralelo de hardening: refresh rotation, tenant scope, evidencia firmada, auditoría.
+- Contrato distinto (`/ingestion/events` vs `/ingest/events`).
+- **No es el backend de `npm run dev`.** Genera confusión arquitectónica.
 
-## 4. Decisiones de stack y trade-offs
+### 4. Capa de datos SQL
 
-Decisión A: Monolito modular para MVP (en vez de microservicios)
-- Elección: backend único modular (API + workers internos).
-- Ventajas: menor complejidad operativa, velocidad de entrega, menos sobrecarga DevOps.
-- Trade-off: escalabilidad por dominio más acoplada.
-- Mitigación: separación estricta por módulos y colas internas para futura extracción.
+**Archivos:** `db/sql_files/01_CreacionDesdeCero/*`, `crear_base_datos.sql`, `db/migrations/001_init.sql`
 
-Decisión B: MySQL 8 como fuente de verdad
-- Ventajas: consistencia transaccional para auditoría y relaciones fuertes (evento↔evidencia↔acciones).
-- Trade-off: consultas analíticas complejas pueden cargar OLTP.
-- Mitigación: índices orientados a filtros M5 + vistas/materialización futura para analítica.
+**Estado real:**
+- **Modelo operativo:** bundle prefijado (36 tablas) — único mantenido y consumido por `mysqlStore.cjs`.
+- Bootstrap mínimo `001_init.sql` permanece como artefacto de referencia, no consumido en runtime.
+- Bundle core legacy en inglés **eliminado** (2026-06-09).
 
-Decisión C: Redis para tiempo real y control de concurrencia
-- Ventajas: latencia baja para WS fanout y locks de deduplicación.
-- Trade-off: nuevo componente operacional.
-- Mitigación: uso acotado (cache efímera, no fuente de verdad).
+---
 
-Decisión D: Object storage para evidencia
-- Ventajas: menor costo/escala vs guardar blobs en DB.
-- Trade-off: necesidad de lifecycle y links firmados.
-- Mitigación: políticas TTL/versionado y firma temporal de URL.
+## Flujo real de la aplicación
 
-Decisión E: Edge connector con túnel saliente
-- Ventajas: seguridad de red, evita abrir puertos en parque, tolera Starlink NAT.
-- Trade-off: dependencia de agente local y su disponibilidad.
-- Mitigación: watchdog, auto-restart, heartbeat y buffering local corto.
+### Auth
 
-## 5. Flujos críticos (M1..M8)
+1. `app/(auth)/login/page.tsx` captura credenciales.
+2. `AuthProvider.login()` → `POST /api/v1/auth/login`.
+3. Backend valida `gen_usuario.password_hash` (bcrypt).
+4. Persiste en localStorage: `tns_token`, datos de usuario vía `persistDemoUser()`.
+5. Navegación según `lib/auth.ts` (`canAccessRoute`, `getDefaultRoute`).
 
-Flujo F1 (M1+M2+M3): evento de seguridad
-1. Edge recibe evento IA/IVS.
-2. Normaliza payload + deduplicación por fingerprint temporal.
-3. Backend persiste evento NEW.
-4. Rule Engine evalúa criticidad/reglas.
-5. Si crítico: WS push a guardia + popup cámara/evidencia.
-6. Guardia confirma/descarta; se registra en auditoría.
+**Gap:** `checkAuthStatus()` solo lee localStorage; no revalida JWT. `logout()` no llama API (endpoint inexistente).
 
-Flujo F2 (M4): ingreso ANPR/manual/híbrido
-1. Captura ANPR (si disponible) + ingreso manual guardia.
-2. Backend guarda admisión con source_type y nivel de completitud.
-3. Si lectura parcial/conflictiva: status=REVIEW_REQUIRED.
+### Consola operativa
 
-Flujo F3 (M6): expediente de velocidad
-1. Llega speed event con patente, velocidad, evidencia.
-2. Se crea speed_case.
-3. Correlation Engine busca admisiones por ventana configurada.
-4. Si match único confiable: completa destino/identidad + confidence.
-5. Si ambiguo: marca MANUAL_REVIEW.
+1. `operacion/page.tsx` → `GET /api/v1/alerts` → `ale_evento`.
+2. Acciones optimistas en React + `POST /alerts/:eventId/attend` best-effort.
+3. Transiciones vía `stpr_register_event_state`.
+4. Realtime: `useRealtime()` → `event.popup` → refetch lista.
 
-Flujo F4 (M7): notificación interna
-1. Evento/caso cumple regla de notificación.
-2. Notification Service envía por canal habilitado.
-3. Persistir estado: queued/sent/failed + retries.
+Ver flujos detallados en `PRD-PRODUCTO.md` §5.
 
-Flujo F5 (M8): salud técnica
-1. Scheduler ejecuta checks de conector/NVR/cámara.
-2. Si timeout > umbral: incidente técnico OPEN.
-3. Reintentos automáticos y cierre al recuperar.
+### Realtime
 
-## 6. Observabilidad y operación
+| Capa | Protocolo | Endpoint | Eventos emitidos |
+|------|-----------|----------|------------------|
+| Frontend (`use-realtime.ts`) | WebSocket nativo | `:4000/ws/operations` | Escucha `event.popup`, `alert:new`, etc. |
+| Backend (`wsHub.js`) | `ws` | `/ws/operations` | Solo emite `event.popup` tras ingest |
 
-Métricas (mínimo):
-- event_ingest_to_queue_seconds (p50/p95/p99).
-- critical_popup_delivery_ratio.
-- event_close_traceability_ratio.
-- correlation_success_ratio y ambiguous_match_ratio.
-- notification_delivery_ratio + retry_count.
-- camera_source_availability_ratio.
-- health_incident_mttr_minutes.
+**Virtud:** el hook ya usa WebSocket nativo alineado con el backend (no Socket.IO en runtime, aunque `socket.io-client` sigue en dependencias).
 
-Logs estructurados:
-- correlation_id por evento.
-- tenant_id/site_id/event_id en todos los logs.
-- nivel INFO para flujo, WARN para degradación, ERROR para falla operativa.
+**Defecto:** token no se envía al WS; canal sin autenticación. Eventos `alert:new`/`alert:updated` preparados en frontend pero no emitidos por backend.
 
-Trazas:
-- spans en: ingest -> rule_eval -> ws_dispatch -> user_action.
+---
 
-Alertas operativas:
-- p95 ingest_to_queue > 10s por 5 min.
-- edge connector heartbeat perdido > 2 intervalos.
-- tasa de fallas de notificación > 5% en 15 min.
+## Fuente de verdad por subsistema
 
-## 7. NFRs del MVP
+| Subsistema | Fuente de verdad actual |
+|---|---|
+| UI operación alertas | `app/(dashboard)/operacion/` + API `/alerts` |
+| UI mock (reglas, expedientes, etc.) | `lib/mock-data.ts`, `lib/mock-case-files-api.ts` |
+| Backend HTTP/WS activo | `src/` + `src/mysqlStore.cjs` |
+| Controles seguridad explorados (no activos) | `backend/src/` |
+| Modelo SQL operativo | `db/sql_files/01_CreacionDesdeCero/*` |
+| Design system | `styles/design-system.css`, `components/ui/` |
 
-- Latencia: p95 < 10s para visibilidad en cola (M1).
-- Disponibilidad: 99.5% mensual para API operativa (objetivo MVP).
-- Trazabilidad: 100% de cambios de estado con usuario+timestamp.
-- Seguridad: todo acceso autenticado JWT; aislamiento estricto por tenant.
-- Retención sugerida MVP:
-  - eventos y auditoría: 12 meses.
-  - evidencia pesada (clips): 90 días (configurable por política).
+---
 
-## 8. Riesgos técnicos y mitigación
+## Matriz integración frontend ↔ backend ↔ BD
 
-1) Calidad variable ANPR/nocturno
-- Mitigación: confidence score + revisión manual + mejora escena por fases.
+| Módulo | Frontend | Backend | MySQL | Notas |
+|--------|----------|---------|-------|-------|
+| Login | Real | Real | `gen_usuario` | Sin refresh/logout |
+| Alertas list/attend | Real | Real | `ale_evento`, SP | UX optimista |
+| Alertas detalle `/alerta/[id]` | Llama API | **No existe** | — | Roto |
+| Ingest NVR | — | Real | Pipeline completo | `db:seed-nvr` |
+| Reglas UI | Mock | GET real | `ale_regla` | UI no consume API |
+| Recepción | Real + fallback | Real | `adm_ingreso` | Tenants mock |
+| Usuarios admin | Real + fallback | Real | `gen_usuario` | — |
+| Health header | Real | Real | Ping DB | — |
+| Salud página | Estático | — | — | — |
+| Expedientes | Mock fallback | — | — | — |
+| Reportes | Estático | — | — | — |
+| Media/streaming | Demo assets | — | `dah_*` sin consumidor | — |
 
-2) NVR3 obsoleto bloquea cobertura completa
-- Mitigación: dependencia explicitada en plan; operar MVP parcial en NVR1/NVR2 mientras se reemplaza.
+---
 
-3) Variabilidad Starlink
-- Mitigación: buffer corto en edge, reintentos exponenciales, colas idempotentes.
+## Virtudes arquitectónicas
 
-4) Ruido por reglas mal calibradas
-- Mitigación: modo observación inicial + ajuste semanal de umbrales.
+1. **Separación clara frontend/backend** con proxy Next en dev.
+2. **Dual store** (`store.js` / `mysqlStore.cjs`) permite tests sin BD y dev con BD real.
+3. **Stored procedure** centraliza transiciones de estado — consistencia transaccional.
+4. **Motor de reglas en ingest** desacoplado de la UI.
+5. **Design system token-first** — base sólida para evolución UI.
+6. **Scripts operativos** (`demo:clean`, `db:verify`, `db:seed-nvr`).
 
-5) Disciplina de cierre de eventos
-- Mitigación: UX de cierre simple + métricas por turno + capacitación.
+---
 
-## 9. Roadmap técnico posterior al MVP (referencial)
+## Defectos y divergencias estructurales
 
-- Extraer Notification y Correlation a workers desacoplados.
-- Réplica de lectura y partición por fecha para histórico grande.
-- Dashboard de reincidencias (C2) con vistas agregadas.
-- Correo a arrendatario (C1) con gobernanza de plantillas y aprobación.
+1. **Dos backends** (`src/` vs `backend/src/`) con contratos incompatibles.
+2. **`backend/src/` huérfano** — riesgo de que un tercero integre el backend equivocado.
+3. **Auth incompleta** — JWT emitido pero no enforced en API ni revalidado en UI.
+4. **Realtime parcial** — un solo evento emitido; WS sin auth.
+5. **Mocks coexistiendo** con datos reales — fallbacks silenciosos (`withMockFallback`, `.catch(() => {})`).
+6. **Dos vocabularios API alertas** — `attend()` legacy vs `attendEvent()` canónico.
+7. **`package.json` `"type": "module"`** con módulos `.cjs` — funciona pero mezcla estilos.
+8. **`socket.io-client` en deps** sin uso en runtime — deuda de dependencia.
+9. **Documentación externa desactualizada** — `INSTRUCCIONES_ACCESO.md` describe auth mock.
+
+---
+
+## Prioridades naturales de consolidación
+
+1. Eliminar o fusionar `backend/src/` con `src/` (elegir uno).
+2. Implementar middleware auth + `/auth/me` + refresh.
+3. Unificar vocabulario `attend` / `attendEvent`; implementar `GET /alerts/:id`.
+4. Conectar UI reglas a `GET /rules`; CRUD backend.
+5. Persistir `llamada_at` o equivalente en timeline.
+6. Emitir `alert:new`/`alert:updated` desde backend o documentar solo refetch.
+7. Autenticar WebSocket.
+8. Reemplazar mocks restantes o documentar explícitamente como out-of-scope.
+
+---
+
+**Última actualización basada en código:** 2026-06-11

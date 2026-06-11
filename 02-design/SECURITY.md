@@ -1,149 +1,204 @@
-# Security Design — MVP CCTV
+# SECURITY.md
 
-## 1. Objetivo
+## Objetivo
 
-Asegurar confidencialidad, integridad, disponibilidad y aislamiento multi-tenant para eventos de seguridad, evidencias y operaciones del parque.
+Refleja los controles de seguridad **que realmente existen hoy** en el código. No asume hardening futuro ni controles del PRD que aún no están implementados.
 
-## 2. Autenticación (JWT)
+---
 
-Modelo:
-- Access token JWT (vida corta: 60 min).
-- Refresh token rotatorio (vida 7 días, revocable).
-- Tokens firmados con clave asimétrica (RS256 recomendado).
+## Resumen por capa
 
-Claims mínimas:
-- sub: user_id
-- tenant_id
-- site_ids autorizados
-- role
-- jti
-- exp, iat
+| Capa | Nivel de seguridad real | Evaluación |
+|------|-------------------------|------------|
+| Frontend auth | Login real + sesión localStorage | Parcial — no apto producción |
+| Backend `src/` | Validación + JWT emitido | Parcial — JWT no enforced |
+| Backend `backend/src/` | PoC refresh/scope/audit | No activo — referencia |
+| MySQL | Credenciales locales, permisos app | Depende del despliegue |
+| WebSocket | Sin autenticación | Insuficiente |
+| Media/evidencia | Assets demo públicos | Sin control de acceso |
 
-Flujos:
-- login -> access + refresh
-- refresh -> nuevo access (+ opcional rotación refresh)
-- logout -> invalidación refresh/jti en denylist temporal
+---
 
-Buenas prácticas:
-- password hash con Argon2id o bcrypt cost alto.
-- rate limiting en login y bloqueo progresivo por intentos.
-- sesión con device fingerprint opcional (MVP simple: ip+ua hash).
+## Autenticación
 
-## 3. Autorización (RBAC + tenancy)
+### Frontend
 
-Roles MVP:
-- GUARD
-- ADMIN
-- OPS
-- SUPERADMIN_TNS
+**Archivos:** `components/providers/auth-provider.tsx`, `app/(auth)/login/page.tsx`, `lib/auth.ts`, `lib/demo-users.ts`
 
-Reglas:
-- Toda query incluye tenant_id obligatorio.
-- Acceso por site_id filtrado por permisos del usuario.
-- SUPERADMIN_TNS solo para operaciones cross-tenant explícitas.
+**Comportamiento real:**
+1. `login()` llama `POST /api/v1/auth/login` con email/password.
+2. Backend valida bcrypt contra `gen_usuario`.
+3. JWT guardado en `localStorage` como `tns_token`.
+4. Datos de usuario persistidos vía `persistDemoUser()`.
+5. `checkAuthStatus()` al recargar: lee token + email de localStorage — **no valida JWT**.
+6. `logout()` limpia storage local — **no revoca token en servidor**.
 
-Aplicación técnica:
-- Policy middleware en backend valida role + scope.
-- Repositorios SQL aplican tenant_id/site_id en cada consulta (sin excepciones).
-- Prohibido usar endpoints sin scoping multi-tenant.
+**Implicancias:**
+- Login ya no es "cualquier password" (contrario a texto legacy en UI login y `INSTRUCCIONES_ACCESO.md`).
+- Token expirado no se detecta hasta fallo de API.
+- No hay protección CSRF específica (SPA con Bearer header).
 
-## 4. Seguridad de conectividad parque-cloud
+### Backend `src/`
 
-- Conector en parque inicia túnel saliente TLS (no inbound público a NVR/cámaras).
-- mTLS recomendado entre edge connector y core API.
-- Credenciales de conector por tenant/site, revocables.
-- Heartbeat firmado para detectar spoofing/desconexión.
+**Implementado:**
+- `POST /api/v1/auth/login` — bcrypt + JWT HS256 (1h)
+- Secret fallback: `process.env.JWT_SECRET || 'dev-secret'`
 
-## 5. Secretos y credenciales
+**No implementado:**
+- Middleware de validación Bearer en rutas protegidas
+- `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`
+- Rate limiting / brute force protection
+- Revocación de tokens
 
-Fuentes permitidas:
-- Secret Manager (Vault/SSM/GCP Secret Manager) o variables de entorno cifradas en runtime.
+**Endpoints mutables sin auth enforced:**
+- `POST /ingest/events`
+- `GET/PATCH /events/*`
+- `GET/POST /alerts/*`
+- CRUD `/users`, `/vehicle-entries`
 
-Política:
-- Nunca secretos en repositorio.
-- Rotación trimestral mínima para claves API y credenciales de integraciones.
-- Claves JWT privadas con control de acceso estricto y auditoría.
-- Separación por entorno (dev/stage/prod) y por tenant cuando aplique.
+### Backend `backend/src/` (PoC — no activo)
 
-## 6. CORS y seguridad de APIs
+**Implementado y probado** (`backend/tests/security.test.js`):
+- Access + refresh JWT con rotación
+- Revocación refresh in-memory
+- Rechazo de refresh reutilizado
+- Tenant/site scope en queries
 
-CORS:
-- allowlist explícita de orígenes front (guardia/admin/ops).
-- Métodos permitidos mínimos: GET, POST, PATCH.
-- Credentials habilitadas solo cuando sea necesario.
+**No integrado** con frontend ni con `npm run dev`.
 
-Headers de seguridad:
-- Content-Security-Policy (frontend).
-- X-Content-Type-Options: nosniff.
-- X-Frame-Options: DENY.
-- Referrer-Policy: strict-origin-when-cross-origin.
-- HSTS en dominios HTTPS.
+---
 
-Protección API:
-- Validación estricta de payload (schema validation).
-- Rate limits por IP + por user + por conector.
-- Idempotency-key en ingestión para evitar duplicados por retry.
+## Autorización y RBAC
 
-## 7. Seguridad de evidencia y archivos
+### Frontend — `lib/auth.ts`
 
-- Evidencia en object storage privado (bucket no público).
-- Acceso mediante URL firmada con TTL corto.
-- Hash checksum de evidencias críticas (sha256) para trazabilidad.
-- Lifecycle policy para expiración según retención definida.
+- Matriz de permisos por string (`hasPermission`, `canAccessRoute`, `getDefaultRoute`).
+- Roles de presentación: `vigilante`, `recepcion`, `supervisor`, `admin_parque`, `soporte_tns`, etc.
+- Control de rutas en cliente — **bypassable** manipulando URL o localStorage.
 
-## 8. Auditoría y trazabilidad
+### Backend MySQL
 
-Auditar como mínimo:
-- login/logout/refresh
-- cambios de estado de eventos
-- cambios de reglas
-- correlaciones manuales
-- envíos de notificación
-- acciones de OPS sobre salud técnica
+- Autoridad real: `gen_permiso` + `gen_usuario_permiso`.
+- Backend deriva `role` para UX; resuelve permisos en login.
+- `attendAlert()` usa `resolveActorWithPermission()` con fallback de actor tenant.
 
-Formato:
-- actor, acción, entidad, antes/después (diff cuando aplique), timestamp, request_id.
-- logs inmutables por 12 meses mínimo.
+### Backend API
 
-## 9. Privacidad y minimización de datos
+- **Sin RBAC por endpoint** en `src/app.js`.
+- Actor a veces hardcoded (`usr_01` en PATCH events legacy).
 
-- Guardar solo datos necesarios para operación y trazabilidad del PRD.
-- Evitar almacenar PII extra no requerida.
-- Campos sensibles (identificadores de visitantes) con acceso restringido por rol.
-- Política clara de retención y purga.
+---
 
-## 10. Threat model resumido y mitigaciones
+## Multi-tenant
 
-1) Robo de token JWT
-- Mitigación: vida corta, revocación refresh, HTTPS, detección anomalías.
+| Capa | Aislamiento |
+|------|-------------|
+| SQL | `id_tenant` en tablas — modelado |
+| Backend `src/` | Sin filtro tenant en queries operativas |
+| Backend PoC | `tenantScope()` probado — no activo |
+| Frontend | Contexto visual demo — sin enforcement |
 
-2) Acceso cruzado entre tenants
-- Mitigación: tenancy guard en middleware + constraints en queries + pruebas negativas.
+---
 
-3) Exposición de NVR/cámaras a internet
-- Mitigación: solo túnel saliente; sin NAT/port-forward inbound.
+## CORS y cabeceras
 
-4) Reenvío duplicado de eventos por red inestable
-- Mitigación: idempotency key + fingerprint dedup.
+### `src/app.js`
 
-5) Manipulación de evidencia
-- Mitigación: almacenamiento append-only lógico + checksum + auditoría de acceso.
+- `helmet()` aplicado
+- `cors()` abierto — sin allowlist
+- `x-request-id` generado/propagado
 
-6) Fuerza bruta en login
-- Mitigación: rate limiting + lock temporal + alertas.
+### `backend/src/app.js`
 
-## 11. Controles de seguridad en CI/CD y operación
+- Sin `cors()` ni `helmet()` en PoC
 
-- SAST básico en backend/frontend.
-- Escaneo de dependencias (CVEs críticas bloqueantes).
-- IaC/infra con revisión de secretos y permisos mínimos.
-- Backups cifrados MySQL diarios + pruebas de restore.
+---
 
-## 12. Checklist de aceptación de seguridad MVP
+## Secretos y claves
 
-- JWT + refresh implementados y testeados.
-- RBAC y aislamiento tenant/site verificados con pruebas de autorización negativa.
-- CORS en allowlist, sin wildcard en producción.
-- Secretos fuera de repo y rotables.
-- Evidencia accesible solo por URL firmada temporal.
-- Auditoría activa en operaciones críticas.
+| Ubicación | Estado |
+|-----------|--------|
+| `src/app.js` | `JWT_SECRET` env o `'dev-secret'` |
+| `backend/src/app.js` | Secrets hardcodeados en PoC |
+| `db/connection-config.json` | Gitignored — correcto |
+| Repo | Sin vault; rotación manual |
+
+**Checklist pre-commit (CLAUDE.md):** buscar `phc_`, `sk_`, `pk_` en código.
+
+---
+
+## Auditoría
+
+| Capa | Persistencia |
+|------|--------------|
+| `log_evento_timeline` | Sí — decisiones operativas vía SP |
+| `log_auditoria_api` | Modelada — sin writer runtime |
+| Backend PoC | In-memory — `GET /audit-logs` |
+
+---
+
+## Evidencia y media
+
+### Frontend
+
+- Snapshots/video desde `/demo/*` — sin auth.
+- `resolveSnapshotUrl()` en `lib/demo-media.ts`.
+
+### Backend PoC
+
+- `POST /api/v1/evidence/sign` — URLs firmadas SHA256, TTL máx 300s.
+- No integrado con UI operativa.
+
+---
+
+## Realtime
+
+| Aspecto | Estado |
+|---------|--------|
+| Protocolo | WebSocket nativo |
+| Auth | Frontend requiere token en localStorage para conectar; **no lo envía al servidor** |
+| Scope | Cualquiera puede conectar a `/ws/operations` |
+| Eventos | Solo metadatos mínimos en `event.popup` |
+
+---
+
+## Controles que faltan (gap producción)
+
+- [ ] Middleware JWT en API
+- [ ] `/auth/me` + refresh + logout con revocación persistente
+- [ ] Rate limiting / lockout login
+- [ ] CORS allowlist
+- [ ] RBAC por endpoint alineado con `gen_permiso`
+- [ ] Aislamiento tenant en queries
+- [ ] Auth WebSocket (token en handshake o primer mensaje)
+- [ ] Auditoría API persistente
+- [ ] Secretos por ambiente (no defaults dev)
+- [ ] Evidencia/media con URLs firmadas en UI
+- [ ] Protección rutas Next.js server-side (middleware)
+
+---
+
+## Virtudes de seguridad actuales
+
+1. **Passwords hasheados** (bcrypt) en BD — no plaintext.
+2. **Modelo permisos granular** en SQL — base sólida para RBAC real.
+3. **Validación Zod** en payloads backend — reduce injection lógica.
+4. **Helmet** en backend activo.
+5. **PoC hardening documentado** en `backend/src/` — patrones de referencia probados.
+6. **Timeline inmutable** — trazabilidad de decisiones operativas.
+7. **`connection-config.json` gitignored** — credenciales BD no en repo.
+
+---
+
+## Lectura honesta
+
+La seguridad hoy está en transición:
+
+- **Mejor que demo puro:** login real, passwords bcrypt, JWT emitido, permisos en BD.
+- **Peor que producción:** API abierta tras login, sesión no revalidada, WS sin auth, secretos dev, mocks que ocultan fallos de API.
+
+Un tercero debe asumir que el sistema es **seguro para demo controlado en red local**, no para exposición internet sin hardening adicional.
+
+---
+
+**Última actualización basada en código:** 2026-06-11
