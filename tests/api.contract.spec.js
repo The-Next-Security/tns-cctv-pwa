@@ -1,11 +1,22 @@
 const request = require('supertest');
 const { createApp } = require('../src/app');
 
+const INGEST_API_KEY = 'dev-ingest-key';
+
+async function loginToken(app) {
+  const res = await request(app)
+    .post('/api/v1/auth/login')
+    .send({ email: 'guardia@tenant.cl', password: 'secret123' });
+  return res.body.access_token;
+}
+
 describe('API contract MVP CCTV', () => {
   let app;
+  let token;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     app = createApp();
+    token = await loginToken(app);
   });
 
   test('POST /api/v1/auth/login responde token y user context', async () => {
@@ -46,8 +57,16 @@ describe('API contract MVP CCTV', () => {
       },
     };
 
-    const first = await request(app).post('/api/v1/ingest/events').set('x-idempotency-key', key).send(payload);
-    const second = await request(app).post('/api/v1/ingest/events').set('x-idempotency-key', key).send(payload);
+    const first = await request(app)
+      .post('/api/v1/ingest/events')
+      .set('x-api-key', INGEST_API_KEY)
+      .set('x-idempotency-key', key)
+      .send(payload);
+    const second = await request(app)
+      .post('/api/v1/ingest/events')
+      .set('x-api-key', INGEST_API_KEY)
+      .set('x-idempotency-key', key)
+      .send(payload);
 
     expect(first.statusCode).toBe(202);
     expect(second.statusCode).toBe(202);
@@ -58,6 +77,7 @@ describe('API contract MVP CCTV', () => {
   test('PATCH /api/v1/events/:id/state valida transiciones', async () => {
     const ingest = await request(app)
       .post('/api/v1/ingest/events')
+      .set('x-api-key', INGEST_API_KEY)
       .set('x-idempotency-key', 'idem-state')
       .send({
         tenant_id: 'tn_01',
@@ -77,6 +97,7 @@ describe('API contract MVP CCTV', () => {
 
     const invalid = await request(app)
       .patch(`/api/v1/events/${eventId}/state`)
+      .set('Authorization', `Bearer ${token}`)
       .send({ to_state: 'CLOSED', decision: 'SKIP', comment: 'invalid' });
 
     expect(invalid.statusCode).toBe(400);
@@ -84,9 +105,13 @@ describe('API contract MVP CCTV', () => {
 
     const ok = await request(app)
       .patch(`/api/v1/events/${eventId}/state`)
+      .set('Authorization', `Bearer ${token}`)
       .send({ to_state: 'IN_REVIEW', decision: 'INSPECTING', comment: 'ok' });
 
     expect(ok.statusCode).toBe(200);
     expect(ok.body.to_state).toBe('IN_REVIEW');
+    // El actor sale del JWT (req.user.sub), nunca hardcodeado.
+    expect(ok.body.actor_user_id).toBeTruthy();
+    expect(ok.body.actor_user_id).not.toBe('usr_01_hardcoded');
   });
 });
