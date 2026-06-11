@@ -1,10 +1,10 @@
 # HANDOFF — TNS CCTV PWA
 
 > **Para:** la próxima instancia de desarrollo (agente Claude o desarrollador humano).
-> **De:** sesión de codificación 2026-06-11 (rama `claude/heuristic-yonath-8b3363`), que ejecutó el plan de la revisión de arquitectura aplicando Loop Engineering.
+> **De:** sesión QA 2026-06-11 (rama `claude/heuristic-yonath-8b3363`), que ejecutó completo el checklist §5.2, corrigió 4 bugs P1 con regresión y registró 9 issues en GitHub.
 > **Punto de partida obligatorio** de la próxima sesión. Léelo completo antes de tocar código.
 > **Misión global:** hito de pruebas con NVR reales (≈2026-06-25) y go-live (≈2026-07-02).
-> **🎯 Próxima sesión: TESTING TIPO QA de la aplicación** (ver §5).
+> **🎯 Próxima sesión: RESOLUCIÓN DE HALLAZGOS QA — issues #48–#56 + push E2E manual** (ver §6; resultados QA en §5.2).
 
 ---
 
@@ -122,51 +122,124 @@ No multi-tenant enforcement · no streaming en vivo · no ORM · no rehacer UI/d
 - Probar **mobile-first** (viewport smartphone) en todas las vistas excepto el editor de reglas (desktop) — regla de oro del producto.
 - Backend con `STORE=mysql`; usar usuarios demo de `USUARIOS_PRUEBA.md` para probar permisos por rol.
 
-### 5.2 Checklist QA (flujos verticales)
+### 5.2 Checklist QA — RESULTADOS (sesión QA 2026-06-11, viewport 390×844 salvo reglas)
 
-**A. Autenticación y sesión (D10)**
-- [ ] Login correcto / credenciales malas / usuario inactivo.
-- [ ] `GET /auth/me` con token válido; 401 con token expirado o ausente.
-- [ ] Refresh rotativo: el token usado queda inválido (replay → 401).
-- [ ] Logout limpia `tns_token` + `tns_refresh_token`.
-- [ ] Menú por rol: admin_parque ve Administración/Configuración; vigilante no.
+**A. Autenticación y sesión (D10) — PASS**
+- [x] Login correcto / credenciales malas ("Correo o contraseña incorrectos"). Usuario inactivo: sin usuario INACTIVE en seed; validado en código (`mysqlStore.cjs:331` → 401).
+- [x] `GET /auth/me` 200 con token; 401 sin token y con token corrupto.
+- [x] Refresh rotativo: nuevo refresh distinto; replay del usado → 401.
+- [x] Logout limpia `tns_token` + `tns_refresh_token` (localStorage queda solo `theme`).
+- [x] Menú por rol: admin ve Administración completa (incl. Configuración); vigilante solo "Alertas".
 
-**B. Flujo crítico de alertas (referencia del checklist 25-jun)**
-- [ ] Ingest evento (curl con `x-api-key`) → popup en `/operacion` vía WS en <10 s.
-- [ ] login → atender (`acknowledge`) → llamar (`register_call`, verificar `CALL_REGISTERED` en timeline) → escalar (checklist + observación) → resolver → verificar cadena completa en `log_evento_timeline`.
-- [ ] Descartar con motivo; reactivar alerta cerrada (vuelve a NEW).
-- [ ] Vocabulario legacy rechazado: POST attend con `action:'revisada'` → 400.
-- [ ] Detalle `/operacion/alerta/[id]` carga desde API (no mock).
+**B. Flujo crítico de alertas — PASS (2 bugs P1 detectados y corregidos)**
+- [x] Ingest curl → 202 RECEIVED, match Regla-0004, popup en `/operacion` <10 s vía WS.
+- [x] Cadena completa atender→llamar→escalar (checklist+observación)→resolver verificada en `log_evento_timeline` (NEW→IN_REVIEW; CALL_REGISTERED; NEW→ESCALATING; ESCALATING→CLOSED/CONFIRMED).
+- [x] Descartar con motivo (Falso positivo – vegetación); reactivar → vuelve a pendiente y exige nueva llamada antes de escalar.
+- [x] `action:'revisada'`/'escalada' → 400 VALIDATION_ERROR con enum canónico.
+- [x] `/operacion/alerta/[id]` carga desde API.
+- 🐛 **QA-03 (Alta, CORREGIDO):** `getAlertClass` degradaba `alta` a "Baja prioridad" contra PRD §5.3 → contador de críticas y popup mal. Fix en `lib/types.ts` + `tests/alert-class.contract.spec.js`.
+- 🐛 **QA-04 (Alta, CORREGIDO):** timestamps mezclados local/UTC en BD (timeline cronológicamente corrupto, "hace 4 horas" en alertas de minutos). Fix: `SET time_zone='+00:00'` por conexión en `db/lib/pool.cjs` + `tests/db-timezone.contract.spec.js`. Datos previos al fix quedan mezclados (solo dev).
 
-**C. Seguridad (no negociable)**
-- [ ] Toda ruta del API sin token → 401 (events, alerts, users, rules, vehicle-entries).
-- [ ] Ingest sin/mala API key → 401; JWT NO sirve como reemplazo en ingest.
-- [ ] WS sin frame auth → cierre 4401 en ~5 s; token inválido → 4401.
-- [ ] Token en query string del WS: confirmar que NO se acepta.
+**C. Seguridad — PASS (1 bug Alta detectado y corregido)**
+- [x] events/alerts/users/rules/vehicle-entries sin token → 401.
+- [x] Ingest sin/mala API key → 401; JWT como reemplazo → 401.
+- [x] WS sin frame auth → 4401 AUTH_TIMEOUT a los 5.0 s; token inválido → 4401 INVALID_TOKEN inmediato; token en query string ignorado (4401). Control positivo: auth.ack OK.
+- 🐛 **QA-05 (Alta, CORREGIDO):** sin RBAC de servidor — un vigilante podía POST/PATCH /users (crear un admin). Fix: `requireRole('admin_parque')` en mutaciones de users (`src/auth.js` + `src/app.js`) + `tests/users-rbac.contract.spec.js`. GET /users queda abierto a autenticados (alimenta contactos de escalación).
 
-**D. Recepción vehicular**
-- [ ] Listado carga desde BD; crear ingreso persiste; registrar salida persiste (`exit_at`).
-- [ ] Caída del backend: aparece toast "datos de demostración" (mock visible, no silencioso).
+**D. Recepción vehicular — PASS**
+- [x] Listado desde BD; validación inline de campos requeridos; crear ingreso persiste (`adm_ingreso`, conductor/RUT/empresa/tipo OK); salida persiste `exit_at`.
+- [x] Backend caído → toast "Sin conexión con el servidor — mostrando datos de demostración".
 
-**E. Salud M6**
-- [ ] `/salud` muestra NVRs con estado real; heartbeat por curl actualiza `last_check`.
-- [ ] Simular silencio: sin heartbeat >5 min → degraded; >15 min → down (umbral configurable en `gen_configuracion_*`).
+**E. Salud M6 — PASS (1 bug Alta corregido)**
+- [x] Heartbeat curl (`POST /ingest/heartbeat`, body `{source_id, status}`) actualiza `last_check`; los 3 estados observados en vivo: ok (recién reportado) → degraded (>5 min) → down (>15 min), umbrales leídos de `gen_configuracion_*`.
+- 🐛 **QA-06 (Alta, CORREGIDO):** `/salud` pintaba NVRs hardcodeados (3 NVRs falsos, "hace 2 segundos", CPU/memoria inventadas) aunque llamaba al API. Fix: la sección consume `/health/nvrs` real con fallback a mock + toast; métricas de hardware se omiten hasta que el API las exponga.
+- ⚠️ Decisión PO pendiente: fuente sin heartbeat jamás (`last_heartbeat_at NULL`) se muestra "ok" (NVR-Secundario, 30 h sin señal). Propuesta: estado "sin datos".
 
-**F. Push (D9) — requiere claves VAPID**
-- [ ] Generar claves, levantar backend, otorgar permiso de notificaciones, escalar una alerta → notificación push con app cerrada; clic abre `/operacion/alerta/[id]`.
-- [ ] Verificar registro en `ale_notificacion` (channel PUSH, status SENT).
+**F. Push (D9) — PARCIAL (limitación del entorno)**
+- [x] Claves VAPID generadas; backend `push enabled:true`; `sw.js` activo con handlers; degradación elegante sin permiso ("push bloqueadas — la escalación se registrará igualmente"); tests unitarios del servicio verdes.
+- [ ] **PENDIENTE manual:** E2E notificación con app cerrada + clic abre detalle + fila `ale_notificacion` SENT. El perfil Chrome automatizado tiene las notificaciones denegadas y no se puede otorgar por script. Ejecutar a mano: definir VAPID en el entorno, permitir notificaciones en el navegador, escalar una alerta.
 
-**G. PWA mobile**
-- [ ] `sw.js` registra sin error; manifest válido; instalable.
-- [ ] Todas las vistas usables en viewport 390×844 (excepto editor de reglas).
+**G. PWA mobile — PASS con 1 hallazgo**
+- [x] `sw.js` registra sin errores de consola; todas las vistas usables en 390×844 (operación, recepción, expedientes+detalle, reportes, salud, admin, login); editor de reglas correcto en desktop.
+- 🐛 **QA-07 (Media, ABIERTO):** los íconos del manifest son 800×250 (logo); Chrome exige 192×192 y 512×512 cuadrados para instalación → la PWA NO es instalable. Requiere assets de diseño.
 
-### 5.3 Al cerrar la sesión QA
+### 5.2b Issue log Media/Baja — REGISTRADOS EN GITHUB (2026-06-11)
 
-- Resultados del checklist documentados (este archivo §5.2 marcado o issue por fallo).
-- Bugs P1 corregidos con test de regresión; suite verde.
-- `LECCIONES.md` actualizado con toda lección no obvia.
-- Actualizar este HANDOFF: §2 con cambios, §5 con resultados, y definir la sesión siguiente.
+- **QA-07 (Media) → [#48](https://github.com/The-Next-Security/tns-cctv-pwa/issues/48):** manifest sin íconos cuadrados 192/512 → PWA no instalable.
+- **QA-08 (Media) → [#49](https://github.com/The-Next-Security/tns-cctv-pwa/issues/49):** `/salud` NVR sin heartbeat se muestra "ok" — falta estado "sin datos" (decisión PO).
+- **QA-09 (Media) → [#50](https://github.com/The-Next-Security/tns-cctv-pwa/issues/50):** `alerts.resolution_notes` devuelve la decisión (`CONFIRMED`) en lugar de la nota escrita; la nota vive solo en el timeline.
+- **QA-10 (Media) → [#51](https://github.com/The-Next-Security/tns-cctv-pwa/issues/51):** detalle de alerta sin acciones Llamar/Escalar — quien llega por deep-link/push no puede escalar desde ahí.
+- **QA-11 (Baja) → [#52](https://github.com/The-Next-Security/tns-cctv-pwa/issues/52):** login dice "Modo demo — cualquier contraseña funciona" pero el backend ya valida credenciales reales.
+- **QA-12 (Baja) → [#53](https://github.com/The-Next-Security/tns-cctv-pwa/issues/53):** `USUARIOS_PRUEBA.md` desactualizado respecto del seed real (también `INSTRUCCIONES_ACCESO.md`).
+- **QA-13 (Baja) → [#54](https://github.com/The-Next-Security/tns-cctv-pwa/issues/54):** tarjetas resueltas muestran "Resuelta: CONFIRMED" (enum crudo en inglés).
+- **QA-14 (Baja) → [#55](https://github.com/The-Next-Security/tns-cctv-pwa/issues/55):** avatar "U" genérica en mobile; popover de contactos desborda el viewport 390 px.
+- **QA-15 (Baja) → [#56](https://github.com/The-Next-Security/tns-cctv-pwa/issues/56):** /reportes con datos mock sin aviso y colores raw fuera del design system (ligado a D11).
+
+### 5.3 Cierre de la sesión QA 2026-06-11 — CUMPLIDO
+
+- Checklist §5.2 ejecutado completo con evidencia (outputs curl + capturas + verificación BD vía API).
+- 4 bugs P1/Alta corregidos en sesión con test de regresión: QA-03, QA-04, QA-05, QA-06.
+- Verificación final: `npm test` **90/90** ✅ · `tsc --noEmit` ✅ · `npm run build` ✅ · scan de secretos limpio.
+- `LECCIONES.md` actualizado (5 reglas nuevas).
 
 ---
 
-*Actualizado el 2026-06-11 al cierre de la sesión de codificación. Si este documento contradice al código, el código + la suite de tests son la verdad — y hay que corregir este documento.*
+## 6. PLAN DE LA PRÓXIMA SESIÓN: RESOLUCIÓN DE HALLAZGOS QA
+
+**Goal verificable de la sesión:** issues [#48](https://github.com/The-Next-Security/tns-cctv-pwa/issues/48)–[#56](https://github.com/The-Next-Security/tns-cctv-pwa/issues/56) cerrados (o re-priorizados con el PO), push E2E validado a mano, suite verde, y cada issue cerrado con evidencia en el comentario de cierre (`gh issue close <n> --comment`).
+
+### 6.0 Protocolo de inicio (igual que siempre + específico)
+
+```
+1. Protocolo de lectura (CLAUDE.md global + proyecto + LECCIONES_APRENDIDAS.md + confirmación)
+2. Leer este HANDOFF (§5.2 resultados QA y este §6) + LECCIONES.md
+3. git status / git log -10  → la rama qa dejó 7 commits sin push (f26420d..)
+4. cp db/connection-config.json del repo principal si el worktree no lo tiene
+5. npm install && npm run db:verify && npm test  → debe dar 90/90 verde
+6. gh issue list --state open  → confirmar el estado real de #48–#56
+7. npm run dev (web :3000, api :4000, STORE=mysql)
+```
+
+### 6.1 Tanda 1 — Flujo de alertas (Media, juntos porque comparten archivos)
+
+| Issue | Qué hacer | Criterio de cierre |
+|---|---|---|
+| [#51](https://github.com/The-Next-Security/tns-cctv-pwa/issues/51) QA-10 | Agregar Llamar/Escalar al detalle `/operacion/alerta/[id]` reutilizando `CallContactsPopover` + `EscalateButton` de `components/operacion/escalation-controls.tsx` | Desde el detalle de una alerta escalable se completa llamar→escalar; timeline en BD lo refleja |
+| [#50](https://github.com/The-Next-Security/tns-cctv-pwa/issues/50) QA-09 | `resolution_notes` debe devolver la nota del operador (comment del último CLOSED del timeline), no la decisión | GET /alerts/:id muestra la nota escrita; test de contrato |
+| [#54](https://github.com/The-Next-Security/tns-cctv-pwa/issues/54) QA-13 | Traducir decisión en tarjetas resueltas (depende de #50) | Pestaña Resueltas sin enums en inglés |
+
+### 6.2 Tanda 2 — PWA y push (cierra el bloque F pendiente)
+
+| Issue | Qué hacer | Criterio de cierre |
+|---|---|---|
+| [#48](https://github.com/The-Next-Security/tns-cctv-pwa/issues/48) QA-07 | Generar íconos 192×192 y 512×512 (+maskable) desde el logo TNS y declararlos en el manifest | Chrome ofrece "Instalar app"; Lighthouse PWA installable |
+| Push E2E (§5.2 F) | Con claves VAPID en el entorno y permiso de notificaciones otorgado A MANO en el navegador del PO: escalar alerta → notificación con app cerrada → clic abre `/operacion/alerta/[id]` → fila `ale_notificacion` channel PUSH status SENT | Evidencia (captura + SELECT) en el HANDOFF |
+
+⚠️ El permiso de notificaciones NO se puede otorgar por script — este paso necesita interacción manual del PO en su Chrome.
+
+### 6.3 Tanda 3 — Salud y coherencia demo (requiere 1 decisión del PO)
+
+| Issue | Qué hacer | Criterio de cierre |
+|---|---|---|
+| [#49](https://github.com/The-Next-Security/tns-cctv-pwa/issues/49) QA-08 | **Preguntar primero al PO:** ¿estado "sin datos" para fuentes sin heartbeat? Si sí: agregar `unknown` a `NvrHealthStatus`, badge gris en /salud | NVR-Secundario deja de mostrarse "ok" sin haber reportado jamás |
+| [#52](https://github.com/The-Next-Security/tns-cctv-pwa/issues/52) QA-11 | Corregir leyenda y accesos rápidos del login al modelo de auth real | Login sin textos falsos |
+| [#53](https://github.com/The-Next-Security/tns-cctv-pwa/issues/53) QA-12 | Reescribir `USUARIOS_PRUEBA.md` + `INSTRUCCIONES_ACCESO.md` desde el seed real | Docs alineados a `07_01_datos_iniciales.sql` |
+
+### 6.4 Tanda 4 — UI mobile y D11 (si queda tiempo; si no, re-agendar)
+
+| Issue | Qué hacer | Criterio de cierre |
+|---|---|---|
+| [#55](https://github.com/The-Next-Security/tns-cctv-pwa/issues/55) QA-14 | Inicial real en avatar; `collisionPadding`/max-width al popover de contactos | Sin scroll horizontal en 390×844 |
+| [#56](https://github.com/The-Next-Security/tns-cctv-pwa/issues/56) QA-15 | Mínimo: aviso "datos de demostración" en /reportes; ideal: tanda 1 de D11 (KPIs desde BD) + tokens ds-* en gráficos | Sin mock silencioso (D6) |
+
+### 6.5 Reglas de la sesión
+
+- Un issue = un goal del loop (ejecutar → verificar → cerrar con evidencia). Commits con aprobación del PO referenciando el issue (`fix: ... (#51)`).
+- Mobile-first 390×844 para validar cada fix de UI; editor de reglas en desktop.
+- Los 4 tests de contrato nuevos (`alert-class`, `db-timezone`, `users-rbac`, `alert-vocabulary`) NO se tocan — si fallan, el fix está mal.
+- Mantener anti-objetivos §2.4. El **spike NVR físico** (§3.1) sigue siendo el bloqueante del hito 25-jun: si el hardware llega antes, ese spike tiene prioridad sobre las tandas 3 y 4.
+- Al cerrar: suite verde, `LECCIONES.md` con lo no obvio, este HANDOFF actualizado (§6 marcado con resultados + plan de la siguiente sesión).
+
+---
+
+*Actualizado el 2026-06-11 al cierre de la sesión QA. Si este documento contradice al código, el código + la suite de tests son la verdad — y hay que corregir este documento.*
