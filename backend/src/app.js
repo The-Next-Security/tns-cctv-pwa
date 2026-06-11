@@ -10,14 +10,20 @@ const users = [
   { id: 'u_124', email: 'admin@agrolivo.cl', password: 'secret', role: 'ADMIN', tenant_id: 'agrolivo', site_ids: ['site-1'] }
 ];
 
-function createStore() {
+function createStore(seed = {}) {
   return {
     refreshTokens: new Map(),
     revokedRefreshTokenJti: new Set(),
     idempotency: new Map(),
-    events: [],
+    events: seed.events || [],
     auditLogs: []
   };
+}
+
+function getLatestClosedTransition(timeline = []) {
+  return [...timeline]
+    .filter((item) => item?.to_state === 'CLOSED')
+    .sort((a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime())[0] || null;
 }
 
 function signAccess(user) {
@@ -58,9 +64,9 @@ function tenantScope(req, res, next) {
   next();
 }
 
-function createApp() {
+function createApp(options = {}) {
   const app = express();
-  const store = createStore();
+  const store = createStore({ events: options.seedEvents || [] });
 
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -183,6 +189,29 @@ function createApp() {
       }));
 
     return res.status(200).json({ items, total: items.length, page: 1, page_size: 20 });
+  });
+
+  app.get('/api/v1/alerts/:id', auth, (req, res) => {
+    const alert = store.events.find((event) => event.event_id === req.params.id && event.tenant_id === req.user.tenant_id);
+
+    if (!alert) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'alert not found', request_id: req.request_id } });
+    }
+
+    const latestClosedTransition = getLatestClosedTransition(alert.timeline);
+
+    return res.status(200).json({
+      event_id: alert.event_id,
+      tenant_id: alert.tenant_id,
+      site_id: alert.site_id,
+      type: alert.type,
+      severity: alert.severity,
+      state: alert.state,
+      occurred_at: alert.occurred_at,
+      resolution_notes: latestClosedTransition?.comment_text || null,
+      resolution_decision: latestClosedTransition?.decision_code || null,
+      timeline: alert.timeline || []
+    });
   });
 
   app.post('/api/v1/evidence/sign', auth, (req, res) => {
