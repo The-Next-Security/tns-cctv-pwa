@@ -8,7 +8,7 @@ const { Store } = require('./store');
 const { errorEnvelope } = require('./errors');
 
 const { resolveJwtSecret } = require('./config');
-const { createAuthMiddleware, createIngestAuthMiddleware } = require('./auth');
+const { createAuthMiddleware, createIngestAuthMiddleware, requireRole } = require('./auth');
 const { createPushService } = require('./push');
 
 const JWT_SECRET = resolveJwtSecret();
@@ -386,7 +386,7 @@ function createApp(deps = {}) {
     return res.status(200).json({ items, data: items, pagination, request_id: req.requestId });
   });
 
-  app.post('/api/v1/users', async (req, res) => {
+  app.post('/api/v1/users', requireRole('admin_parque'), async (req, res) => {
     if (typeof store.createUser !== 'function') {
       return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'users no disponible en este store', req.requestId));
     }
@@ -410,7 +410,7 @@ function createApp(deps = {}) {
     return res.status(201).json({ ...result.user, request_id: req.requestId });
   });
 
-  app.patch('/api/v1/users/:userId', async (req, res) => {
+  app.patch('/api/v1/users/:userId', requireRole('admin_parque'), async (req, res) => {
     if (typeof store.updateUser !== 'function') {
       return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'users no disponible en este store', req.requestId));
     }

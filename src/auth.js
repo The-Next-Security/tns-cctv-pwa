@@ -53,4 +53,16 @@ function createIngestAuthMiddleware({ store, env = process.env }) {
   };
 }
 
-module.exports = { createAuthMiddleware, createIngestAuthMiddleware };
+// QA-05: autorización por rol en el servidor. La UI oculta menús por rol, pero
+// sin este guard cualquier usuario autenticado (p. ej. vigilante) podía listar
+// usuarios o crear un admin_parque vía API directa.
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json(errorEnvelope('FORBIDDEN', 'rol sin permiso para este recurso', req.requestId));
+    }
+    return next();
+  };
+}
+
+module.exports = { createAuthMiddleware, createIngestAuthMiddleware, requireRole };
