@@ -78,6 +78,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
 
   const isPending = alert?.status === 'pendiente'
   const isInReview = alert?.status === 'en_revision'
+  const canShowEscalationActions = Boolean(alert?.rule?.can_escalate && (isPending || isInReview))
 
   async function handleRevisar() {
     if (!alert) return
@@ -371,7 +372,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
             </Card>
           )}
 
-          {isInReview && operationalAlert.rule?.can_escalate === true && (
+          {canShowEscalationActions && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Escalación</CardTitle>

@@ -59,7 +59,9 @@ export function getEscalationRoles(rule?: Rule | null): Role[] {
 }
 
 export function showEscalationActions(alert: Alert): boolean {
-  return alert.status === 'en_revision' && alert.rule?.can_escalate === true
+  if (!alert.rule?.can_escalate) return false
+
+  return alert.status === 'en_revision' || alert.status === 'pendiente'
 }
 
 export function buildEscalationObservation(

@@ -79,7 +79,7 @@ function readMockRuleEscalationConfig() {
 }
 
 describe('workflow de escalación', () => {
-  test('solo muestra acciones para alertas en revisión cuya regla permite escalar', () => {
+  test('muestra acciones de escalación para alertas en revisión o pendientes cuando la regla lo permite', () => {
     const baseAlert = {
       status: 'en_revision',
       rule: {
@@ -89,13 +89,25 @@ describe('workflow de escalación', () => {
     }
 
     expect(showEscalationActions(baseAlert)).toBe(true)
-    expect(showEscalationActions({ ...baseAlert, status: 'pendiente' })).toBe(false)
+    expect(showEscalationActions({ ...baseAlert, status: 'pendiente' })).toBe(true)
     expect(
       showEscalationActions({
         ...baseAlert,
         rule: { ...baseAlert.rule, can_escalate: false },
       })
     ).toBe(false)
+  })
+
+  test('también expone acciones de escalación cuando el detalle entra por deep-link pendiente y escalable', () => {
+    expect(
+      showEscalationActions({
+        status: 'pendiente',
+        rule: {
+          can_escalate: true,
+          escalation_roles: ['responsable_seguridad'],
+        },
+      })
+    ).toBe(true)
   })
 
   test('usa únicamente roles de escalación autorizados y definidos por la regla', () => {
