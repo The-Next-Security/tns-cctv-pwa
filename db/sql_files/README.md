@@ -1,19 +1,46 @@
 # SQL bundle
 
-Canonical MySQL 8 SQL_FILES layout requested for the data model workstream.
+Esquema MySQL 8/9 del proyecto. SQL repartido en modulos; el orquestador solo enlaza.
 
-Order of execution:
-1. `00_setup.sql`
-2. `01_ddl.sql`
-3. `02_indices.sql`
-4. `03_seed_inserts.sql`
-5. `04_procedures.sql`
-6. `05_functions.sql`
-7. `06_events.sql`
-8. `07_logs.sql`
+## Layout
 
-Notes:
-- `01_ddl.sql` keeps the core table graph and foreign keys.
-- `02_indices.sql` isolates non-key index creation for easier tuning.
-- `07_logs.sql` carries the API audit log table used by the contract tests.
-- Seed data is intentionally minimal and safe for local dev.
+```text
+db/sql_files/
+  crear_base_datos.sql          <- orquestador (SOURCE a cada modulo)
+  eliminar_base_datos.sql       <- DROP de la base
+  01_CreacionDesdeCero/         <- tablas DDL
+  02_Funciones/
+  04_StoredProcedures/
+  05_Eventos/
+  07_DatosIniciales/
+    07_01_datos_iniciales.sql   <- inserts de prueba
+```
+
+## Crear la base
+
+Desde la **raiz del repositorio**, cliente `mysql` interactivo:
+
+```bash
+mysql --default-character-set=utf8mb4 -u root -p
+```
+
+**MySQL 9.x no soporta `SOURCE` anidado.** No uses
+`SOURCE db/sql_files/crear_base_datos.sql` (falla con error 1064).
+
+En su lugar, **copia y pega todo** el contenido de `crear_base_datos.sql`
+en el prompt `mysql>`, o ejecuta cada linea `SOURCE ...` del archivo una a una.
+
+Para borrar y recrear:
+
+```sql
+SOURCE db/sql_files/eliminar_base_datos.sql
+-- luego pegar / ejecutar crear_base_datos.sql como arriba
+```
+
+Contraseña usuarios demo: `password123`.
+
+## Verificacion
+
+```bash
+npm run db:verify
+```

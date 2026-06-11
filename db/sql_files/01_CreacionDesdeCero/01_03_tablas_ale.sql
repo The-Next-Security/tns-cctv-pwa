@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS ale_evento (
   plate                  VARCHAR(16)  NULL,
   occurred_at            DATETIME(3)  NOT NULL,
   ingested_at            DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  state                  ENUM('NEW','IN_REVIEW','CLOSED') NOT NULL DEFAULT 'NEW',
+  state                  ENUM('NEW','IN_REVIEW','ESCALATING','CLOSED') NOT NULL DEFAULT 'NEW',
   critical               TINYINT(1)   NOT NULL DEFAULT 0,
   priority               INT          NOT NULL DEFAULT 0,
   payload_version        VARCHAR(16)  NOT NULL DEFAULT '1.0',

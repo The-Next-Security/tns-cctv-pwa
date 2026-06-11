@@ -1,8 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { useState, useEffect, useCallback } from 'react'
+import { RelativeTime } from '@/components/ui/relative-time'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -43,19 +42,19 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { MOCK_USERS } from '@/lib/mock-data'
-import { ROLE_LABELS } from '@/lib/types'
+import { users as usersApi } from '@/lib/api'
+import { ROLE_LABELS, USER_ASSIGNABLE_ROLES } from '@/lib/types'
 import type { UserRole } from '@/lib/types'
 
 interface Usuario {
   id: string
   nombre: string
   email: string
+  telefono: string
   role: UserRole
   activo: boolean
   ultimaConexion: string
 }
-
-const roles: UserRole[] = ['admin_parque', 'supervisor', 'vigilante', 'recepcionista', 'tecnico', 'visualizador', 'recepcion', 'responsable_seguridad', 'soporte_tns']
 
 const getRoleColor = (role: UserRole) => {
   const colors: Record<UserRole, string> = {
@@ -67,7 +66,6 @@ const getRoleColor = (role: UserRole) => {
     visualizador: 'bg-ds-muted text-ds-ink-muted border-ds-hairline',
     recepcion: 'bg-[var(--stat-pending-bg)] text-[var(--stat-pending)] border-[var(--stat-pending)]/30',
     responsable_seguridad: 'bg-[var(--danger-bg)] text-[var(--crextio-terracotta)] border-[var(--crextio-terracotta)]/30',
-    soporte_tns: 'bg-ds-muted text-ds-ink-display border-ds-accent/30',
   }
   return colors[role] || 'bg-ds-muted text-ds-ink-muted'
 }
@@ -75,6 +73,7 @@ const getRoleColor = (role: UserRole) => {
 interface UserFormData {
   nombre: string
   email: string
+  telefono: string
   role: UserRole
   password: string
   activo: boolean
@@ -83,28 +82,61 @@ interface UserFormData {
 const defaultFormData: UserFormData = {
   nombre: '',
   email: '',
+  telefono: '',
   role: 'vigilante',
   password: '',
   activo: true,
 }
 
+function mapUserRow(u: {
+  id: string | number
+  nombre?: string
+  email: string
+  telefono?: string | null
+  role: UserRole
+  activo?: boolean
+  active?: boolean
+  ultimaConexion?: string
+}): Usuario {
+  return {
+    id: String(u.id),
+    nombre: u.nombre || '',
+    email: u.email,
+    telefono: u.telefono || '',
+    role: u.role,
+    activo: u.activo ?? u.active ?? true,
+    ultimaConexion: u.ultimaConexion || new Date().toISOString(),
+  }
+}
+
+const MOCK_USUARIOS = MOCK_USERS.map(mapUserRow)
+
 export default function UsuariosPage() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [usuarios, setUsuarios] = useState<Usuario[]>(
-    MOCK_USERS.map(u => ({
-      id: String(u.id),
-      nombre: u.nombre || '',
-      email: u.email,
-      role: u.role,
-      activo: u.activo ?? true,
-      ultimaConexion: u.ultimaConexion || new Date().toISOString(),
-    }))
-  )
+  const [usuarios, setUsuarios] = useState<Usuario[]>(MOCK_USUARIOS)
+  const [usingMockData, setUsingMockData] = useState(true)
   const [editSheet, setEditSheet] = useState(false)
   const [editingUser, setEditingUser] = useState<Usuario | null>(null)
   const [formData, setFormData] = useState<UserFormData>(defaultFormData)
   const [deleteDialog, setDeleteDialog] = useState<Usuario | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const loadUsuarios = useCallback(async () => {
+    try {
+      const items = await usersApi.list()
+      if (items.length > 0) {
+        setUsuarios(items.map(mapUserRow))
+        setUsingMockData(false)
+      }
+    } catch {
+      setUsuarios(MOCK_USUARIOS)
+      setUsingMockData(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadUsuarios()
+  }, [loadUsuarios])
 
   const filteredUsuarios = usuarios.filter(
     (u) =>
@@ -129,6 +161,7 @@ export default function UsuariosPage() {
     setFormData({
       nombre: user.nombre,
       email: user.email,
+      telefono: user.telefono,
       role: user.role,
       password: '',
       activo: user.activo,
@@ -136,9 +169,9 @@ export default function UsuariosPage() {
     setEditSheet(true)
   }
 
-  function handleSubmit() {
-    if (!formData.nombre.trim() || !formData.email.trim()) {
-      toast.error('Nombre y email son requeridos')
+  async function handleSubmit() {
+    if (!formData.nombre.trim() || !formData.email.trim() || !formData.telefono.trim()) {
+      toast.error('Nombre, email y teléfono son requeridos')
       return
     }
 
@@ -147,30 +180,38 @@ export default function UsuariosPage() {
       return
     }
 
+    const payload = {
+      nombre: formData.nombre.trim(),
+      email: formData.email.trim(),
+      telefono: formData.telefono.trim(),
+      role: formData.role,
+      activo: formData.activo,
+    }
+
     setIsSubmitting(true)
-    setTimeout(() => {
+    try {
       if (editingUser) {
-        setUsuarios(prev => prev.map(u => 
-          u.id === editingUser.id 
-            ? { ...u, nombre: formData.nombre, email: formData.email, role: formData.role, activo: formData.activo }
-            : u
-        ))
-        toast.success('Usuario actualizado')
+        await usersApi.update(editingUser.id, {
+          ...payload,
+          ...(formData.password ? { password: formData.password } : {}),
+        })
+        toast.success('Usuario actualizado en la base de datos')
       } else {
-        const newUser: Usuario = {
-          id: String(usuarios.length + 1),
-          nombre: formData.nombre,
-          email: formData.email,
-          role: formData.role,
-          activo: formData.activo,
-          ultimaConexion: new Date().toISOString(),
-        }
-        setUsuarios(prev => [...prev, newUser])
-        toast.success('Usuario creado')
+        await usersApi.create({
+          ...payload,
+          password: formData.password,
+        })
+        toast.success('Usuario creado en la base de datos')
       }
-      setIsSubmitting(false)
+      await loadUsuarios()
       setEditSheet(false)
-    }, 500)
+    } catch {
+      toast.error(
+        'No se pudo guardar. Verifique que el API esté activo (pnpm dev) y que existan las migraciones 08_05 (telefono) y 08_06 (rol).'
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   function handleDelete() {
@@ -187,6 +228,11 @@ export default function UsuariosPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Usuarios</h1>
           <p className="text-ds-ink-muted">Gestiona usuarios, roles y permisos</p>
+          {usingMockData && (
+            <p className="mt-1 text-xs text-ds-ink-muted">
+              Mostrando datos mock — conecte el API (pnpm dev) y aplique las migraciones 08_05/08_06 para ver usuarios de BD.
+            </p>
+          )}
         </div>
         <Button onClick={handleNewUser} className="touch-target">
           <Plus className="h-4 w-4 mr-2" />
@@ -260,6 +306,7 @@ export default function UsuariosPage() {
                 <TableRow>
                   <TableHead>Nombre</TableHead>
                   <TableHead className="hidden md:table-cell">Email</TableHead>
+                  <TableHead className="hidden lg:table-cell">Teléfono</TableHead>
                   <TableHead>Rol</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="hidden lg:table-cell">Ultima Conexion</TableHead>
@@ -274,6 +321,9 @@ export default function UsuariosPage() {
                       <span className="block text-xs text-ds-ink-muted md:hidden">{usuario.email}</span>
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-sm text-ds-ink-muted">{usuario.email}</TableCell>
+                    <TableCell className="hidden lg:table-cell font-mono text-sm text-ds-ink-muted">
+                      {usuario.telefono || '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn(getRoleColor(usuario.role))}>
                         {ROLE_LABELS[usuario.role]}
@@ -285,7 +335,7 @@ export default function UsuariosPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-sm text-ds-ink-muted">
-                      {formatDistanceToNow(new Date(usuario.ultimaConexion), { addSuffix: true, locale: es })}
+                      <RelativeTime date={usuario.ultimaConexion} />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -360,6 +410,24 @@ export default function UsuariosPage() {
               />
             </div>
 
+            {/* Teléfono — antes del rol; usado en escalación / llamadas */}
+            <div className="space-y-3">
+              <Label htmlFor="telefono" className="text-sm font-medium">
+                Teléfono de contacto <span className="text-ds-signal">*</span>
+              </Label>
+              <Input
+                id="telefono"
+                type="tel"
+                value={formData.telefono}
+                onChange={e => setFormData({ ...formData, telefono: e.target.value })}
+                placeholder="+56 9 1234 5678"
+                className="h-11 font-mono"
+              />
+              <p className="text-xs text-ds-ink-muted">
+                Número para contacto en escalación de alertas
+              </p>
+            </div>
+
             {/* Password */}
             <div className="space-y-3">
               <Label htmlFor="password" className="text-sm font-medium">
@@ -391,7 +459,7 @@ export default function UsuariosPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {roles.map(role => (
+                  {USER_ASSIGNABLE_ROLES.map(role => (
                     <SelectItem key={role} value={role} className="py-3">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className={cn(getRoleColor(role))}>

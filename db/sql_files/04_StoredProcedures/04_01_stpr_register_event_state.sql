@@ -50,7 +50,11 @@ BEGIN
 
   IF NOT (
     (v_from_state = 'NEW' AND p_to_state = 'IN_REVIEW')
+    OR (v_from_state = 'NEW' AND p_to_state = 'ESCALATING')
+    OR (v_from_state = 'IN_REVIEW' AND p_to_state = 'ESCALATING')
     OR (v_from_state = 'IN_REVIEW' AND p_to_state = 'CLOSED')
+    OR (v_from_state = 'ESCALATING' AND p_to_state = 'CLOSED')
+    OR (v_from_state = 'CLOSED' AND p_to_state = 'NEW')
   ) THEN
     SIGNAL SQLSTATE '45000'
       SET MESSAGE_TEXT = 'INVALID_EVENT_STATE_TRANSITION';
@@ -58,7 +62,7 @@ BEGIN
 
   UPDATE ale_evento
      SET state = p_to_state,
-         decision_reason = p_decision,
+         decision_reason = CASE WHEN p_to_state = 'NEW' THEN NULL ELSE p_decision END,
          actualizado_en = CURRENT_TIMESTAMP(3)
    WHERE id_evento = p_id_evento
      AND id_tenant = p_id_tenant;

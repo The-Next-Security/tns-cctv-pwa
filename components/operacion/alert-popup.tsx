@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Image, AlertTriangle } from 'lucide-react'
+import { Image, AlertTriangle, Eye } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -24,12 +24,14 @@ import { LiveCameraPanel } from '@/components/operacion/live-camera-panel'
 import { resolveSnapshotUrl, resolveLiveFeedUrl } from '@/lib/demo-media'
 import { cn } from '@/lib/utils'
 import type { Alert } from '@/lib/types'
-import { getEventLabel } from '@/lib/types'
+import { getAlertRuleTitle, getEventLabel, getAlertClass } from '@/lib/types'
+import { RuleId } from '@/components/ui/rule-id'
 import { CRITICALITY_STYLES, DISCARD_REASONS } from '@/lib/constants'
 import {
   CallContactsPopover,
   EscalateButton,
 } from '@/components/operacion/escalation-controls'
+import { AlertId } from '@/components/ui/alert-id'
 
 interface AlertPopupProps {
   alert: Alert | null
@@ -59,6 +61,14 @@ export function AlertPopup({
   const recentSameCamera = recentAlerts.filter(
     a => a.id !== alert.id && a.camera?.id === alert.camera?.id
   ).slice(0, 5)
+  const isClosed = alert.status === 'resuelta' || alert.status === 'descartada'
+  const isPending = alert.status === 'pendiente'
+  const isLowPriority = getAlertClass(alert.criticality) === 'baja_prioridad'
+  const showAtenderButton = isLowPriority && isPending && !isClosed
+  const escalationAlert =
+    !isClosed && alert.status !== 'en_revision'
+      ? { ...alert, status: 'en_revision' as const }
+      : alert
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -77,8 +87,10 @@ export function AlertPopup({
               {alert.criticality}
             </Badge>
             <span className="flex-1 leading-snug text-sm sm:text-base">
-              {alert.description || getEventLabel(alert.event_code)}
+              {getAlertRuleTitle(alert)}
             </span>
+            <RuleId rule={alert.rule} variant="compact" />
+            <AlertId externalEventId={alert.external_event_id} fallbackId={alert.id} variant="compact" />
           </DialogTitle>
         </DialogHeader>
 
@@ -157,7 +169,10 @@ export function AlertPopup({
                         'bg-secondary/50'
                       )}
                     >
-                      <p className="truncate font-medium">{a.description}</p>
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="truncate font-medium">{a.description}</p>
+                        <AlertId externalEventId={a.external_event_id} fallbackId={a.id} variant="compact" />
+                      </div>
                       <p className="text-xs text-ds-ink-muted">
                         {format(new Date(a.timestamp), 'HH:mm', { locale: es })}
                       </p>
@@ -192,6 +207,31 @@ export function AlertPopup({
         </div>
 
         <DialogFooter className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:flex-row sm:justify-end">
+          {isClosed ? (
+            <Button
+              className="col-span-2 h-11 w-full touch-target sm:h-9 sm:w-auto"
+              onClick={() => {
+                onAction(alert.id, 'reactivate')
+                onOpenChange(false)
+              }}
+            >
+              Activar
+            </Button>
+          ) : (
+            <>
+          {showAtenderButton && (
+            <Button
+              className="col-span-2 h-11 w-full touch-target sm:col-span-1 sm:h-9 sm:w-auto"
+              onClick={() => {
+                onAction(alert.id, 'acknowledge')
+                onOpenChange(false)
+              }}
+            >
+              <Eye className="h-4 w-4 mr-1" />
+              Atender
+            </Button>
+          )}
+
           <Button
             className="col-span-2 h-11 w-full touch-target sm:col-span-1 sm:h-9 sm:w-auto"
             onClick={() => {
@@ -201,6 +241,22 @@ export function AlertPopup({
           >
             ✓ Marcar como Revisada
           </Button>
+
+          <CallContactsPopover
+            alert={escalationAlert}
+            onLlamar={onLlamar}
+            className="h-11 w-full touch-target border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
+          />
+
+          <EscalateButton
+            alert={escalationAlert}
+            onEscalate={() => {
+              onEscalate?.()
+              onOpenChange(false)
+            }}
+            wrapperClassName="w-full sm:w-auto"
+            className="h-11 w-full border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
+          />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -224,22 +280,8 @@ export function AlertPopup({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-
-          <CallContactsPopover
-            alert={alert}
-            onLlamar={onLlamar}
-            className="h-11 w-full touch-target border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
-          />
-
-          <EscalateButton
-            alert={alert}
-            onEscalate={() => {
-              onEscalate?.()
-              onOpenChange(false)
-            }}
-            wrapperClassName="w-full sm:w-auto"
-            className="h-11 w-full border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
-          />
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

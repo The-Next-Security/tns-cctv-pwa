@@ -2,235 +2,197 @@
 
 ## Objetivo
 
-Este archivo baja el nivel de detalle operativo del estado actual de la capa SQL: layout real, orquestadores, reglas de ejecucion y diferencias que hoy existen entre bundles.
+Detalle operativo de la capa SQL: layout, orquestador, reglas de ejecución, objetos programables y estado de consumo runtime.
 
-## Layout real versionado
+---
 
-La carpeta real existente hoy es:
+## Layout versionado
 
 ```text
 db/
+  connection-config.template.json   # Plantilla (commiteada)
+  connection-config.json            # Local (gitignored)
+  lib/pool.cjs                      # Pool mysql2 para Node
   migrations/
+    001_init.sql                    # Bootstrap mínimo (NO operativo)
   sql_files/
-    00_setup.sql
-    01_ddl.sql
-    02_indices.sql
-    03_seed_inserts.sql
-    04_procedures.sql
-    05_functions.sql
-    06_events.sql
-    07_logs.sql
-    01_CreacionDesdeCero/
+    crear_base_datos.sql            # Orquestador principal
+    eliminar_base_datos.sql
+    01_CreacionDesdeCero/           # DDL prefijado (36 tablas)
     02_Funciones/
     04_StoredProcedures/
     05_Eventos/
     07_DatosIniciales/
-    crear_base_datos.sql
-    eliminar_base_datos.sql
+    08_Migraciones/                 # Migraciones incrementales
+  seed/
+    simulate-nvr-ingest.mjs
+  tests/
+    verify-sql.mjs
 ```
 
-## Caveat importante de path
+---
 
-Varios archivos del repo hablan de `db/SQL_FILES`, por ejemplo:
-- `db/README.md`
-- `db/tests/verify-sql.mjs`
-- `db/sql_files/crear_base_datos.sql`
+## Caveat: case sensitivity de paths
 
-Pero el directorio commiteado es `db/sql_files` en minusculas.
-
-En macOS esto puede pasar desapercibido por filesystem case-insensitive. En Linux case-sensitive es una divergencia real y potencialmente rompible.
-
-## Especificacion del bundle ejecutable mas completo
-
-### Orquestador real
-
-Archivo:
-- `db/sql_files/crear_base_datos.sql`
-
-Hace hoy exactamente esto:
-1. crea la base `tns_cctv`
-2. ejecuta `USE tns_cctv`
-3. fija `utf8mb4`, timezone UTC y `sql_mode`
-4. ejecuta por `SOURCE` el bundle prefijado
-5. ejecuta funcion, stored procedure, evento y configuracion inicial
-
-Orden real de `SOURCE`:
-- `01_CreacionDesdeCero/01_01_tablas_gen.sql`
-- `01_CreacionDesdeCero/01_02_tablas_src.sql`
-- `01_CreacionDesdeCero/01_03_tablas_ale.sql`
-- `01_CreacionDesdeCero/01_04_tablas_log.sql`
-- `01_CreacionDesdeCero/01_05_tablas_sal.sql`
-- `01_CreacionDesdeCero/01_06_tablas_adm.sql`
-- `01_CreacionDesdeCero/01_07_tablas_dah.sql`
-- `02_Funciones/02_01_fun_normalize_plate.sql`
-- `04_StoredProcedures/04_01_stpr_register_event_state.sql`
-- `05_Eventos/05_01_evt_purge_idempotencia.sql`
-- `07_DatosIniciales/07_01_configuracion.sql`
-
-## Reglas de diseño que hoy si existen en SQL
-
-### 1. Prefijos modulares
-
-El bundle completo usa estos prefijos:
-- `gen_`
-- `src_`
-- `ale_`
-- `log_`
-- `sal_`
-- `adm_`
-- `dah_`
-
-### 2. IDs largos tipo `CHAR(26)`
-
-El bundle completo y el bundle core usan PKs de 26 caracteres.
-
-### 3. Timezone de base en UTC
-
-Esto aparece de forma explicita en:
-- `db/sql_files/01_ddl.sql`
-- `db/sql_files/crear_base_datos.sql`
-
-### 4. Idempotencia modelada a nivel persistente
-
-Tablas reales:
-- `src_idempotencia_ingesta`
-- `ingress_idempotency`
-- `idempotency_keys`
-
-### 5. Auditoria separada de timeline
-
-Bundle completo:
-- `log_evento_timeline`
-- `log_auditoria_api`
-
-Bundle core:
-- `event_timeline`
-- `api_audit_log`
-
-## Stored procedure real de transicion
-
-Archivo:
-- `db/sql_files/04_StoredProcedures/04_01_stpr_register_event_state.sql`
-
-Contrato real:
-- actor permitido: `USER`, `SYSTEM`, `CONNECTOR`
-- si `actor_type = USER`, `p_actor_id_usuario` es obligatorio
-- lee estado actual desde `ale_evento`
-- bloquea fila con `FOR UPDATE`
-- valida:
-  - `NEW -> IN_REVIEW`
-  - `IN_REVIEW -> CLOSED`
-- actualiza `decision_reason`
-- inserta fila de timeline
-- usa transaccion explicita con `START TRANSACTION` y `COMMIT`
-
-## Eventos scheduler reales
-
-### Bundle prefijado
-
-Archivo:
-- `db/sql_files/05_Eventos/05_01_evt_purge_idempotencia.sql`
-
-Evento:
-- `evt_purge_idempotencia`
-- borra filas expiradas de `src_idempotencia_ingesta`
-
-### Bundle core
-
-Archivo:
-- `db/sql_files/06_events.sql`
-
-Eventos:
-- `ev_purge_expired_idempotency`
-- `ev_purge_old_health_incidents`
-
-## Configuracion runtime modelada en BD
-
-Tablas reales del bundle prefijado:
-- `gen_configuracion_grupos`
-- `gen_configuracion_parametros`
-- `gen_configuracion_valores`
-
-Esto significa que la idea de `ConfigLoader` si tiene soporte estructural en SQL, aunque hoy no existe un consumidor runtime cableado en Node/Frontend.
-
-## Soporte real para Dahua
-
-El detalle mas profundo hoy esta en el bundle prefijado:
-- eventos crudos: `dah_evento_crudo`
-- facial: `dah_deteccion_facial`, `dah_reconocimiento_facial`
-- vehiculos: `dah_deteccion_vehiculo`
-- IVS: `dah_evento_ivs`
-- audio: `dah_evento_audio`
-- grabaciones: `dah_archivo_grabacion`
-- snapshots: `dah_snapshot`
-- suscripciones: `dah_suscripcion`
-
-Esto existe solo a nivel SQL. No hay todavia servicio runtime que lo pueble desde un conector Dahua en este repo.
-
-## Especificacion del bundle core simplificado
-
-Archivos:
-- `01_ddl.sql`
-- `02_indices.sql`
-- `06_events.sql`
-- `07_logs.sql`
-
-Caracteristicas:
-- nomenclatura en ingles
-- menos tablas
-- misma idea de dominio, pero comprimida
-- indices separados de las tablas
-- auditoria partida a `07_logs.sql`
-
-No reemplaza al bundle completo; simplemente coexiste con el.
-
-## Especificacion de la migracion bootstrap
-
-Archivo:
-- `db/migrations/001_init.sql`
-
-Estado real:
-- es una migracion minima
-- usa `BIGINT`
-- crea solo 8 tablas
-- no cubre rules, notifications, health detallado, admissions completas ni Dahua
-
-Utilidad real:
-- bootstrap rapido
-- referencia minima
-- no representa el dominio completo
-
-## Lo que NO hace hoy la capa de datos
-
-- Ninguno de los backends actuales usa estas tablas en runtime.
-- No hay ORM.
-- No hay repositorio de acceso a datos compartido.
-- No hay migrador unificado que el backend ejecute al arrancar.
-
-## Verificacion existente
-
-### `db/tests/verify-sql.mjs`
-
-Valida de forma fuerte:
-- tablas esperadas del bundle completo
-- constraints e indices
-- orden del orquestador
-- stored procedure
-- evento de purga
-
-### `tests/data-model-sql.spec.js`
-
-Valida de forma ligera:
-- estructura general del folder
-- presencia de `tenants`, `events`, `speed_cases`
-- presencia de `api_audit_log`
-
-## Decision pragmatica
-
-Si hay que ejecutar o ampliar la base real del proyecto hoy:
-1. el bundle mas completo es el prefijado
-2. el orquestador real es `db/sql_files/crear_base_datos.sql`
-3. hay que resolver antes la divergencia `SQL_FILES` vs `sql_files` si el runtime final sera Linux
+Varios archivos históricos referencian `db/SQL_FILES`. El directorio commiteado es `db/sql_files` (minúsculas). En macOS puede pasar desapercibido; en Linux case-sensitive puede romper scripts.
 
 ---
-Ultima actualizacion basada en codigo: 2026-06-09
+
+## Orquestador principal
+
+**Archivo:** `db/sql_files/crear_base_datos.sql`
+
+**Secuencia:**
+1. Crea base `tns_cctv`
+2. `USE tns_cctv`
+3. Charset `utf8mb4`, timezone UTC, `sql_mode`
+4. `SOURCE` del bundle prefijado en orden
+5. Función, SP, evento scheduler, datos iniciales
+
+**Orden de SOURCE:**
+```
+01_CreacionDesdeCero/01_01_tablas_gen.sql
+01_CreacionDesdeCero/01_02_tablas_src.sql
+01_CreacionDesdeCero/01_03_tablas_ale.sql
+01_CreacionDesdeCero/01_04_tablas_log.sql
+01_CreacionDesdeCero/01_05_tablas_sal.sql
+01_CreacionDesdeCero/01_06_tablas_adm.sql
+01_CreacionDesdeCero/01_07_tablas_dah.sql
+02_Funciones/02_01_fun_normalize_plate.sql
+04_StoredProcedures/04_01_stpr_register_event_state.sql
+05_Eventos/05_01_evt_purge_idempotencia.sql
+07_DatosIniciales/07_01_datos_iniciales.sql
+```
+
+### Cómo ejecutar
+
+| Método | Funciona |
+|--------|----------|
+| Cliente interactivo `mysql> SOURCE db/sql_files/crear_base_datos.sql` | Sí |
+| Pipe batch `mysql < crear_base_datos.sql` | **No** — `SOURCE` no se interpreta en stdin |
+| Archivos uno por uno en orden | Sí (alternativa usada en setup inicial) |
+
+---
+
+## Reglas de diseño en SQL
+
+1. **Prefijos modulares:** `gen_`, `src_`, `ale_`, `log_`, `sal_`, `adm_`, `dah_`
+2. **PKs `CHAR(26)`**
+3. **Timezone UTC** explícita en orquestador
+4. **Idempotencia:** `src_idempotencia_ingesta`
+5. **Timeline separada de auditoría API:** `log_evento_timeline` vs `log_auditoria_api`
+6. **Autorización por permisos:** `gen_permiso` + `gen_usuario_permiso` (sin columna `role` en usuario)
+
+---
+
+## Stored procedure — transiciones de estado
+
+**Archivo:** `04_StoredProcedures/04_01_stpr_register_event_state.sql`
+
+**Contrato:**
+- Actor: `USER` | `SYSTEM` | `CONNECTOR`
+- Si `USER`, `p_actor_id_usuario` obligatorio
+- Transiciones válidas:
+  - `NEW → IN_REVIEW`
+  - `NEW → ESCALATING`
+  - `IN_REVIEW → ESCALATING`
+  - `IN_REVIEW → CLOSED`
+  - `ESCALATING → CLOSED`
+- Actualiza `ale_evento.decision_reason`
+- Inserta fila en `log_evento_timeline`
+- Transacción explícita
+
+**Consumidor runtime:** `src/mysqlStore.cjs` → `attendAlert()`.
+
+---
+
+## Evento scheduler
+
+**Archivo:** `05_Eventos/05_01_evt_purge_idempotencia.sql`  
+Evento `evt_purge_idempotencia` — purga filas expiradas de `src_idempotencia_ingesta`.
+
+---
+
+## Configuración runtime en BD
+
+Tablas `gen_configuracion_*` modelan parámetros editables por tenant/sitio.
+
+**Estado:** estructura lista; no hay `ConfigLoader` en Node/Frontend consumiéndolas hoy.
+
+---
+
+## Soporte Dahua (solo DDL)
+
+Tablas `dah_*` cubren eventos crudos, IVS, facial, vehículo, audio, grabaciones, snapshots, suscripciones.
+
+**Estado:** sin servicio runtime que las pueble desde conector Dahua en este repo.
+
+**Fix aplicado:** `dah_snapshot.`trigger`` → backticks por palabra reservada MySQL.
+
+---
+
+## Migraciones incrementales
+
+**Carpeta:** `db/sql_files/08_Migraciones/`
+
+Ejemplos versionados:
+- `08_01_adm_ingreso_recepcion.sql`
+- `08_03_estado_escalating.sql`
+- `08_06_usuario_rol.sql` (histórico — rediseño posterior eliminó columna role)
+
+Verificar README en subcarpetas antes de aplicar en BD existente.
+
+---
+
+## Consumo runtime (actualizado)
+
+| Componente | Conexión |
+|------------|----------|
+| `src/mysqlStore.cjs` | Pool `db/lib/pool.cjs` → `connection-config.json` |
+| `scripts/ensure-demo-schema.mjs` | Preflight esquema para `demo:clean` |
+| `db/seed/simulate-nvr-ingest.mjs` | Ingest demo vía API |
+
+**Ya no es cierto** que "ningún backend usa estas tablas en runtime".
+
+---
+
+## Configuración local requerida
+
+1. MySQL 9.x (probado 9.6.0)
+2. Copiar `db/connection-config.template.json` → `db/connection-config.json`
+3. Usuario app recomendado: `tns_cctv_app` con `SELECT/INSERT/UPDATE/DELETE/EXECUTE`
+4. Ejecutar orquestador o `npm run db:verify` tras crear esquema
+
+---
+
+## Verificación
+
+```bash
+npm run db:verify   # node db/tests/verify-sql.mjs
+```
+
+Valida: 36 tablas, constraints, índices, SP, evento, orden del orquestador.
+
+---
+
+## Virtudes
+
+1. Orquestador documentado con orden explícito de SOURCE.
+2. Seed idempotente con datos demo reproducibles.
+3. SP centraliza reglas de transición — un solo punto de verdad.
+4. Script `verify-sql.mjs` automatiza validación estructural.
+5. Migraciones incrementales versionadas en `08_Migraciones/`.
+
+---
+
+## Defectos
+
+1. **`SOURCE` no batch-friendly** — fricción en CI/automatización.
+2. **Bundle bootstrap `001_init.sql` coexistente** — riesgo de confusión.
+3. **Sin migrador unificado** — no hay herramienta tipo Flyway/Liquibase; aplicación manual.
+4. **Sin ORM** — SQL directo en `mysqlStore.cjs`; cambios de esquema requieren sync manual.
+5. **Objetos programables no todos consumidos** — evento scheduler requiere `event_scheduler=ON` en MySQL.
+
+---
+
+**Última actualización basada en código:** 2026-06-11

@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { formatDistanceToNow, format } from 'date-fns'
+import { format } from 'date-fns'
+import { RelativeTime } from '@/components/ui/relative-time'
 import { es } from 'date-fns/locale'
 import { 
   ArrowLeft, 
@@ -45,6 +46,8 @@ import {
   CallContactsPopover,
   EscalateButton,
 } from '@/components/operacion/escalation-controls'
+import { AlertId } from '@/components/ui/alert-id'
+import { RuleId } from '@/components/ui/rule-id'
 
 const criticalityStyles: Record<Criticality, string> = {
   baja: 'bg-criticality-baja/20 text-criticality-baja border-criticality-baja/30',
@@ -78,6 +81,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
 
   const isPending = alert?.status === 'pendiente'
   const isInReview = alert?.status === 'en_revision'
+  const isEscalated = alert?.status === 'escalada'
 
   async function handleRevisar() {
     if (!alert) return
@@ -159,11 +163,6 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
     llamada_at: llamadaAt ?? alert.llamada_at ?? null,
   }
 
-  const timeAgo = formatDistanceToNow(new Date(alert.created_at || new Date()), {
-    addSuffix: false,
-    locale: es,
-  })
-
   return (
     <div className="space-y-4">
       {/* Back button */}
@@ -189,6 +188,11 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
         <h1 className="text-2xl font-bold tracking-tight">
           {getEventLabel(alert.event_code)}
         </h1>
+        <AlertId
+          externalEventId={alert.external_event_id}
+          fallbackId={alert.id}
+          className="text-base text-ds-ink-body"
+        />
         {!isPending && (
           <Badge variant="secondary">
             {ALERT_STATUS_LABELS[alert.status]}
@@ -212,7 +216,7 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
         )}
         <span className="flex items-center gap-1.5">
           <Clock className="h-4 w-4" />
-          hace {timeAgo}
+          <RelativeTime date={alert.created_at} />
         </span>
         <span className="text-xs">
           {format(new Date(alert.pts_timestamp || new Date()), 'dd/MM/yyyy HH:mm:ss', { locale: es })}
@@ -299,21 +303,29 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                 <CardContent className="pt-0">
                   <dl className="grid gap-2 text-sm">
                     <div className="flex justify-between">
-                      <dt className="text-ds-ink-muted">ID Alerta</dt>
-                      <dd className="font-mono">{alert.id}</dd>
+                      <dt className="text-ds-ink-muted">ID NVR</dt>
+                      <dd>
+                        <AlertId
+                          externalEventId={alert.external_event_id}
+                          fallbackId={alert.id}
+                        />
+                      </dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-ds-ink-muted">ID Evento</dt>
-                      <dd className="font-mono">{alert.event_raw_id}</dd>
+                      <dt className="text-ds-ink-muted">ID Evento (BD)</dt>
+                      <dd className="font-mono text-xs">{alert.event_id || '-'}</dd>
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-ds-ink-muted">Codigo Evento</dt>
                       <dd className="font-mono">{alert.event_code || '-'}</dd>
                     </div>
                     {alert.rule && (
-                      <div className="flex justify-between">
-                        <dt className="text-ds-ink-muted">Regla aplicada</dt>
-                        <dd>{alert.rule.name}</dd>
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-ds-ink-muted shrink-0">Regla aplicada</dt>
+                        <dd className="text-right">
+                          <span className="block">{alert.rule.name}</span>
+                          <RuleId rule={alert.rule} variant="compact" className="justify-end" />
+                        </dd>
                       </div>
                     )}
                     <div className="flex justify-between">
@@ -393,6 +405,47 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                   wrapperClassName="w-full"
                   className="w-full"
                 />
+              </CardContent>
+            </Card>
+          )}
+
+          {isEscalated && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Cerrar alerta escalada</CardTitle>
+                <CardDescription>
+                  La alerta está en atención por el supervisor. Resuélvala o descártela cuando corresponda.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button
+                  className="w-full"
+                  onClick={handleRevisar}
+                  disabled={isLoading}
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Marcar como resuelta
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full" disabled={isLoading}>
+                      <X className="h-4 w-4 mr-2" />
+                      Descartar
+                      <ChevronDown className="h-3 w-3 ml-auto" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56">
+                    {discardReasons.map(reason => (
+                      <DropdownMenuItem
+                        key={reason}
+                        onClick={() => handleDescartar(reason)}
+                      >
+                        {DISCARD_REASON_LABELS[reason]}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </CardContent>
             </Card>
           )}

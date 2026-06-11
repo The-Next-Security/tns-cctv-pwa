@@ -35,18 +35,18 @@ export function useUser() {
 
 // Permisos por rol
 const PERMISSIONS: Record<string, Role[]> = {
-  'alerts.view': ['vigilante', 'recepcion', 'responsable_seguridad', 'admin_parque', 'soporte_tns'],
-  'alerts.attend': ['vigilante', 'recepcion', 'responsable_seguridad', 'admin_parque'],
+  'alerts.view': ['vigilante', 'recepcion', 'responsable_seguridad', 'admin_parque', 'supervisor', 'tecnico'],
+  'alerts.attend': ['vigilante', 'recepcion', 'responsable_seguridad', 'admin_parque', 'supervisor'],
   'vehicle_entries.create': ['recepcion', 'admin_parque'],
-  'vehicle_entries.view': ['recepcion', 'responsable_seguridad', 'admin_parque', 'soporte_tns'],
-  'case_files.view': ['responsable_seguridad', 'admin_parque', 'soporte_tns'],
-  'case_files.resolve': ['responsable_seguridad', 'admin_parque'],
-  'rules.manage': ['responsable_seguridad', 'admin_parque', 'soporte_tns'],
-  'reports.view': ['responsable_seguridad', 'admin_parque', 'soporte_tns'],
-  'users.manage': ['admin_parque', 'soporte_tns'],
-  'nvrs.manage': ['admin_parque', 'soporte_tns'],
-  'config.manage': ['admin_parque', 'soporte_tns'],
-  'health.view': ['admin_parque', 'soporte_tns'],
+  'vehicle_entries.view': ['recepcion', 'responsable_seguridad', 'admin_parque', 'supervisor', 'tecnico'],
+  'case_files.view': ['responsable_seguridad', 'admin_parque', 'supervisor'],
+  'case_files.resolve': ['responsable_seguridad', 'admin_parque', 'supervisor'],
+  'rules.manage': ['responsable_seguridad', 'admin_parque', 'supervisor'],
+  'reports.view': ['responsable_seguridad', 'admin_parque', 'supervisor', 'tecnico'],
+  'users.manage': ['admin_parque'],
+  'nvrs.manage': ['admin_parque', 'tecnico'],
+  'config.manage': ['admin_parque', 'tecnico'],
+  'health.view': ['admin_parque', 'tecnico'],
 }
 
 export function hasPermission(role: Role | undefined, permission: string): boolean {
@@ -101,7 +101,9 @@ export function getDefaultRoute(role: Role): string {
       return '/expedientes'
     case 'admin_parque':
       return '/operacion'
-    case 'soporte_tns':
+    case 'supervisor':
+      return '/operacion'
+    case 'tecnico':
       return '/salud'
     default:
       return '/operacion'

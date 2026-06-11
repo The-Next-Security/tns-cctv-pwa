@@ -57,15 +57,19 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { MOCK_RULES, MOCK_ZONES } from '@/lib/mock-data'
-import { ESCALATION_ROLE_OPTIONS } from '@/lib/escalation'
+import { RuleId } from '@/components/ui/rule-id'
 import type { Rule, Criticality, EventCategory, Role } from '@/lib/types'
 import {
   CRITICALITY_LABELS,
+  ESCALATION_ROLE_OPTIONS,
   EVENT_CODES_BY_CATEGORY,
   EVENT_CATEGORY_LABELS,
+  NOTIFY_PUSH_ROLE_OPTIONS,
   ROLE_LABELS,
   getEventLabel,
+  nextRuleCode,
   requiresDedicatedHardware,
+  ruleNotifyPushRoles,
 } from '@/lib/types'
 
 const criticalityStyles: Record<Criticality, string> = {
@@ -86,7 +90,7 @@ interface RuleFormData {
   time_from: string
   time_to: string
   priority_popup: boolean
-  notify_admin: boolean
+  notify_push_roles: Role[]
   notify_tenant: boolean
   record_evidence: boolean
   can_escalate: boolean
@@ -103,7 +107,7 @@ const defaultFormData: RuleFormData = {
   time_from: '00:00',
   time_to: '23:59',
   priority_popup: true,
-  notify_admin: false,
+  notify_push_roles: [],
   notify_tenant: false,
   record_evidence: false,
   can_escalate: false,
@@ -137,7 +141,7 @@ export default function ReglasPage() {
       time_from: rule.time_from || '00:00',
       time_to: rule.time_to || '23:59',
       priority_popup: rule.priority_popup ?? false,
-      notify_admin: rule.notify_admin ?? false,
+      notify_push_roles: ruleNotifyPushRoles(rule),
       notify_tenant: rule.notify_tenant ?? false,
       record_evidence: rule.record_evidence ?? false,
       can_escalate: rule.can_escalate ?? false,
@@ -180,6 +184,15 @@ export default function ReglasPage() {
     }))
   }
 
+  function toggleNotifyPushRole(role: Role) {
+    setFormData(prev => ({
+      ...prev,
+      notify_push_roles: prev.notify_push_roles.includes(role)
+        ? prev.notify_push_roles.filter(currentRole => currentRole !== role)
+        : [...prev.notify_push_roles, role],
+    }))
+  }
+
   function handleToggleRule(rule: Rule) {
     setRules(prev => prev.map(r => 
       r.id === rule.id ? { ...r, enabled: !r.enabled } : r
@@ -216,8 +229,10 @@ export default function ReglasPage() {
         ))
         toast.success('Regla actualizada')
       } else {
+        const nextId = rules.reduce((max, rule) => Math.max(max, rule.id), 0) + 1
         const newRule: Rule = {
-          id: rules.length + 1,
+          id: nextId,
+          rule_code: nextRuleCode(rules),
           ...rulePayload,
           tenant_id: 1,
         }
@@ -305,7 +320,10 @@ export default function ReglasPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-ds-ink-display">{rule.name}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <p className="truncate font-medium text-ds-ink-display">{rule.name}</p>
+                          <RuleId rule={rule} variant="compact" />
+                        </div>
                         <p className="mt-0.5 text-xs text-ds-ink-muted">
                           {rule.zone?.name || 'Todas las zonas'} · {rule.time_from || '00:00'}–{rule.time_to || '23:59'}
                         </p>
@@ -351,6 +369,7 @@ export default function ReglasPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[50px]">Estado</TableHead>
+                    <TableHead className="w-[100px]">ID</TableHead>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Eventos</TableHead>
                     <TableHead>Criticidad</TableHead>
@@ -367,6 +386,9 @@ export default function ReglasPage() {
                           checked={rule.enabled}
                           onCheckedChange={() => handleToggleRule(rule)}
                         />
+                      </TableCell>
+                      <TableCell>
+                        <RuleId rule={rule} variant="compact" />
                       </TableCell>
                       <TableCell>
                         <div>
@@ -394,7 +416,11 @@ export default function ReglasPage() {
                               </span>
                             )}
                             {rule.priority_popup && <span className="text-[10px] text-ds-ink-muted">Popup</span>}
-                            {rule.notify_admin && <span className="text-[10px] text-ds-ink-muted">· Admin</span>}
+                            {ruleNotifyPushRoles(rule).length > 0 && (
+                              <span className="text-[10px] text-ds-ink-muted">
+                                · Push ({ruleNotifyPushRoles(rule).length})
+                              </span>
+                            )}
                             {rule.notify_tenant && <span className="text-[10px] text-ds-ink-muted">· Correo</span>}
                             {rule.record_evidence && <span className="text-[10px] text-ds-ink-muted">· Evidencia</span>}
                           </div>
@@ -659,13 +685,12 @@ export default function ReglasPage() {
               </div>
             </div>
 
-            {/* Acciones — 2 columnas */}
+            {/* Acciones — popup, evidencia, correo */}
             <div className="space-y-3">
               <Label className="text-sm font-medium">Acciones al activarse</Label>
               <div className="grid gap-3 sm:grid-cols-2">
                 {([
                   { key: 'priority_popup', title: 'Popup al vigilante', desc: 'Muestra la camara automaticamente en el puesto de guardia' },
-                  { key: 'notify_admin', title: 'Notificar administracion', desc: 'Envia alerta a responsables de seguridad / administracion' },
                   { key: 'notify_tenant', title: 'Correo al arrendatario', desc: 'Notifica por correo a la empresa de destino (requiere patente)' },
                   { key: 'record_evidence', title: 'Guardar evidencia', desc: 'Asocia snapshot / clip al evento para historial' },
                 ] as const).map(action => (
@@ -680,6 +705,36 @@ export default function ReglasPage() {
                     />
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Notificación PUSH por rol */}
+            <div className="space-y-3 rounded-xl border border-ds-hairline bg-ds-surface p-4">
+              <div>
+                <p className="text-sm font-medium text-ds-ink-display">Notificación PUSH por rol</p>
+                <p className="text-xs text-ds-ink-muted">
+                  Envía alerta push a los usuarios activos del rol seleccionado
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {NOTIFY_PUSH_ROLE_OPTIONS.map(role => {
+                  const switchId = `notify-push-${role}`
+                  return (
+                    <div
+                      key={role}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-ds-hairline bg-ds-muted p-3"
+                    >
+                      <Label htmlFor={switchId} className="text-sm font-medium text-ds-ink-body">
+                        {ROLE_LABELS[role]}
+                      </Label>
+                      <Switch
+                        id={switchId}
+                        checked={formData.notify_push_roles.includes(role)}
+                        onCheckedChange={() => toggleNotifyPushRole(role)}
+                      />
+                    </div>
+                  )
+                })}
               </div>
             </div>
 

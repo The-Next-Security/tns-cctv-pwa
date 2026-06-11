@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
-import { Camera, Clock, MapPin, Check, X, ChevronDown } from 'lucide-react'
+import { RelativeTime } from '@/components/ui/relative-time'
+import { Camera, Clock, MapPin, Check, X, ChevronDown, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -27,11 +26,12 @@ import { LiveCameraPanel } from '@/components/operacion/live-camera-panel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
-import { DISCARD_REASON_LABELS, CRITICALITY_LABELS, getEventLabel } from '@/lib/types'
+import { DISCARD_REASON_LABELS, CRITICALITY_LABELS, getEventLabel, getAlertClass } from '@/lib/types'
 import {
   CallContactsPopover,
   EscalateButton,
 } from '@/components/operacion/escalation-controls'
+import { AlertId } from '@/components/ui/alert-id'
 
 interface AlertDialogProps {
   alert: Alert | null
@@ -62,10 +62,14 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
 
   if (!alert) return null
 
-  const timeAgo = formatDistanceToNow(new Date(alert.created_at || new Date()), {
-    addSuffix: false,
-    locale: es,
-  })
+  const isClosed = alert.status === 'resuelta' || alert.status === 'descartada'
+  const isPending = alert.status === 'pendiente'
+  const isLowPriority = getAlertClass(alert.criticality) === 'baja_prioridad'
+  const showAtenderButton = isLowPriority && isPending && !isClosed
+  const escalationAlert =
+    !isClosed && alert.status !== 'en_revision'
+      ? { ...alert, status: 'en_revision' as const }
+      : alert
 
   async function handleRevisar() {
     setIsLoading(true)
@@ -116,6 +120,7 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
             </DialogTitle>
           </div>
           <DialogDescription className="flex flex-wrap items-center justify-start gap-x-4 gap-y-1 text-left">
+            <AlertId externalEventId={alert.external_event_id} fallbackId={alert.id} />
             {alert.camera && (
               <span className="flex items-center gap-1">
                 <Camera className="h-3.5 w-3.5" />
@@ -130,7 +135,7 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
             )}
             <span className="flex items-center gap-1 text-live-data font-semibold">
               <Clock className="h-3.5 w-3.5" />
-              hace {timeAgo}
+              <RelativeTime date={alert.created_at} />
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -169,14 +174,43 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
         </Tabs>
 
         <DialogFooter className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:flex-row sm:flex-wrap sm:justify-end">
+          {showAtenderButton && (
+            <Button
+              onClick={() => {
+                onAction('acknowledge')
+                onClose()
+              }}
+              disabled={isLoading}
+              className="col-span-2 h-11 w-full touch-target sm:col-span-1 sm:h-9 sm:w-auto"
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              Atender
+            </Button>
+          )}
+
           <Button
             onClick={handleRevisar}
             disabled={isLoading}
             className="col-span-2 h-11 w-full touch-target sm:col-span-1 sm:h-9 sm:w-auto"
           >
             <Check className="h-4 w-4 mr-2" />
-            Marcar como revisada
+            Marcar como Revisada
           </Button>
+
+          <CallContactsPopover
+            alert={escalationAlert}
+            onLlamar={onLlamar}
+            disabled={isLoading}
+            className="h-11 w-full touch-target border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
+          />
+
+          <EscalateButton
+            alert={escalationAlert}
+            onEscalate={onEscalate}
+            disabled={isLoading}
+            wrapperClassName="w-full sm:w-auto"
+            className="h-11 w-full border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
+          />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -202,21 +236,6 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-
-          <CallContactsPopover
-            alert={alert}
-            onLlamar={onLlamar}
-            disabled={isLoading}
-            className="h-11 w-full touch-target border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
-          />
-
-          <EscalateButton
-            alert={alert}
-            onEscalate={onEscalate}
-            disabled={isLoading}
-            wrapperClassName="w-full sm:w-auto"
-            className="h-11 w-full border-2 border-ds-hairline bg-ds-page shadow-xs hover:bg-accent sm:h-9 sm:w-auto"
-          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

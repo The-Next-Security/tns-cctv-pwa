@@ -105,10 +105,11 @@ export function buildAlertFromRule(
   const isResolved =
     seed.status === 'resuelta' || seed.status === 'descartada' || seed.status === 'escalada'
 
-  const description = seed.note ? `${rule.description} — ${seed.note}` : (rule.description ?? rule.name)
+  const description = seed.note ? `${rule.name} — ${seed.note}` : rule.name
 
   return {
     id,
+    external_event_id: `mock-${id}`,
     rule_id: rule.id,
     rule,
     event_type,

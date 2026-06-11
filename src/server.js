@@ -5,7 +5,15 @@ const { WsHub } = require('./wsHub');
 
 function createServer() {
   const wsHub = new WsHub();
-  const app = createApp({ wsHub });
+  let store;
+  if (process.env.STORE === 'mysql') {
+    const { MysqlStore } = require('./mysqlStore.cjs');
+    store = new MysqlStore();
+    console.log('[store] usando MySQL (tns_cctv)');
+  } else {
+    console.log('[store] usando store en memoria');
+  }
+  const app = createApp({ wsHub, store });
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: '/ws/operations' });
 

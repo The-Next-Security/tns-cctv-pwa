@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS dah_snapshot (
   id_evento        CHAR(26)      NULL,
   channel          INT           NOT NULL,
   captured_at      DATETIME(3)   NOT NULL,
-  trigger          ENUM('ON_DEMAND','EVENT','SCHEDULED') NOT NULL,
+  `trigger`        ENUM('ON_DEMAND','EVENT','SCHEDULED') NOT NULL,
   storage_uri      VARCHAR(1024) NOT NULL,
   mime_type        VARCHAR(64)   NULL,
   sha256           CHAR(64)      NULL,

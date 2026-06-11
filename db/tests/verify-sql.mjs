@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const root = process.cwd()
-const sqlRoot = resolve(root, 'db/SQL_FILES')
+const sqlRoot = resolve(root, 'db/sql_files')
 
 const creationFiles = [
   '01_CreacionDesdeCero/01_01_tablas_gen.sql',
@@ -19,6 +19,8 @@ const expectedTables = [
   'gen_tenant',
   'gen_site',
   'gen_usuario',
+  'gen_permiso',
+  'gen_usuario_permiso',
   'gen_acceso_sitio',
   'gen_sesion',
   'gen_configuracion_grupos',
@@ -103,21 +105,27 @@ const orchestrator = readFileSync(
   'utf8',
 )
 const sources = [
-  ...orchestrator.matchAll(/^SOURCE\s+([^;]+);$/gm),
+  ...orchestrator.matchAll(/^SOURCE\s+(\S+)\s*;?\s*$/gm),
 ].map((match) => match[1])
 
 const expectedSources = [
-  ...creationFiles.map((file) => `db/SQL_FILES/${file}`),
-  'db/SQL_FILES/02_Funciones/02_01_fun_normalize_plate.sql',
-  'db/SQL_FILES/04_StoredProcedures/04_01_stpr_register_event_state.sql',
-  'db/SQL_FILES/05_Eventos/05_01_evt_purge_idempotencia.sql',
-  'db/SQL_FILES/07_DatosIniciales/07_01_configuracion.sql',
+  ...creationFiles.map((file) => `db/sql_files/${file}`),
+  'db/sql_files/02_Funciones/02_01_fun_normalize_plate.sql',
+  'db/sql_files/04_StoredProcedures/04_01_stpr_register_event_state.sql',
+  'db/sql_files/05_Eventos/05_01_evt_purge_idempotencia.sql',
+  'db/sql_files/07_DatosIniciales/07_01_datos_iniciales.sql',
 ]
 
 assert.deepEqual(
   sources,
   expectedSources,
   'El orden SOURCE del orquestador es incorrecto',
+)
+
+assert.doesNotMatch(
+  orchestrator,
+  /CREATE TABLE IF NOT EXISTS/,
+  'crear_base_datos.sql debe ser orquestador delgado; el DDL vive en los modulos',
 )
 
 for (const source of sources) {
@@ -144,10 +152,11 @@ const procedure = readFileSync(
 )
 assert.match(procedure, /START TRANSACTION;/)
 assert.match(procedure, /FOR UPDATE;/)
+assert.match(procedure, /ESCALATING/)
 assert.match(procedure, /INSERT INTO log_evento_timeline/)
 assert.match(procedure, /COMMIT;/)
 
 console.log(
   `Bundle SQL verificado: ${actualTables.length} tablas, `
-    + `${identifiers.length} constraints/indices y ${sources.length} fuentes.`,
+    + `${identifiers.length} constraints/indices y ${sources.length} fuentes SOURCE.`,
 )

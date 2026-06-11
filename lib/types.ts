@@ -6,7 +6,6 @@ export type Role =
   | 'recepcionista'
   | 'responsable_seguridad' 
   | 'admin_parque' 
-  | 'soporte_tns'
   | 'supervisor'
   | 'tecnico'
   | 'visualizador'
@@ -67,6 +66,7 @@ export type NvrHealthStatus = 'ok' | 'degraded' | 'down'
 export interface User {
   id: string | number
   email: string
+  telefono?: string | null
   full_name?: string
   nombre?: string
   role: Role
@@ -134,6 +134,10 @@ export interface NVR {
 // Alerta
 export interface Alert {
   id: number
+  /** ID reportado por el NVR (ale_evento.external_event_id). */
+  external_event_id?: string | null
+  /** ID real del evento en la base de datos (CHAR(26)); presente cuando proviene del backend */
+  event_id?: string
   event_raw_id?: number
   rule_id?: number | null
   camera_id?: number
@@ -171,6 +175,10 @@ export interface Alert {
 // Regla operativa
 export interface Rule {
   id: number
+  /** ID real en BD (CHAR 26), p. ej. RG000000000000000000000001 */
+  rule_id?: string
+  /** Identificador visible correlativo, p. ej. Regla-0001 */
+  rule_code?: string
   name: string
   description?: string | null
   zone_id?: number | null
@@ -186,6 +194,9 @@ export interface Rule {
   generate_alert?: boolean
   priority_popup?: boolean
   // Acciones operativas (flujos CCTV.md)
+  /** Roles que reciben notificación PUSH al activarse la regla */
+  notify_push_roles?: Role[]
+  /** @deprecated Usar notify_push_roles */
   notify_admin?: boolean
   notify_tenant?: boolean
   record_evidence?: boolean
@@ -320,7 +331,7 @@ export const ALERT_STATUS_LABELS: Record<AlertStatus, string> = {
   pendiente: 'Pendiente',
   revisada: 'Revisada',
   descartada: 'Descartada',
-  escalada: 'Escalada',
+  escalada: 'En Atención',
   en_revision: 'En Revision',
   resuelta: 'Resuelta'
 }
@@ -361,7 +372,6 @@ export const ROLE_LABELS: Record<Role, string> = {
   recepcionista: 'Recepcionista',
   responsable_seguridad: 'Responsable de Seguridad',
   admin_parque: 'Administrador',
-  soporte_tns: 'Soporte TNS',
   supervisor: 'Supervisor',
   tecnico: 'Tecnico',
   visualizador: 'Visualizador'
@@ -531,6 +541,70 @@ export const EVENT_CODES: EventCodeDef[] = [
 const EVENT_CODE_MAP: Record<string, EventCodeDef> = Object.fromEntries(
   EVENT_CODES.map(e => [e.value, e])
 )
+
+/** Roles asignables al crear/editar un usuario */
+export const USER_ASSIGNABLE_ROLES: Role[] = [
+  'admin_parque',
+  'supervisor',
+  'responsable_seguridad',
+  'vigilante',
+  'recepcion',
+  'recepcionista',
+  'tecnico',
+  'visualizador',
+]
+
+/** Roles con toggle de notificación PUSH en reglas */
+export const NOTIFY_PUSH_ROLE_OPTIONS: Role[] = USER_ASSIGNABLE_ROLES
+
+/** Roles que pueden recibir escalación (configurables por regla) */
+export const ESCALATION_ROLE_OPTIONS: Role[] = [
+  'admin_parque',
+  'supervisor',
+  'responsable_seguridad',
+]
+
+/** Resuelve roles PUSH desde regla (compatibilidad con notify_admin legacy) */
+export function ruleNotifyPushRoles(rule: Pick<Rule, 'notify_push_roles' | 'notify_admin'>): Role[] {
+  if (rule.notify_push_roles?.length) return rule.notify_push_roles
+  if (rule.notify_admin) return ['responsable_seguridad', 'admin_parque']
+  return []
+}
+
+/** Formato visible Regla-XXXX a partir de rule_code, rule_id o id numérico. */
+export function formatRuleCode(rule?: {
+  rule_code?: string | null
+  rule_id?: string | null
+  id?: number
+} | null): string | null {
+  if (!rule) return null
+  if (rule.rule_code?.trim()) return rule.rule_code.trim()
+  if (rule.rule_id) {
+    const match = String(rule.rule_id).match(/(\d+)$/)
+    if (match) {
+      const n = parseInt(match[1], 10)
+      if (Number.isFinite(n) && n > 0) return `Regla-${String(n).padStart(4, '0')}`
+    }
+  }
+  if (rule.id != null && rule.id > 0) return `Regla-${String(rule.id).padStart(4, '0')}`
+  return null
+}
+
+/** Siguiente correlativo Regla-XXXX sin colisiones en el listado actual. */
+export function nextRuleCode(existing: Rule[]): string {
+  const max = existing.reduce((acc, rule) => {
+    const code = formatRuleCode(rule)
+    if (!code) return acc
+    const n = parseInt(code.replace(/^Regla-/, ''), 10)
+    return Number.isFinite(n) ? Math.max(acc, n) : acc
+  }, 0)
+  return `Regla-${String(max + 1).padStart(4, '0')}`
+}
+
+/** Título principal de una alerta: nombre de la regla que la disparó. */
+export function getAlertRuleTitle(alert: Alert): string {
+  return alert.rule?.name ?? alert.description ?? getEventLabel(alert.event_code)
+}
 
 // Nombre legible para un event_code Dahua (fallback al codigo crudo)
 export function getEventLabel(code?: string | null): string {

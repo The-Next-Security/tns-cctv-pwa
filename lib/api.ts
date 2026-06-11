@@ -98,6 +98,16 @@ export const alerts = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  // Atiende una alerta por su event_id real (CHAR(26)) usando el vocabulario del backend MySQL.
+  attendEvent: (
+    eventId: string,
+    action: 'acknowledge' | 'resolve' | 'escalate' | 'discard' | 'reactivate' | 'activate',
+    notes?: string
+  ) =>
+    fetchApi<import('./types').Alert>(`/alerts/${eventId}/attend`, {
+      method: 'POST',
+      body: JSON.stringify({ action, notes }),
+    }),
 }
 
 // Reglas
@@ -290,14 +300,36 @@ export const nvrs = {
 
 // Usuarios
 export const users = {
-  list: () => fetchApi<import('./types').User[]>('/users'),
-  get: (id: number) => fetchApi<import('./types').User>(`/users/${id}`),
-  create: (data: Partial<import('./types').User> & { password: string }) =>
+  list: async () => {
+    const res = await fetchApi<{ items?: import('./types').User[]; data?: import('./types').User[] }>(
+      '/users'
+    )
+    return res.items ?? res.data ?? []
+  },
+  get: (id: string | number) => fetchApi<import('./types').User>(`/users/${id}`),
+  create: (data: {
+    nombre: string
+    email: string
+    telefono: string
+    role: import('./types').Role
+    password: string
+    activo?: boolean
+  }) =>
     fetchApi<import('./types').User>('/users', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  update: (id: number, data: Partial<import('./types').User>) =>
+  update: (
+    id: string | number,
+    data: {
+      nombre: string
+      email: string
+      telefono: string
+      role: import('./types').Role
+      password?: string
+      activo?: boolean
+    }
+  ) =>
     fetchApi<import('./types').User>(`/users/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),

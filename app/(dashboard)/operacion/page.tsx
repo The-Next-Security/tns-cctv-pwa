@@ -15,7 +15,9 @@ import { AlertPopup } from '@/components/operacion/alert-popup'
 import { EscalateSheet } from '@/components/operacion/escalate-sheet'
 import { ConnectionStatus } from '@/components/operacion/connection-status'
 import { useRealtime } from '@/hooks/use-realtime'
-import { MOCK_ALERTS, MOCK_ZONES } from '@/lib/mock-data'
+import { alerts as alertsApi } from '@/lib/api'
+import { PARK_ZONES } from '@/lib/constants'
+import { toast } from 'sonner'
 import { DEMO_ALERT_POPUP_KEY } from '@/lib/reset-demo'
 import { URGENCY_STYLES, type UrgencyLevel } from '@/lib/constants'
 import { UrgencyBadge, UrgencyText } from '@/components/ui/urgency-badge'
@@ -48,7 +50,7 @@ const STATUS_VIEW_URGENCY: Partial<Record<StatusView, UrgencyLevel>> = {
 
 function resolveListHeadingUrgency(
   view: StatusView,
-  counts: { criticalPending: number; lowPriorityPending: number; inReview: number }
+  counts: { criticalPending: number; lowPriorityPending: number; inReview: number; escalated: number }
 ): UrgencyLevel | null {
   const mapped = STATUS_VIEW_URGENCY[view]
   if (mapped) return mapped
@@ -56,6 +58,7 @@ function resolveListHeadingUrgency(
   if (view === 'activas') {
     if (counts.criticalPending > 0) return 'critical'
     if (counts.inReview > 0) return 'review'
+    if (counts.escalated > 0) return 'escalated'
     if (counts.lowPriorityPending > 0) return 'pending'
   }
 
@@ -78,7 +81,11 @@ function matchesStatusView(alert: Alert, view: StatusView): boolean {
     case 'criticas':
       return alertClass === 'critica' && alert.status === 'pendiente'
     case 'baja_prioridad':
-      return alertClass === 'baja_prioridad' && (alert.status === 'pendiente' || alert.status === 'en_revision')
+      return alertClass === 'baja_prioridad' && (
+        alert.status === 'pendiente' ||
+        alert.status === 'en_revision' ||
+        alert.status === 'escalada'
+      )
     case 'all':
       return true
     default:
@@ -94,13 +101,32 @@ export default function OperacionPage() {
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
   const [showPopup, setShowPopup] = useState(false)
   const [escalateAlert, setEscalateAlert] = useState<Alert | null>(null)
-  const [localAlerts, setLocalAlerts] = useState<Alert[]>(MOCK_ALERTS)
+  const [localAlerts, setLocalAlerts] = useState<Alert[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800)
-    return () => clearTimeout(timer)
+  const loadAlerts = useCallback(async () => {
+    try {
+      const res = await alertsApi.list()
+      const items = (res as unknown as { data?: Alert[]; items?: Alert[] }).data
+        ?? (res as unknown as { items?: Alert[] }).items
+        ?? []
+      setLocalAlerts(items)
+    } catch {
+      toast.error('No se pudieron cargar las alertas. Verifique que el API esté activo (pnpm dev:api).')
+      setLocalAlerts([])
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    loadAlerts()
+  }, [loadAlerts])
+
+  const resolveEventId = useCallback(
+    (alertId: number) => localAlerts.find(a => a.id === alertId)?.event_id ?? String(alertId),
+    [localAlerts]
+  )
 
   // Demo: popup automático solo para clase 'critica' (alta + critica)
   useEffect(() => {
@@ -134,9 +160,16 @@ export default function OperacionPage() {
     setLocalAlerts(prev => prev.map(a => a.id === alert.id ? alert : a))
   }, [])
 
+  // El backend emite event.popup con datos mínimos: recargar la lista para
+  // obtener la alerta completa y disparar el popup si corresponde.
+  const handleEventPopup = useCallback(() => {
+    loadAlerts()
+  }, [loadAlerts])
+
   const { connected: isRealtimeConnected } = useRealtime({
     onAlertNew: handleNewAlert,
     onAlertUpdated: handleAlertUpdated,
+    onEventPopup: handleEventPopup,
   })
 
   const filteredAlerts = localAlerts.filter(alert => {
@@ -159,7 +192,7 @@ export default function OperacionPage() {
     lowPriorityPending: localAlerts.filter(a => getAlertClass(a.criticality) === 'baja_prioridad' && a.status === 'pendiente').length,
     inReview:           localAlerts.filter(a => a.status === 'en_revision').length,
     escalated:          localAlerts.filter(a => a.status === 'escalada').length,
-    resolved:           localAlerts.filter(a => a.status === 'resuelta').length,
+    resolved:           localAlerts.filter(a => a.status === 'resuelta' || a.status === 'descartada').length,
   }
 
   const listHeadingUrgency = resolveListHeadingUrgency(statusView, stats)
@@ -167,10 +200,11 @@ export default function OperacionPage() {
 
   function handleRefresh() {
     setIsLoading(true)
-    setTimeout(() => setIsLoading(false), 500)
+    loadAlerts()
   }
 
-  function handleAlertAction(alertId: number, action: 'acknowledge' | 'resolve' | 'escalate', notes?: string) {
+  function handleAlertAction(alertId: number, action: 'acknowledge' | 'resolve' | 'escalate' | 'discard', notes?: string) {
+    const eventId = resolveEventId(alertId)
     setLocalAlerts(prev => prev.map(a => {
       if (a.id !== alertId) return a
       if (action === 'acknowledge') {
@@ -179,19 +213,64 @@ export default function OperacionPage() {
       if (action === 'resolve') {
         return { ...a, status: 'resuelta' as const, resolved_at: new Date().toISOString(), resolution_notes: notes }
       }
+      if (action === 'discard') {
+        return {
+          ...a,
+          status: 'descartada' as const,
+          discard_reason: notes as Alert['discard_reason'],
+          discard_note: notes,
+          resolved_at: new Date().toISOString(),
+        }
+      }
       if (action === 'escalate') {
         return { ...a, status: 'escalada' as const }
       }
       return a
     }))
+    // Persistencia best-effort en el backend (no bloquea la UX optimista).
+    alertsApi.attendEvent(eventId, action, notes).catch(() => {})
     setPriorityAlert(null)
 
     if (action === 'acknowledge') {
       setStatusView('en_revision')
     } else if (action === 'escalate') {
       setStatusView('escaladas')
-    } else if (action === 'resolve') {
+    } else if (action === 'resolve' || action === 'discard') {
       setStatusView('resueltas')
+    }
+  }
+
+  function handleReactivate(alertId: number) {
+    const alert = localAlerts.find(a => a.id === alertId)
+    const eventId = resolveEventId(alertId)
+    setLocalAlerts(prev => prev.map(a =>
+      a.id === alertId
+        ? {
+            ...a,
+            status: 'pendiente' as const,
+            resolved_at: null,
+            resolution_notes: null,
+            discard_reason: null,
+            discard_note: null,
+            assigned_to: null,
+            attended_at: null,
+            llamada_at: null,
+          }
+        : a
+    ))
+    alertsApi.attendEvent(eventId, 'reactivate').catch(() => {})
+    toast.success('Alerta reactivada — vuelve al inicio del flujo')
+
+    if (!alert) {
+      setStatusView('activas')
+      return
+    }
+    if (getAlertClass(alert.criticality) === 'critica') {
+      setStatusView('criticas')
+    } else if (getAlertClass(alert.criticality) === 'baja_prioridad') {
+      setStatusView('baja_prioridad')
+    } else {
+      setStatusView('activas')
     }
   }
 
@@ -219,12 +298,9 @@ export default function OperacionPage() {
     } else if (action === 'escalate') {
       handleAlertAction(alertId, 'escalate')
     } else if (action === 'discard') {
-      setLocalAlerts(prev => prev.map(a =>
-        a.id === alertId
-          ? { ...a, status: 'descartada' as const, discard_reason: reason as any }
-          : a
-      ))
-      setStatusView('resueltas')
+      handleAlertAction(alertId, 'discard', reason)
+    } else if (action === 'reactivate') {
+      handleReactivate(alertId)
     }
     setShowPopup(false)
   }
@@ -374,7 +450,7 @@ export default function OperacionPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas las zonas</SelectItem>
-                    {MOCK_ZONES.map(zone => (
+                    {PARK_ZONES.map(zone => (
                       <SelectItem key={zone.id} value={String(zone.id)}>
                         {zone.name}
                       </SelectItem>
@@ -490,6 +566,7 @@ export default function OperacionPage() {
                       onAction={(action, notes) => handleAlertAction(alert.id, action, notes)}
                       onEscalate={() => setEscalateAlert(alert)}
                       onLlamar={handleLlamar}
+                      onReactivate={handleReactivate}
                       onShowDetails={handleShowDetails}
                       useReviewActions
                     />
@@ -508,7 +585,7 @@ export default function OperacionPage() {
       <AlertDialog
         alert={priorityAlert}
         onClose={() => setPriorityAlert(null)}
-        onAction={(action: 'acknowledge' | 'resolve' | 'escalate', notes?: string) => {
+        onAction={(action: 'acknowledge' | 'resolve' | 'escalate' | 'discard', notes?: string) => {
           if (priorityAlert) handleAlertAction(priorityAlert.id, action, notes)
         }}
         onEscalate={() => {

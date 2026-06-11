@@ -1,4 +1,5 @@
-import type { Alert, Role, Rule } from './types'
+import type { Alert, Role, Rule, User } from './types'
+import { ESCALATION_ROLE_OPTIONS, ROLE_LABELS } from './types'
 
 export interface EscalationContact {
   name: string
@@ -6,42 +7,13 @@ export interface EscalationContact {
   email?: string
 }
 
-export const ESCALATION_ROLE_OPTIONS: Role[] = [
-  'responsable_seguridad',
-  'admin_parque',
-  'supervisor',
-  'soporte_tns',
-]
-
-export const ROLE_CONTACTS: Record<Role, EscalationContact> = {
-  responsable_seguridad: {
-    name: 'Carlos Rodríguez',
-    phone: '+56 9 8821 4430',
-    email: 'c.rodriguez@agrolivo.cl',
-  },
-  admin_parque: {
-    name: 'Ana Méndez',
-    phone: '+56 9 7743 2219',
-    email: 'admin@agrolivo.cl',
-  },
-  supervisor: {
-    name: 'Pedro Soto',
-    phone: '+56 9 9103 5567',
-    email: 'p.soto@agrolivo.cl',
-  },
-  soporte_tns: {
-    name: 'TNS Soporte',
-    phone: '+56 2 2891 0045',
-    email: 'soporte@thenextsecurity.cl',
-  },
-  vigilante: { name: 'Vigilante' },
-  recepcion: { name: 'Recepción' },
-  recepcionista: { name: 'Recepcionista' },
-  tecnico: { name: 'Técnico' },
-  visualizador: { name: 'Visualizador' },
+export interface EscalationContactEntry extends EscalationContact {
+  role: Role
+  userId?: string | number
 }
 
-// TODO: configurable por regla en v2.
+export { ESCALATION_ROLE_OPTIONS }
+
 export const ESCALATION_CHECKLIST_ACTIONS = [
   'Llamé a Carabineros (133)',
   'Notifiqué al guardia de turno',
@@ -49,6 +21,45 @@ export const ESCALATION_CHECKLIST_ACTIONS = [
   'Revisé cámaras adicionales del sector',
   'Activé el protocolo de emergencia local',
 ] as const
+
+function isActiveUser(user: User): boolean {
+  return user.activo !== false && user.active !== false
+}
+
+function mapUserToEscalationContact(user: User): EscalationContactEntry {
+  return {
+    userId: user.id,
+    role: user.role,
+    name: user.nombre || user.full_name || ROLE_LABELS[user.role],
+    phone: user.telefono || undefined,
+    email: user.email,
+  }
+}
+
+/** Todos los usuarios activos cuyo rol está configurado para recibir escalación. */
+export function getEscalationContacts(rule?: Rule | null, users?: User[]): EscalationContactEntry[] {
+  const roles = getEscalationRoles(rule)
+  if (!roles.length || !users?.length) return []
+
+  const roleSet = new Set(roles)
+  return users
+    .filter(user => isActiveUser(user) && roleSet.has(user.role))
+    .map(mapUserToEscalationContact)
+    .sort((a, b) => {
+      const roleOrder = roles.indexOf(a.role) - roles.indexOf(b.role)
+      if (roleOrder !== 0) return roleOrder
+      return a.name.localeCompare(b.name, 'es')
+    })
+}
+
+/** Primer usuario activo para un rol (compatibilidad). */
+export function getEscalationContact(role: Role, users?: User[]): EscalationContact {
+  const user = users?.find(u => u.role === role && isActiveUser(u))
+  if (user) {
+    return mapUserToEscalationContact(user)
+  }
+  return { name: ROLE_LABELS[role] }
+}
 
 export function getEscalationRoles(rule?: Rule | null): Role[] {
   if (!rule?.can_escalate) return []
@@ -83,5 +94,5 @@ export function buildEscalationObservation(
 }
 
 export function toTelHref(phone: string): string {
-  return `tel://${phone.replace(/[^\d+]/g, '')}`
+  return `tel:${phone.replace(/[^\d+]/g, '')}`
 }

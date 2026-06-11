@@ -58,6 +58,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { vehicleEntries as vehicleEntriesApi } from '@/lib/api'
 import { MOCK_TENANTS, MOCK_VEHICLE_ENTRIES } from '@/lib/mock-data'
 import {
   INITIAL_ANPR_PENDING_QUEUE,
@@ -94,7 +95,27 @@ export default function RecepcionPage() {
   const [exitDialogOpen, setExitDialogOpen] = useState(false)
   const [exitingEntry, setExitingEntry] = useState<VehicleEntry | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [entries, setEntries] = useState<VehicleEntry[]>(MOCK_VEHICLE_ENTRIES)
+  const [entries, setEntries] = useState<VehicleEntry[]>([])
+
+  // Carga real desde la BD (adm_ingreso); fallback a mock si el backend no responde.
+  useEffect(() => {
+    let cancelled = false
+    vehicleEntriesApi
+      .list()
+      .then(res => {
+        if (cancelled) return
+        const items = (res as unknown as { data?: VehicleEntry[]; items?: VehicleEntry[] }).data
+          ?? (res as unknown as { items?: VehicleEntry[] }).items
+          ?? []
+        setEntries(items)
+      })
+      .catch(() => {
+        if (!cancelled) setEntries(MOCK_VEHICLE_ENTRIES)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const [pendingDetections, setPendingDetections] = useState<AnprPendingDetection[]>(
     () => INITIAL_ANPR_PENDING_QUEUE.map(d => ({ ...d }))
   )
@@ -178,51 +199,69 @@ export default function RecepcionPage() {
 
   async function onSubmit(data: VehicleEntryForm) {
     setIsSubmitting(true)
-    
-    // Simulate API call
-    setTimeout(() => {
-      const newEntry: VehicleEntry = {
-        id: entries.length + 1,
+
+    const tenant = MOCK_TENANTS.find(t => t.id === parseInt(data.tenant_id))
+    const confidence =
+      data.plate_source === 'manual'
+        ? null
+        : (anprConfidence ?? (data.plate_source === 'anpr' ? 94 : 91))
+
+    const localEntry: VehicleEntry = {
+      id: Date.now(),
+      plate: data.plate,
+      declared_driver_name: data.declared_driver_name,
+      declared_driver_id: data.declared_driver_id ?? null,
+      tenant_id: parseInt(data.tenant_id),
+      tenant,
+      destination_text: data.destination_text ?? null,
+      vehicle_type: (data.vehicle_type as VehicleType) ?? 'particular',
+      entry_at: new Date(data.entry_at).toISOString(),
+      observations: (data.observations ?? null),
+      plate_normalized: data.plate.replace(/[^A-Z0-9]/g, ''),
+      exit_at: null,
+      registered_by: '1',
+      created_at: new Date().toISOString(),
+      plate_source: data.plate_source as PlateSource,
+      anpr_confidence: confidence,
+    }
+
+    // Persistencia real en la BD; si el backend no responde, registro local (demo).
+    let newEntry = localEntry
+    try {
+      const created = await vehicleEntriesApi.create({
         plate: data.plate,
         declared_driver_name: data.declared_driver_name,
-        declared_driver_id: data.declared_driver_id ?? null,
-        tenant_id: parseInt(data.tenant_id),
-        tenant: MOCK_TENANTS.find(t => t.id === parseInt(data.tenant_id)),
-        destination_text: data.destination_text ?? null,
-        vehicle_type: (data.vehicle_type as VehicleType) ?? 'particular',
+        declared_driver_id: data.declared_driver_id || undefined,
+        destination_text: data.destination_text || tenant?.commercial_name || tenant?.legal_name,
+        vehicle_type: data.vehicle_type,
         entry_at: new Date(data.entry_at).toISOString(),
-        observations: (data.observations ?? null),
-        plate_normalized: data.plate.replace(/[^A-Z0-9]/g, ''),
-        exit_at: null,
-        registered_by: '1',
-        created_at: new Date().toISOString(),
-        plate_source: data.plate_source as PlateSource,
-        anpr_confidence:
-          data.plate_source === 'manual'
-            ? null
-            : (anprConfidence ??
-              (data.plate_source === 'anpr' ? 94 : 91)),
-      }
+        observations: data.observations || undefined,
+        plate_source: data.plate_source,
+        anpr_confidence: confidence ?? undefined,
+      } as Parameters<typeof vehicleEntriesApi.create>[0])
+      newEntry = { ...created, tenant: tenant ?? created.tenant }
+    } catch {
+      toast.warning('Backend no disponible: el ingreso quedó solo en esta sesión')
+    }
 
-      if (activeDetectionId) {
-        setPendingDetections(prev => prev.filter(d => d.id !== activeDetectionId))
-      }
-      
-      setEntries(prev => [newEntry, ...prev])
-      toast.success('Ingreso registrado correctamente')
-      reset({
-        entry_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-        vehicle_type: '',
-        tenant_id: '',
-        plate_source: 'hybrid',
-      })
-      setAnprReading(null)
-      setAnprConfidence(null)
-      setNeedsManualReview(false)
-      setActiveDetectionId(null)
-      setSelectedTenant(null)
-      setIsSubmitting(false)
-    }, 500)
+    if (activeDetectionId) {
+      setPendingDetections(prev => prev.filter(d => d.id !== activeDetectionId))
+    }
+
+    setEntries(prev => [newEntry, ...prev])
+    toast.success('Ingreso registrado correctamente')
+    reset({
+      entry_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+      vehicle_type: '',
+      tenant_id: '',
+      plate_source: 'hybrid',
+    })
+    setAnprReading(null)
+    setAnprConfidence(null)
+    setNeedsManualReview(false)
+    setActiveDetectionId(null)
+    setSelectedTenant(null)
+    setIsSubmitting(false)
   }
 
   function handleExitClick(entry: VehicleEntry) {
@@ -232,12 +271,15 @@ export default function RecepcionPage() {
 
   function handleConfirmExit() {
     if (!exitingEntry) return
-    
-    setEntries(prev => prev.map(e => 
-      e.id === exitingEntry.id 
-        ? { ...e, exit_at: new Date().toISOString() }
+
+    const exitAt = new Date().toISOString()
+    setEntries(prev => prev.map(e =>
+      e.id === exitingEntry.id
+        ? { ...e, exit_at: exitAt }
         : e
     ))
+    // Persistencia best-effort (requiere columna exit_at en adm_ingreso).
+    vehicleEntriesApi.update(exitingEntry.id, { exit_at: exitAt }).catch(() => {})
     toast.success('Salida registrada correctamente')
     setExitDialogOpen(false)
     setExitingEntry(null)

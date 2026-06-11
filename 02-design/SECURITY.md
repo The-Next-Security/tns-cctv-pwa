@@ -2,264 +2,203 @@
 
 ## Objetivo
 
-Este documento refleja los controles de seguridad que realmente existen hoy en el codigo. No asume hardening futuro ni controles del PRD que todavia no estan implementados.
+Refleja los controles de seguridad **que realmente existen hoy** en el código. No asume hardening futuro ni controles del PRD que aún no están implementados.
 
-## Resumen real por capa
+---
 
-### Frontend
+## Resumen por capa
 
-Archivos fuente:
-- `components/providers/auth-provider.tsx`
-- `app/(auth)/login/page.tsx`
-- `lib/auth.ts`
-- `lib/demo-users.ts`
+| Capa | Nivel de seguridad real | Evaluación |
+|------|-------------------------|------------|
+| Frontend auth | Login real + sesión localStorage | Parcial — no apto producción |
+| Backend `src/` | Validación + JWT emitido | Parcial — JWT no enforced |
+| Backend `backend/src/` | PoC refresh/scope/audit | No activo — referencia |
+| MySQL | Credenciales locales, permisos app | Depende del despliegue |
+| WebSocket | Sin autenticación | Insuficiente |
+| Media/evidencia | Assets demo públicos | Sin control de acceso |
 
-Estado real:
-- autenticacion demo
-- cualquier email y password no vacios permiten login
-- se persiste un token falso en `localStorage`
-- la autorizacion de rutas es local y basada en roles mock
+---
 
-Implicancias:
-- no existe seguridad real de identidad en la UI
-- el control de acceso del frontend sirve para demo UX, no para enforcement real
-
-### Backend contractual en `src/`
-
-Archivos fuente:
-- `src/app.js`
-- `src/errors.js`
-- `src/wsHub.js`
-
-Estado real:
-- usa `helmet()`
-- usa `cors()` sin allowlist explicita
-- genera y propaga `x-request-id`
-- valida payloads con `zod`
-- no exige auth para ingest, list, detail ni state transition
-- no aplica tenant scope
-
-Implicancias:
-- tiene buenas bases de validacion y trazabilidad
-- no puede considerarse seguro para multi-tenant real
-
-### Backend PoC en `backend/src/`
-
-Archivos fuente:
-- `backend/src/app.js`
-- `backend/tests/security.test.js`
-
-Estado real:
-- access token JWT HS256
-- refresh token JWT HS256 con rotacion y revocacion in-memory
-- auth middleware para rutas protegidas
-- tenant/site scope por query params
-- firma de URL de evidencia
-- auditoria in-memory
-
-Implicancias:
-- es la capa con controles mas cercanos a un backend real
-- sigue siendo un PoC paralelo, no el backend unificado del sistema
-
-## Auth actual
+## Autenticación
 
 ### Frontend
 
-Login real:
-- `AuthProvider.login()` acepta cualquier combinacion no vacia
-- crea `mock_token_<timestamp>`
-- deriva usuario desde `lib/demo-users.ts`
+**Archivos:** `components/providers/auth-provider.tsx`, `app/(auth)/login/page.tsx`, `lib/auth.ts`, `lib/demo-users.ts`
 
-Esto no llama a `/api/v1/auth/login`.
+**Comportamiento real:**
+1. `login()` llama `POST /api/v1/auth/login` con email/password.
+2. Backend valida bcrypt contra `gen_usuario`.
+3. JWT guardado en `localStorage` como `tns_token`.
+4. Datos de usuario persistidos vía `persistDemoUser()`.
+5. `checkAuthStatus()` al recargar: lee token + email de localStorage — **no valida JWT**.
+6. `logout()` limpia storage local — **no revoca token en servidor**.
+
+**Implicancias:**
+- Login ya no es "cualquier password" (contrario a texto legacy en UI login y `INSTRUCCIONES_ACCESO.md`).
+- Token expirado no se detecta hasta fallo de API.
+- No hay protección CSRF específica (SPA con Bearer header).
 
 ### Backend `src/`
 
-Solo existe:
-- `POST /api/v1/auth/login`
+**Implementado:**
+- `POST /api/v1/auth/login` — bcrypt + JWT HS256 (1h)
+- Secret fallback: `process.env.JWT_SECRET || 'dev-secret'`
 
-No existen en esta superficie:
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
-- `GET /api/v1/auth/me`
+**No implementado:**
+- Middleware de validación Bearer en rutas protegidas
+- `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`
+- Rate limiting / brute force protection
+- Revocación de tokens
 
-### Backend `backend/src/`
+**Endpoints mutables sin auth enforced:**
+- `POST /ingest/events`
+- `GET/PATCH /events/*`
+- `GET/POST /alerts/*`
+- CRUD `/users`, `/vehicle-entries`
 
-Si existen:
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
+### Backend `backend/src/` (PoC — no activo)
 
-Controles reales:
-- refresh rotation
-- refresh revocation
-- rechazo de refresh reutilizado
+**Implementado y probado** (`backend/tests/security.test.js`):
+- Access + refresh JWT con rotación
+- Revocación refresh in-memory
+- Rechazo de refresh reutilizado
+- Tenant/site scope en queries
 
-Eso esta cubierto por `backend/tests/security.test.js`.
+**No integrado** con frontend ni con `npm run dev`.
 
-## Autorizacion y RBAC
+---
 
-### En frontend
+## Autorización y RBAC
 
-`lib/auth.ts` implementa:
-- matriz de permisos por string
-- `hasPermission(role, permission)`
-- `canAccessRoute(role, path)`
-- `getDefaultRoute(role)`
+### Frontend — `lib/auth.ts`
 
-Roles reales del frontend:
-- `vigilante`
-- `recepcion`
-- `recepcionista`
-- `responsable_seguridad`
-- `admin_parque`
-- `soporte_tns`
-- `supervisor`
-- `tecnico`
-- `visualizador`
+- Matriz de permisos por string (`hasPermission`, `canAccessRoute`, `getDefaultRoute`).
+- Roles de presentación: `vigilante`, `recepcion`, `supervisor`, `admin_parque`, `soporte_tns`, etc.
+- Control de rutas en cliente — **bypassable** manipulando URL o localStorage.
 
-### En backend `src/`
+### Backend MySQL
 
-No existe RBAC hoy.
+- Autoridad real: `gen_permiso` + `gen_usuario_permiso`.
+- Backend deriva `role` para UX; resuelve permisos en login.
+- `attendAlert()` usa `resolveActorWithPermission()` con fallback de actor tenant.
 
-### En backend `backend/src/`
+### Backend API
 
-Existe control parcial:
-- verifica bearer token
-- limita `tenant_id`
-- limita `site_id`
+- **Sin RBAC por endpoint** en `src/app.js`.
+- Actor a veces hardcoded (`usr_01` en PATCH events legacy).
 
-No existe aun una matriz completa de permisos por endpoint.
+---
 
 ## Multi-tenant
 
-### En frontend
+| Capa | Aislamiento |
+|------|-------------|
+| SQL | `id_tenant` en tablas — modelado |
+| Backend `src/` | Sin filtro tenant en queries operativas |
+| Backend PoC | `tenantScope()` probado — no activo |
+| Frontend | Contexto visual demo — sin enforcement |
 
-No existe enforcement real. Solo mock data por contexto visual.
-
-### En backend `src/`
-
-No existe tenant isolation real.
-
-### En backend `backend/src/`
-
-Si existe una forma minima:
-- `tenantScope()` compara `tenant_id` consultado contra `req.user.tenant_id`
-- tambien revisa `site_id` contra `req.user.site_ids`
-
-Ese control esta probado.
+---
 
 ## CORS y cabeceras
 
 ### `src/app.js`
 
-Realidad actual:
-- `cors()` abierto
-- no hay allowlist
-- no hay configuracion de metodos ni headers explicitos
+- `helmet()` aplicado
+- `cors()` abierto — sin allowlist
+- `x-request-id` generado/propagado
 
 ### `backend/src/app.js`
 
-Realidad actual:
-- no aplica `cors()`
-- no aplica `helmet()`
+- Sin `cors()` ni `helmet()` en PoC
+
+---
 
 ## Secretos y claves
 
-### `src/app.js`
+| Ubicación | Estado |
+|-----------|--------|
+| `src/app.js` | `JWT_SECRET` env o `'dev-secret'` |
+| `backend/src/app.js` | Secrets hardcodeados en PoC |
+| `db/connection-config.json` | Gitignored — correcto |
+| Repo | Sin vault; rotación manual |
 
-Usa fallback duro:
-- `process.env.JWT_SECRET || 'dev-secret'`
+**Checklist pre-commit (CLAUDE.md):** buscar `phc_`, `sk_`, `pk_` en código.
 
-### `backend/src/app.js`
+---
 
-Usa secretos hardcodeados:
-- `ACCESS_SECRET = 'access-secret-rs256-simulated'`
-- `REFRESH_SECRET = 'refresh-secret-rs256-simulated'`
+## Auditoría
 
-Conclusion:
-- no existe vault
-- no existe rotacion real de claves
-- no existe separacion segura por ambiente dentro de estos prototipos
+| Capa | Persistencia |
+|------|--------------|
+| `log_evento_timeline` | Sí — decisiones operativas vía SP |
+| `log_auditoria_api` | Modelada — sin writer runtime |
+| Backend PoC | In-memory — `GET /audit-logs` |
 
-## Auditoria
+---
 
-### Backend `src/`
-
-No persiste auditoria.
-
-### Backend `backend/src/`
-
-Si registra en memoria:
-- `tenant_id`
-- `actor_user_id`
-- `actor_type`
-- `action`
-- `entity_type`
-- `entity_id`
-- `request_id`
-- `payload`
-- `created_at`
-
-Endpoint real:
-- `GET /api/v1/audit-logs`
-
-## Evidencia y acceso a media
+## Evidencia y media
 
 ### Frontend
 
-La evidencia es demo:
-- snapshots desde `/demo/*`
-- video en loop desde `/demo/live-feed-loop.mp4`
+- Snapshots/video desde `/demo/*` — sin auth.
+- `resolveSnapshotUrl()` en `lib/demo-media.ts`.
 
-### Backend `backend/src/`
+### Backend PoC
 
-Implementa:
-- `POST /api/v1/evidence/sign`
+- `POST /api/v1/evidence/sign` — URLs firmadas SHA256, TTL máx 300s.
+- No integrado con UI operativa.
 
-Comportamiento real:
-- recibe `object_url`, `checksum_sha256`, `ttl_seconds`
-- devuelve `signed_url` con hash SHA256
-- TTL maximo 300 segundos
-
-No existe validacion posterior de acceso real a object storage en este repo.
+---
 
 ## Realtime
 
-### Frontend
-
-Espera:
-- `socket.io`
-- `/realtime`
-
-### Backend real
-
-Ofrece:
-- `ws`
-- `/ws/operations`
-
-Desde seguridad, esto importa porque hoy no hay un canal realtime autenticado y unificado entre UI y backend.
-
-## Controles que faltan hoy
-
-- rate limiting
-- brute force protection
-- allowlist CORS
-- session storage persistente
-- revocacion persistente
-- RBAC backend unificado
-- secretos por ambiente seguros
-- auditoria persistente
-- aislamiento multi-tenant end-to-end
-- autenticacion del canal realtime
-
-## Lectura honesta del estado actual
-
-La seguridad hoy esta repartida asi:
-- frontend: demo UX
-- `src/`: validacion y trazabilidad basica
-- `backend/src/`: PoC de auth y tenant scope
-
-Todavia no existe una historia de seguridad completa y coherente de punta a punta.
+| Aspecto | Estado |
+|---------|--------|
+| Protocolo | WebSocket nativo |
+| Auth | Frontend requiere token en localStorage para conectar; **no lo envía al servidor** |
+| Scope | Cualquiera puede conectar a `/ws/operations` |
+| Eventos | Solo metadatos mínimos en `event.popup` |
 
 ---
-Ultima actualizacion basada en codigo: 2026-06-09
+
+## Controles que faltan (gap producción)
+
+- [ ] Middleware JWT en API
+- [ ] `/auth/me` + refresh + logout con revocación persistente
+- [ ] Rate limiting / lockout login
+- [ ] CORS allowlist
+- [ ] RBAC por endpoint alineado con `gen_permiso`
+- [ ] Aislamiento tenant en queries
+- [ ] Auth WebSocket (token en handshake o primer mensaje)
+- [ ] Auditoría API persistente
+- [ ] Secretos por ambiente (no defaults dev)
+- [ ] Evidencia/media con URLs firmadas en UI
+- [ ] Protección rutas Next.js server-side (middleware)
+
+---
+
+## Virtudes de seguridad actuales
+
+1. **Passwords hasheados** (bcrypt) en BD — no plaintext.
+2. **Modelo permisos granular** en SQL — base sólida para RBAC real.
+3. **Validación Zod** en payloads backend — reduce injection lógica.
+4. **Helmet** en backend activo.
+5. **PoC hardening documentado** en `backend/src/` — patrones de referencia probados.
+6. **Timeline inmutable** — trazabilidad de decisiones operativas.
+7. **`connection-config.json` gitignored** — credenciales BD no en repo.
+
+---
+
+## Lectura honesta
+
+La seguridad hoy está en transición:
+
+- **Mejor que demo puro:** login real, passwords bcrypt, JWT emitido, permisos en BD.
+- **Peor que producción:** API abierta tras login, sesión no revalidada, WS sin auth, secretos dev, mocks que ocultan fallos de API.
+
+Un tercero debe asumir que el sistema es **seguro para demo controlado en red local**, no para exposición internet sin hardening adicional.
+
+---
+
+**Última actualización basada en código:** 2026-06-11

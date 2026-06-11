@@ -132,7 +132,7 @@ export const MOCK_VEHICLE_ENTRIES: VehicleEntry[] = [
 ]
 
 // Reglas mock — codigos de evento reales suscribibles via API Dahua
-export const MOCK_RULES: Rule[] = [
+const MOCK_RULES_BASE: Rule[] = [
   {
     id: 1,
     name: 'Intrusion perimetral nocturna',
@@ -294,12 +294,26 @@ export const MOCK_RULES: Rule[] = [
   },
 ]
 
+export const MOCK_RULES: Rule[] = MOCK_RULES_BASE.map((rule) => ({
+  ...rule,
+  rule_id: rule.rule_id ?? `RG${String(rule.id).padStart(24, '0')}`,
+  rule_code: rule.rule_code ?? `Regla-${String(rule.id).padStart(4, '0')}`,
+  notify_push_roles:
+    rule.notify_push_roles ??
+    (rule.notify_admin ? ['responsable_seguridad', 'admin_parque'] : []),
+  escalation_roles:
+    rule.can_escalate && rule.escalation_roles?.length
+      ? ['responsable_seguridad', 'admin_parque', 'supervisor']
+      : rule.escalation_roles ?? [],
+}))
+
 // Usuarios mock
 export const MOCK_USERS: User[] = [
   {
     id: '1',
     email: 'admin@agrolivo.cl',
     nombre: 'Carlos Rodriguez',
+    telefono: '+56 9 7743 2219',
     role: 'admin_parque',
     ultimaConexion: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
     activo: true,
@@ -308,6 +322,7 @@ export const MOCK_USERS: User[] = [
     id: '2',
     email: 'supervisor@agrolivo.cl',
     nombre: 'Maria Gonzalez',
+    telefono: '+56 9 9103 5567',
     role: 'supervisor',
     ultimaConexion: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
     activo: true,
@@ -316,6 +331,7 @@ export const MOCK_USERS: User[] = [
     id: '3',
     email: 'operador@agrolivo.cl',
     nombre: 'Juan Perez',
+    telefono: '+56 9 8765 4321',
     role: 'vigilante',
     ultimaConexion: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
     activo: true,
@@ -324,6 +340,7 @@ export const MOCK_USERS: User[] = [
     id: '4',
     email: 'recepcionista@agrolivo.cl',
     nombre: 'Ana Silva',
+    telefono: '+56 9 7654 3210',
     role: 'recepcionista',
     ultimaConexion: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     activo: true,
@@ -332,9 +349,19 @@ export const MOCK_USERS: User[] = [
     id: '5',
     email: 'tecnico@agrolivo.cl',
     nombre: 'Roberto Diaz',
+    telefono: '+56 2 2891 0045',
     role: 'tecnico',
     ultimaConexion: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     activo: false,
+  },
+  {
+    id: '6',
+    email: 'seguridad@agrolivo.cl',
+    nombre: 'Patricia Morales',
+    telefono: '+56 9 8821 4430',
+    role: 'responsable_seguridad',
+    ultimaConexion: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+    activo: true,
   },
 ]
 
