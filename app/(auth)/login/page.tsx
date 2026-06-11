@@ -8,7 +8,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { getDemoRoleLabel } from '@/lib/demo-users'
+
+const QUICK_ACCESS_CREDENTIALS = {
+  label: 'Guardia',
+  email: 'guardia@tenant.cl',
+  password: 'secret123',
+} as const
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -158,27 +163,23 @@ export default function LoginPage() {
                 <p className="mb-2 sm:mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-ds-ink-muted">
                   Acceso rápido
                 </p>
-                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                  {[
-                    { label: 'Admin', email: 'admin@agrolivo.cl' },
-                    { label: 'Operador', email: 'operador@agrolivo.cl' },
-                    { label: 'Recepción', email: 'recepcionista@agrolivo.cl' },
-                  ].map(user => (
-                    <button
-                      key={user.email}
-                      type="button"
-                      onClick={() => fillTestUser(user.email, 'password123')}
-                      className="rounded-xl border border-ds-hairline/50 bg-ds-muted px-1.5 py-2.5 sm:px-2 sm:py-3 text-[11px] sm:text-xs font-semibold transition-all hover:bg-ds-muted/70 active:scale-[0.98] min-h-[44px]"
-                    >
-                      <span className="block">{user.label}</span>
-                      <span className="mt-0.5 block text-[10px] font-normal text-ds-ink-muted">
-                        {getDemoRoleLabel(user.email)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => fillTestUser(QUICK_ACCESS_CREDENTIALS.email, QUICK_ACCESS_CREDENTIALS.password)}
+                  className="flex w-full items-center justify-between rounded-xl border border-ds-hairline/50 bg-ds-muted px-3 py-3 text-left text-sm font-semibold transition-all hover:bg-ds-muted/70 active:scale-[0.98]"
+                >
+                  <span>
+                    <span className="block">{QUICK_ACCESS_CREDENTIALS.label}</span>
+                    <span className="mt-0.5 block text-[11px] font-normal text-ds-ink-muted">
+                      {QUICK_ACCESS_CREDENTIALS.email}
+                    </span>
+                  </span>
+                  <span className="rounded-full bg-background/70 px-2.5 py-1 text-[10px] font-medium text-ds-ink-muted">
+                    Demo real
+                  </span>
+                </button>
                 <p className="mt-3 text-center text-[11px] text-ds-ink-muted">
-                  Modo demo — cualquier contraseña funciona
+                  Usuario de prueba: guardia@tenant.cl · contraseña secret123
                 </p>
               </div>
             </form>
