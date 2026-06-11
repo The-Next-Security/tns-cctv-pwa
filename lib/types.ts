@@ -22,9 +22,9 @@ export const ALERT_CLASS_LABELS: Record<AlertClass, string> = {
   baja_prioridad: 'Baja Prioridad',
 }
 
-/** Solo 'critica' → 'critica'; alta + media + baja → 'baja_prioridad' */
+/** PRD §5.3: 'critica' = severidad alta o crítica; 'baja_prioridad' = media o baja */
 export function getAlertClass(criticality: Criticality): AlertClass {
-  return criticality === 'critica' ? 'critica' : 'baja_prioridad'
+  return criticality === 'critica' || criticality === 'alta' ? 'critica' : 'baja_prioridad'
 }
 
 export type AlertStatus = 'pendiente' | 'revisada' | 'descartada' | 'escalada' | 'en_revision' | 'resuelta'
