@@ -40,6 +40,33 @@
   `tests/alert-vocabulary.contract.spec.js` falla si `revisada/descartada/escalada`
   reaparecen como acciones API — no eliminarlo.
 
+- **RULE:** El pool MySQL DEBE fijar `SET time_zone = '+00:00'` por conexión.
+  Sin eso, `NOW()`/`CURRENT_TIMESTAMP` y los DEFAULT de las tablas escriben en el
+  timezone del SO mientras los parámetros llegan en UTC — la misma tabla mezcla
+  husos y el orden del timeline se corrompe (QA-04). La UI convierte a local;
+  la BD y el API SIEMPRE hablan UTC. Guardia: `tests/db-timezone.contract.spec.js`.
+
+- **RULE:** Toda clasificación de UI con contrato en el PRD necesita un test que
+  la fije. `getAlertClass` degradaba las alertas `alta` a "Baja prioridad"
+  contradiciendo PRD §5.3 (QA-03) y nadie lo notó hasta ver una alerta real en
+  pantalla. Guardia: `tests/alert-class.contract.spec.js`.
+
+- **RULE:** Ocultar menús por rol NO es autorización. El API aceptaba que un
+  vigilante creara un `admin_parque` vía POST /users directo (QA-05). Toda
+  mutación sensible necesita guard de rol en el SERVIDOR (`requireRole` en
+  `src/auth.js`). Ojo: `GET /users` debe quedar abierto a autenticados porque
+  alimenta los contactos de escalación. Guardia: `tests/users-rbac.contract.spec.js`.
+
+- **RULE:** Página que consulta el API pero pinta datos hardcodeados = mock
+  silencioso (viola D6). `/salud` llamaba `/health/nvrs` y renderizaba un array
+  const con 3 NVRs falsos (QA-06). Patrón correcto: fetch real + fallback a mock
+  CON toast "datos de demostración" (como `/recepcion`), y omitir métricas que el
+  API aún no expone en lugar de inventarlas.
+
+- **RULE:** En heartbeat M6, una fuente con `last_heartbeat_at = NULL` se muestra
+  "ok" por diseño (no se evalúa antigüedad hasta el primer heartbeat). Decisión
+  pendiente del PO: estado "sin datos" explícito. No "corregir" sin esa decisión.
+
 ## Estado al cierre de sesión 2026-06-11
 
 **Verificación:** `npm test` 76/76 verde (×2 desde cero) · `tsc --noEmit` limpio ·
