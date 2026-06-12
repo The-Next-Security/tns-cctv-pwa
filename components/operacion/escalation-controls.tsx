@@ -72,7 +72,8 @@ export function CallContactsPopover({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-[min(calc(100vw-2rem),22rem)] border-ds-hairline bg-ds-surface p-3 text-ds-ink-body"
+        collisionPadding={16}
+        className="w-[min(calc(100vw-2rem),22rem)] max-w-[calc(100vw-2rem)] border-ds-hairline bg-ds-surface p-3 text-ds-ink-body"
       >
         <div className="space-y-3">
           <div>
