@@ -22,6 +22,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   LifeBuoy,
+  X,
 } from 'lucide-react'
 import { BrandLogo } from '@/components/brand/brand-logo'
 import { cn } from '@/lib/utils'
@@ -105,9 +106,11 @@ function filterNavItems(items: NavItem[], role: Role | undefined): NavItem[] {
 interface AppSidebarProps {
   collapsed: boolean
   onToggle: () => void
+  /** En el overlay móvil onToggle cierra el menú (no colapsa la barra). */
+  mobile?: boolean
 }
 
-export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
+export function AppSidebar({ collapsed, onToggle, mobile = false }: AppSidebarProps) {
   const pathname = usePathname()
   const { user } = useUser()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
@@ -141,7 +144,9 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
     <TooltipProvider delayDuration={100}>
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 h-screen flex flex-col bg-ds-surface border-r border-ds-hairline transition-all duration-300 ease-out',
+          // h-full (no h-screen): en fixed, el % resuelve contra el viewport
+          // dinámico — 100vh desborda en iOS Safari con la barra de URL visible.
+          'fixed left-0 top-0 z-40 h-full flex flex-col bg-ds-surface border-r border-ds-hairline transition-all duration-300 ease-out',
           collapsed ? 'w-[68px]' : 'w-[var(--sidebar-width)]'
         )}
       >
@@ -316,10 +321,15 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             variant="ghost"
             size="sm"
             onClick={onToggle}
-            className="w-full justify-center rounded-xl h-10 hover:bg-ds-page"
-            aria-label={collapsed ? 'Expandir barra lateral' : 'Colapsar barra lateral'}
+            className="w-full justify-center rounded-xl h-10 hover:bg-ds-page touch-target"
+            aria-label={mobile ? 'Cerrar menú' : collapsed ? 'Expandir barra lateral' : 'Colapsar barra lateral'}
           >
-            {collapsed ? (
+            {mobile ? (
+              <>
+                <X size={16} className="mr-2" />
+                <span className="text-sm">Cerrar menú</span>
+              </>
+            ) : collapsed ? (
               <PanelLeft size={16} />
             ) : (
               <>

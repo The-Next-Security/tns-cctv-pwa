@@ -333,6 +333,16 @@
     scroll-behavior: smooth;
     overflow-x: hidden;
   }
+
+  /* iOS Safari ignora overflow-x:hidden para el paneo táctil del root scroller;
+     clip (iOS/Safari 16+) sí lo bloquea. El @supports evita que el minificador
+     elimine el fallback hidden para motores viejos. Va al final del layer para
+     ganarle en orden a las reglas base de html y body. */
+  @supports (overflow-x: clip) {
+    html, body {
+      overflow-x: clip;
+    }
+  }
 }
 
 @layer utilities {
@@ -646,6 +656,10 @@
 
   .mobile-scroll-x {
     @apply -mx-3 px-3 overflow-x-auto sm:mx-0 sm:px-0 sm:overflow-visible;
+    /* position relative: sin esto, los descendientes position:absolute (p. ej.
+       sr-only de botones) resuelven su containing block en el body, escapan el
+       clip del scroll y expanden el scrollWidth → paneo lateral en iOS Safari. */
+    position: relative;
     -ms-overflow-style: none;
     scrollbar-width: none;
   }

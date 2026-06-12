@@ -69,13 +69,15 @@ export default function DashboardLayout({
       {/* Mobile sidebar overlay - glassmorphism */}
       {mobileMenuOpen && (
         <>
+          {/* z > 50: el menú abierto debe cubrir también el bottom nav (z-50). */}
           <div
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden animate-fade-in"
+            className="fixed inset-0 z-[55] bg-black/60 backdrop-blur-sm lg:hidden animate-fade-in"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="fixed left-0 top-0 z-50 h-full w-[min(100vw,280px)] lg:hidden animate-fade-in">
+          <div className="fixed left-0 top-0 z-[60] h-full w-[min(100vw,280px)] lg:hidden animate-fade-in">
             <AppSidebar
               collapsed={false}
+              mobile
               onToggle={() => setMobileMenuOpen(false)}
             />
           </div>

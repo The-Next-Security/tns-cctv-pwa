@@ -98,6 +98,38 @@
   exige en_revision). El SP sí permite NEW→ESCALATING, así que el flujo
   llamar→escalar desde una pendiente es válido server-side (#51).
 
+- **RULE (iOS/responsive):** un elemento `position:absolute` dentro de un scroll
+  container SIN ancestro posicionado resuelve su containing block en el body:
+  escapa el clip del contenedor y expande `body.scrollWidth` (el `sr-only` del
+  botón refresh quedó en x=955 y habilitaba paneo lateral en iOS). Todo
+  contenedor `overflow-x: auto` debe llevar `position: relative`
+  (ya aplicado a `.mobile-scroll-x`).
+
+- **RULE (iOS/responsive):** `overflow-x: hidden` en html/body NO bloquea el
+  paneo táctil del root scroller en iOS Safari; `overflow-x: clip` sí. El
+  fallback se escribe con `@supports (overflow-x: clip)` AL FINAL del layer base
+  (dos declaraciones del mismo property en una regla son colapsadas por el
+  minificador, y el orden de reglas decide qué gana).
+
+- **RULE (iOS/PWA):** sin `viewportFit: 'cover'` en el export `viewport` de
+  Next, `env(safe-area-inset-*)` es 0 y las utilidades `.safe-top`/`.safe-bottom`
+  no hacen nada (topbar bajo el notch, nav bajo el home indicator).
+
+- **RULE (iOS):** en elementos `position:fixed` usar `h-full`, no `h-screen`:
+  el % resuelve contra el viewport dinámico mientras 100vh es el viewport
+  grande — con la barra de URL visible el pie del sidebar quedaba fuera de
+  pantalla.
+
+- **RULE (tooling):** turbopack en dev puede no recompilar un `@apply` editado
+  dentro de una regla CSS existente (sirvió el chunk con `clip` nuevo pero sin
+  el `relative` agregado al mismo archivo). Para declaraciones críticas usar CSS
+  plano (`position: relative;`) y verificar SIEMPRE el chunk compilado servido,
+  no solo el fuente.
+
+- **RULE (UI móvil):** los overlays modales de navegación deben tener z-index
+  mayor que el bottom nav (z-50): el menú lateral usaba z-50 y el nav, posterior
+  en el DOM, lo tapaba. Backdrop z-[55] y panel z-[60].
+
 ## Estado al cierre de sesión 2026-06-11
 
 **Verificación:** `npm test` 76/76 verde (×2 desde cero) · `tsc --noEmit` limpio ·
