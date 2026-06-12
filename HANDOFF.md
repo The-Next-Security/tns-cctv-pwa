@@ -1,10 +1,10 @@
 # HANDOFF — TNS CCTV PWA
 
 > **Para:** la próxima instancia de desarrollo (agente Claude o desarrollador humano).
-> **De:** sesión QA 2026-06-11 (rama `claude/heuristic-yonath-8b3363`), que ejecutó completo el checklist §5.2, corrigió 4 bugs P1 con regresión y registró 9 issues en GitHub.
+> **De:** sesiones del 2026-06-11/12 en la rama `claude/heuristic-yonath-8b3363`: (1) QA completo §5.2, (2) resolución de hallazgos #48–#56 (§6.R), (3) responsividad iOS de la PWA (§7).
 > **Punto de partida obligatorio** de la próxima sesión. Léelo completo antes de tocar código.
 > **Misión global:** hito de pruebas con NVR reales (≈2026-06-25) y go-live (≈2026-07-02).
-> **🎯 Próxima sesión: validaciones manuales del PO (push E2E + instalar PWA), decisión #49, spike NVR físico** (ver §6.6; resultados de la sesión de resolución en §6).
+> **🎯 Próxima sesión: ver §8** — validaciones manuales del PO (push E2E, instalar PWA, iPhone real), cierre de issues en GitHub, spike NVR físico si hay hardware.
 
 ---
 
@@ -251,13 +251,7 @@ No multi-tenant enforcement · no streaming en vivo · no ORM · no rehacer UI/d
 
 **Commits:** 8 commits aprobados por el PO al cierre (sin push). **Cierre de issues en GitHub:** pendiente de la validación manual del PO (lista de validaciones por issue entregada en la sesión); #48 espera el check "Instalar app" y #49 quedó diferido.
 
-### 6.6 Plan de la siguiente sesión
-
-1. **Validaciones manuales del PO (15 min):** (a) push E2E — backend con VAPID de `.env.local`, otorgar permiso de notificaciones en Chrome, escalar una alerta, verificar notificación con app cerrada + clic abre detalle + fila `ale_notificacion` SENT; (b) Chrome → menú → "Instalar app" para cerrar #48.
-2. **#49:** decisión diferida al spike NVR físico — con heartbeats reales se decide entre `unknown`/"sin datos" (badge gris) o mantener el diseño actual.
-3. **Spike NVR físico** (§3.1) si el hardware llegó — sigue siendo el bloqueante del hito 25-jun.
-4. **D11 tanda 1** (mocks→seed: `GET /tenants` + zonas; KPIs de /reportes desde BD).
-5. Backlog pre-go-live §3.5 + corregir la línea `public/` de `.gitignore` (hoy obliga a `git add -f` para cada asset).
+### 6.6 Plan de la siguiente sesión — SUPERSEDIDO por §8 (tras la sesión de responsividad §7)
 
 ### 6.5 Reglas de la sesión
 
@@ -269,4 +263,69 @@ No multi-tenant enforcement · no streaming en vivo · no ORM · no rehacer UI/d
 
 ---
 
-*Actualizado el 2026-06-11 al cierre de la sesión QA. Si este documento contradice al código, el código + la suite de tests son la verdad — y hay que corregir este documento.*
+## 7. RESULTADOS — sesión de responsividad iOS (2026-06-11/12)
+
+**Goal:** PWA sin desplazamiento lateral fuera de los bordes y menús/navegación perfectos; el PO reportó mal comportamiento en iOS.
+
+**Verificación de cierre:** las 13 rutas (login, operación, detalle de alerta, recepción, expedientes, reportes, salud, admin + 6 subpáginas) con `scrollWidth` = viewport exacto en **390×844 y 375×667**, cero elementos fuera de bordes, `window.scrollTo(500,0)` no mueve la página. Menú móvil completo: abre, cubre el bottom nav, expande submenú Admin, navega, se auto-cierra. `npm test` 99/99 ✅ · `tsc` ✅ · `build` ✅.
+
+### 7.1 Causas raíz corregidas (commit `7cdb16b`)
+
+| Síntoma iOS | Causa raíz | Fix |
+|---|---|---|
+| Paneo lateral de toda la página | `sr-only` `position:absolute` del botón refresh sin ancestro posicionado → containing block = body → escapaba el clip de la fila de chips y expandía `body.scrollWidth` a 956px | `position: relative` en `.mobile-scroll-x` (`app/globals.css`) |
+| `overflow-x: hidden` no bloquea el paneo táctil | Limitación conocida del root scroller en iOS Safari | `overflow-x: clip` en html/body vía `@supports` AL FINAL del layer base (el minificador colapsa fallbacks duplicados en una misma regla) |
+| Topbar bajo el notch / nav bajo el home indicator (PWA instalada) | Faltaba `viewportFit: 'cover'` → `env(safe-area-inset-*)` = 0 | `viewportFit: 'cover'` en el export `viewport` (`app/layout.tsx`) |
+| Pie del menú lateral fuera de pantalla con barra de URL visible | `h-screen` (100vh = viewport grande) en elemento fixed | `h-full` (en fixed, el % sigue el viewport dinámico) en `app-sidebar.tsx` |
+| Menú lateral tapado por el bottom nav | Ambos z-50 y el nav va después en el DOM | Overlay del menú a z-[55]/z-[60] + botón contextual "Cerrar menú" (prop `mobile` en `AppSidebar`) |
+
+⚠️ **Hallazgo de tooling (LECCIONES.md):** turbopack en dev no recompiló un `@apply` editado (sirvió el chunk con otros cambios del MISMO archivo pero sin ese). Verificar el chunk CSS servido, no solo el fuente; declaraciones críticas en CSS plano.
+
+### 7.2 Pendiente de validación en dispositivo real
+
+No hay Safari/iOS en el entorno de desarrollo (Puppeteer = Blink). Los fixes atacan los mecanismos documentados de iOS, pero la confirmación final es **en el iPhone del PO**: arrastre lateral en operación/reportes/salud, menú hamburguesa con barra de URL visible, topbar vs notch en modo instalado.
+
+---
+
+## 8. PLAN DE LA PRÓXIMA SESIÓN
+
+**Estado de partida:** rama `claude/heuristic-yonath-8b3363` en `7cdb16b`, **sincronizada con `origin/feature/t_0126143d`** (mismo HEAD verificado 2026-06-12); son **25 commits sobre `dev`**, aún sin merge. Suite **99/99** en 17 archivos (6 tests de contrato intocables: `alert-class`, `db-timezone`, `users-rbac`, `alert-vocabulary`, `resolution-notes`, `resolution-label`). Issues #48–#56 **abiertos en GitHub a propósito** (el PO pidió cerrarlos solo tras su validación manual). Claves VAPID en `.env.local` (gitignored — regenerar con `npx web-push generate-vapid-keys` si se pierde). Para levantar la app con push: `set -a; source .env.local; set +a; npm run dev`.
+
+### 8.0 Protocolo de inicio
+
+```
+1. Protocolo de lectura (CLAUDE.md global + proyecto + LECCIONES_APRENDIDAS.md + confirmación)
+2. Leer este HANDOFF (§6.R, §7 y este §8) + LECCIONES.md (25 reglas)
+3. git status / git log -25  → HEAD debe seguir sincronizado con origin/feature/t_0126143d; decidir merge/PR a dev con el PO
+4. npm install && npm run db:verify && npm test  → debe dar 99/99 verde
+5. set -a; source .env.local; set +a; npm run dev  → web :3000, api :4000 (push enabled:true)
+```
+
+### 8.1 Bloque 1 — Validaciones manuales del PO (≈20 min, desbloquea los cierres)
+
+| Validación | Cómo | Cierra |
+|---|---|---|
+| Push E2E | Chrome del PO → login admin → permitir notificaciones → atender+llamar+escalar una alerta → cerrar pestaña → notificación llega → clic abre detalle → SELECT (solo lectura, protocolo BD) de `ale_notificacion` channel PUSH status SENT | Bloque F §5.2 |
+| Instalar PWA | Chrome → menú ⋮ → "Instalar app" en localhost:3000 | #48 |
+| iPhone real | Arrastre lateral en operación/reportes/salud; menú hamburguesa; topbar vs notch instalada | §7.2 |
+| Fixes #50–#56 | Lista de validaciones por issue entregada en la sesión (resolución con/sin nota, leyenda login, avatar "C", popover 390px, aviso /reportes) | #50–#56 |
+
+Tras validar: `gh issue close <n> --comment` con evidencia (aprobación del PO por tanda). #49 queda abierto (decisión diferida al spike NVR — los heartbeats actuales son datos inventados, dixit PO 2026-06-11).
+
+### 8.2 Bloque 2 — Trabajo de desarrollo (en orden)
+
+1. **Spike NVR físico** (§3.1) si el hardware llegó — bloqueante del hito 25-jun, prioridad sobre todo lo demás. Incluye decisión #49 con heartbeats reales.
+2. **PR/merge de la rama a `dev`** (con aprobación): 25 commits acumulados; mientras más crezca, más caro el merge.
+3. **D11 tanda 1** (mocks→seed): `GET /tenants` + zonas; KPIs de /reportes desde BD (hoy tienen aviso de demo, falta el dato real).
+4. **Backlog pre-go-live §3.5** + corregir la línea `public/` de `.gitignore` (hoy obliga a `git add -f` por asset) + rotar `dev-ingest-key` y credenciales demo.
+
+### 8.3 Reglas vigentes
+
+- Un goal verificable por tarea; máximo 3 diagnósticos por bloqueo antes de escalar al PO.
+- Mobile-first 390×844 (editor de reglas en desktop). Los 6 tests de contrato NO se tocan.
+- Commits/push/cierres de issues con aprobación explícita del PO. Checklist de secretos antes de cada commit.
+- Al cerrar: suite verde, LECCIONES.md con lo no obvio, este HANDOFF actualizado (§8 marcado con resultados + plan siguiente).
+
+---
+
+*Actualizado el 2026-06-12 al cierre de la sesión de responsividad iOS. Si este documento contradice al código, el código + la suite de tests son la verdad — y hay que corregir este documento.*
