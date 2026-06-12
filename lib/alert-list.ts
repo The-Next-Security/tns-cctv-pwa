@@ -15,6 +15,22 @@ export const ALERT_SORT_OPTIONS = Object.keys(ALERT_SORT_LABELS) as AlertSortBy[
 /** Mapa opcional zone_id → nombre, para ordenar por zona cuando la alerta no trae la relación expandida */
 export type ZoneNameMap = Record<number, string>
 
+/** Ventana SLA operativa: toda alerta debería resolverse dentro de las 48h (D12) */
+export const SLA_WINDOW_MS = 48 * 60 * 60 * 1000
+
+const OPEN_STATUSES: ReadonlyArray<Alert['status']> = ['pendiente', 'en_revision', 'escalada']
+
+/**
+ * Una alerta abierta que superó la ventana SLA de 48h está "vencida": nunca se
+ * archiva, se destaca para que no desaparezca del radar operativo (D12).
+ */
+export function isSlaOverdue(alert: Alert, now: number = Date.now()): boolean {
+  if (!OPEN_STATUSES.includes(alert.status)) return false
+  const created = resolveAlertDateValue(alert)
+  if (created === 0) return false
+  return now - created > SLA_WINDOW_MS
+}
+
 const CRITICALITY_RANK: Record<Criticality, number> = {
   critica: 0,
   alta: 1,

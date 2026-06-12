@@ -281,11 +281,66 @@ function createApp(deps = {}) {
   });
 
   // --- Contrato de alertas para el frontend (requiere store con soporte) ---
+  // Ciclo de vida (D12): scope=operativa acota la consola a abiertas + cerradas
+  // <48h; scope=historial es la búsqueda forense paginada (solo supervisor+).
+  const ALERT_HISTORY_ROLES = ['supervisor', 'responsable_seguridad', 'admin_parque'];
+
   app.get('/api/v1/alerts', async (req, res) => {
+    const scopeSchema = z.object({
+      scope: z.enum(['operativa', 'historial']).optional(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+      zone_id: z.coerce.number().int().positive().optional(),
+      criticality: z.enum(['baja', 'media', 'alta', 'critica']).optional(),
+      plate: z.string().max(16).optional(),
+      resolved_by: z.string().max(64).optional(),
+      page: z.coerce.number().int().min(1).default(1),
+      pageSize: z.coerce.number().int().min(1).max(100).default(25),
+    });
+    const parsed = scopeSchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json(errorEnvelope('VALIDATION_ERROR', 'invalid query', req.requestId, parsed.error.issues));
+    }
+    const q = parsed.data;
+    for (const key of ['from', 'to']) {
+      if (q[key] && Number.isNaN(new Date(q[key]).getTime())) {
+        return res.status(400).json(errorEnvelope('VALIDATION_ERROR', `'${key}' no es una fecha válida`, req.requestId));
+      }
+    }
+
+    // QA-05: el guard corre antes que la disponibilidad del store, para que un
+    // rol sin permiso reciba 403 (y no 501) también con el store en memoria.
+    if (q.scope === 'historial' && !ALERT_HISTORY_ROLES.includes(req.user?.role)) {
+      return res.status(403).json(errorEnvelope('FORBIDDEN', 'rol sin permiso para el historial de alertas', req.requestId));
+    }
+
+    if (q.scope === 'historial') {
+      if (typeof store.searchAlertHistory !== 'function') {
+        return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'historial no disponible en este store', req.requestId));
+      }
+      const { items, total } = await store.searchAlertHistory({
+        from: q.from,
+        to: q.to,
+        zoneId: q.zone_id,
+        criticality: q.criticality,
+        plate: q.plate,
+        resolvedBy: q.resolved_by,
+        page: q.page,
+        pageSize: q.pageSize,
+      });
+      const pagination = {
+        page: q.page,
+        page_size: q.pageSize,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / q.pageSize)),
+      };
+      return res.status(200).json({ items, data: items, pagination, page: q.page, page_size: q.pageSize, total, request_id: req.requestId });
+    }
+
     if (typeof store.listAlerts !== 'function') {
       return res.status(501).json(errorEnvelope('NOT_IMPLEMENTED', 'alerts no disponible en este store', req.requestId));
     }
-    const items = await store.listAlerts();
+    const items = await store.listAlerts({ scope: q.scope });
     const pagination = { page: 1, page_size: items.length, total: items.length, total_pages: 1 };
     // Devolvemos ambas formas: `items` (contrato src) y `data`/`pagination` (PaginatedResponse del frontend).
     return res.status(200).json({ items, data: items, pagination, page: 1, page_size: items.length, total: items.length, request_id: req.requestId });

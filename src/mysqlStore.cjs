@@ -254,6 +254,9 @@ function mapAlertRow(r, maps = {}) {
     // del timeline; la decisión del SP (CONFIRMED/DISMISSED) se expone aparte.
     resolution_notes: r.close_comment || null,
     resolution_decision: r.close_decision || null,
+    // Ciclo de vida: fecha/actor del último CLOSED del timeline; null si sigue abierta.
+    resolved_at: r.closed_at ? toIso(r.closed_at) : null,
+    resolved_by: r.closed_by ?? null,
     // D4: la llamada vive en el timeline (CALL_REGISTERED), no como columna de ale_evento.
     llamada_at: r.llamada_at ? toIso(r.llamada_at) : null,
     zone: zoneId ? { id: zoneId, name: ZONE_NAMES[r.zone_code] || r.zone_code, active: true } : undefined,
@@ -265,6 +268,51 @@ function toIso(value) {
   const s = String(value);
   return s.includes('T') ? s : s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z');
 }
+
+// Ciclo de vida de alertas: una alerta cerrada permanece en la vista operativa
+// durante la ventana SLA (48h) y luego pasa al historial forense. El corte es
+// lógico (condición de query sobre el cierre del timeline), sin archivado físico.
+const OPERATIONAL_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+// ISO/Date -> 'YYYY-MM-DD HH:MM:SS.mmm' para comparar contra DATETIME(3) (UTC, QA-04).
+function toSqlDateTime(d) {
+  return d.toISOString().replace('T', ' ').replace('Z', '');
+}
+
+function operationalCutoffSql() {
+  return toSqlDateTime(new Date(Date.now() - OPERATIONAL_WINDOW_MS));
+}
+
+// FROM compartido entre listAlerts y searchAlertHistory: enriquece cada evento
+// con el último cierre del timeline (decisión, nota, fecha y actor) y la llamada.
+const ALERT_FROM_SQL = `
+     FROM ale_evento e
+     LEFT JOIN (
+       SELECT lt.id_evento, lt.decision, lt.comment_text, lt.occurred_at AS closed_at, lt.actor_id_usuario AS closed_by
+         FROM log_evento_timeline lt
+         JOIN (
+           SELECT id_evento, MAX(occurred_at) mx
+             FROM log_evento_timeline
+            WHERE to_state = 'CLOSED'
+            GROUP BY id_evento
+         ) m ON m.id_evento = lt.id_evento AND m.mx = lt.occurred_at AND lt.to_state = 'CLOSED'
+     ) t ON t.id_evento = e.id_evento
+     LEFT JOIN (
+       SELECT id_evento, MAX(occurred_at) AS llamada_at
+         FROM log_evento_timeline
+        WHERE action_type = 'CALL_REGISTERED'
+        GROUP BY id_evento
+     ) c ON c.id_evento = e.id_evento`;
+
+const ALERT_SELECT_SQL = `SELECT e.*, t.decision AS close_decision, t.comment_text AS close_comment, t.closed_at, t.closed_by, c.llamada_at${ALERT_FROM_SQL}`;
+
+// criticality del frontend -> condición sobre severity (inversa de severityToCriticality).
+const CRITICALITY_SQL = {
+  critica: 'e.severity >= 5',
+  alta: 'e.severity = 4',
+  media: 'e.severity = 3',
+  baja: 'e.severity <= 2',
+};
 
 // ISO UTC -> 'YYYY-MM-DD HH:MM:SS.mmm' para comparar contra DATETIME(3) (UTC, QA-04).
 // Sin from/to se asume la última semana.
@@ -678,31 +726,67 @@ class MysqlStore {
     return { user: users.find((u) => u.id === userId) };
   }
 
-  async listAlerts() {
+  async listAlerts({ scope } = {}) {
     const maps = await this.loadEnrichmentMaps();
+    // scope=operativa: toda alerta abierta (sin importar antigüedad) + las
+    // cerradas dentro de la ventana SLA. Las demás viven en el historial.
+    const where = scope === 'operativa' ? `WHERE e.state <> 'CLOSED' OR t.closed_at >= ?` : '';
+    const params = scope === 'operativa' ? [operationalCutoffSql()] : [];
     const [rows] = await this.pool.query(
-      `SELECT e.*, t.decision AS close_decision, t.comment_text AS close_comment, c.llamada_at
-         FROM ale_evento e
-         LEFT JOIN (
-           SELECT lt.id_evento, lt.decision, lt.comment_text
-             FROM log_evento_timeline lt
-             JOIN (
-               SELECT id_evento, MAX(occurred_at) mx
-                 FROM log_evento_timeline
-                WHERE to_state = 'CLOSED'
-                GROUP BY id_evento
-             ) m ON m.id_evento = lt.id_evento AND m.mx = lt.occurred_at AND lt.to_state = 'CLOSED'
-         ) t ON t.id_evento = e.id_evento
-         LEFT JOIN (
-           SELECT id_evento, MAX(occurred_at) AS llamada_at
-             FROM log_evento_timeline
-            WHERE action_type = 'CALL_REGISTERED'
-            GROUP BY id_evento
-         ) c ON c.id_evento = e.id_evento
+      `${ALERT_SELECT_SQL}
+        ${where}
         ORDER BY e.occurred_at DESC
-        LIMIT 200`
+        LIMIT 200`,
+      params
     );
     return rows.map((r) => mapAlertRow(r, maps));
+  }
+
+  // Historial forense: alertas cerradas fuera de la ventana operativa de 48h,
+  // con filtros de investigación y paginación server-side.
+  async searchAlertHistory({ from, to, zoneId, criticality, plate, resolvedBy, page = 1, pageSize = 25 } = {}) {
+    const maps = await this.loadEnrichmentMaps();
+    const where = [`e.state = 'CLOSED'`, `t.closed_at < ?`];
+    const params = [operationalCutoffSql()];
+
+    if (from) {
+      where.push(`e.occurred_at >= ?`);
+      params.push(toSqlDateTime(new Date(from)));
+    }
+    if (to) {
+      where.push(`e.occurred_at <= ?`);
+      params.push(toSqlDateTime(new Date(to)));
+    }
+    if (zoneId != null) {
+      where.push(`e.zone_code = ?`);
+      params.push(`zone-${zoneId}`);
+    }
+    if (criticality && CRITICALITY_SQL[criticality]) {
+      where.push(CRITICALITY_SQL[criticality]);
+    }
+    if (plate) {
+      where.push(`REPLACE(REPLACE(UPPER(e.plate), '-', ''), ' ', '') LIKE ?`);
+      params.push(`%${String(plate).replace(/[^A-Za-z0-9]/g, '').toUpperCase()}%`);
+    }
+    if (resolvedBy) {
+      where.push(`t.closed_by = ?`);
+      params.push(resolvedBy);
+    }
+
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+    const [countRows] = await this.pool.query(
+      `SELECT COUNT(*) AS total${ALERT_FROM_SQL} ${whereSql}`,
+      params
+    );
+    const total = countRows[0]?.total ?? 0;
+    const [rows] = await this.pool.query(
+      `${ALERT_SELECT_SQL}
+        ${whereSql}
+        ORDER BY e.occurred_at DESC
+        LIMIT ? OFFSET ?`,
+      [...params, pageSize, (page - 1) * pageSize]
+    );
+    return { items: rows.map((r) => mapAlertRow(r, maps)), total };
   }
 
   // --- Ingresos vehiculares (adm_ingreso) ---
@@ -1060,6 +1144,14 @@ class MysqlStore {
            WHERE lt.id_evento = e.id_evento AND lt.to_state = 'CLOSED'
            ORDER BY lt.occurred_at DESC LIMIT 1
         ) AS close_comment, (
+          SELECT lt.occurred_at FROM log_evento_timeline lt
+           WHERE lt.id_evento = e.id_evento AND lt.to_state = 'CLOSED'
+           ORDER BY lt.occurred_at DESC LIMIT 1
+        ) AS closed_at, (
+          SELECT lt.actor_id_usuario FROM log_evento_timeline lt
+           WHERE lt.id_evento = e.id_evento AND lt.to_state = 'CLOSED'
+           ORDER BY lt.occurred_at DESC LIMIT 1
+        ) AS closed_by, (
           SELECT MAX(lt.occurred_at) FROM log_evento_timeline lt
            WHERE lt.id_evento = e.id_evento AND lt.action_type = 'CALL_REGISTERED'
         ) AS llamada_at

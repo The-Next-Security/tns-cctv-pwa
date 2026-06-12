@@ -162,6 +162,8 @@ export interface Alert {
   plate?: string
   snapshot_url?: string | null
   resolved_at?: string | null
+  /** id_usuario (CHAR 26) del actor que cerró la alerta, según el timeline */
+  resolved_by?: string | null
   resolution_notes?: string | null
   /** Decisión del SP al cerrar (CONFIRMED/DISMISSED) — la nota va en resolution_notes (QA-09). */
   resolution_decision?: string | null

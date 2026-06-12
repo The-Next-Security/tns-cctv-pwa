@@ -70,7 +70,13 @@ export const auth = {
 export const alerts = {
   list: (params?: {
     status?: string
+    /** Ciclo de vida (D12): 'operativa' = abiertas + cerradas <48h; 'historial' = forense (supervisor+) */
+    scope?: 'operativa' | 'historial'
     zone_id?: number
+    criticality?: import('./types').Criticality
+    plate?: string
+    /** id_usuario del operador que cerró la alerta (solo scope=historial) */
+    resolved_by?: string
     from?: string
     to?: string
     page?: number

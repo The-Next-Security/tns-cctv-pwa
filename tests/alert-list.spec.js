@@ -19,7 +19,7 @@ function loadAlertListModule() {
   return module.exports
 }
 
-const { sortAlertsByMostRecent, sortAlerts, ALERT_SORT_OPTIONS, ALERT_SORT_LABELS } = loadAlertListModule()
+const { sortAlertsByMostRecent, sortAlerts, ALERT_SORT_OPTIONS, ALERT_SORT_LABELS, isSlaOverdue, SLA_WINDOW_MS } = loadAlertListModule()
 
 describe('sortAlertsByMostRecent', () => {
   it('ordena las alertas desde la mas reciente a la mas antigua usando timestamp', () => {
@@ -121,5 +121,45 @@ describe('sortAlerts', () => {
     ]
     expect(sortAlerts(alerts, 'recientes').map(a => a.id)).toEqual([2, 1])
     expect(sortAlerts(alerts, 'antiguas').map(a => a.id)).toEqual([1, 2])
+  })
+})
+
+// D12: ciclo de vida — una alerta abierta >48h está vencida; las cerradas nunca.
+describe('isSlaOverdue', () => {
+  const NOW = Date.parse('2026-06-12T12:00:00.000Z')
+  const hoursAgo = h => new Date(NOW - h * 60 * 60 * 1000).toISOString()
+
+  it('exporta la ventana SLA de 48 horas', () => {
+    expect(SLA_WINDOW_MS).toBe(48 * 60 * 60 * 1000)
+  })
+
+  it.each(['pendiente', 'en_revision', 'escalada'])(
+    'alerta %s con más de 48h está vencida',
+    status => {
+      expect(isSlaOverdue({ status, timestamp: hoursAgo(49) }, NOW)).toBe(true)
+    }
+  )
+
+  it('alerta abierta con menos de 48h no está vencida', () => {
+    expect(isSlaOverdue({ status: 'pendiente', timestamp: hoursAgo(47) }, NOW)).toBe(false)
+  })
+
+  it('exactamente 48h aún no está vencida (el corte es estricto)', () => {
+    expect(isSlaOverdue({ status: 'pendiente', timestamp: hoursAgo(48) }, NOW)).toBe(false)
+  })
+
+  it.each(['resuelta', 'descartada'])(
+    'alerta %s antigua nunca se marca vencida',
+    status => {
+      expect(isSlaOverdue({ status, timestamp: hoursAgo(200) }, NOW)).toBe(false)
+    }
+  )
+
+  it('usa created_at como respaldo cuando timestamp no viene informado', () => {
+    expect(isSlaOverdue({ status: 'pendiente', timestamp: '', created_at: hoursAgo(72) }, NOW)).toBe(true)
+  })
+
+  it('sin fecha válida no se marca vencida', () => {
+    expect(isSlaOverdue({ status: 'pendiente', timestamp: 'no-es-fecha' }, NOW)).toBe(false)
   })
 })

@@ -23,7 +23,9 @@ export type StatusView =
   | 'resueltas'
   | 'criticas'
   | 'baja_prioridad'
+  | 'vencidas'
   | 'all'
+  | 'historial'
 
 export const STATUS_VIEW_LABELS: Record<StatusView, string> = {
   activas: 'Alertas activas',
@@ -33,18 +35,21 @@ export const STATUS_VIEW_LABELS: Record<StatusView, string> = {
   resueltas: 'Resueltas hoy',
   criticas: 'Críticas sin atender',
   baja_prioridad: 'Baja prioridad sin atender',
+  vencidas: 'SLA vencido (+48h)',
   all: 'Todas las alertas',
+  historial: 'Historial forense',
 }
 
 export type CriticalityFilter = 'all' | 'critica' | 'baja_prioridad'
 
 /** Vistas representadas en el segmented control siempre visible; el resto vive en el panel de filtros o en las StatCards */
-const SEGMENT_VIEWS: ReadonlyArray<StatusView> = ['activas', 'resueltas', 'all']
+const SEGMENT_VIEWS: ReadonlyArray<StatusView> = ['activas', 'resueltas', 'all', 'historial']
 
 const PANEL_STATUS_OPTIONS: ReadonlyArray<{ value: StatusView; label: string }> = [
   { value: 'pendiente', label: 'Pendientes' },
   { value: 'en_revision', label: 'En revisión' },
   { value: 'escaladas', label: 'Escaladas' },
+  { value: 'vencidas', label: 'SLA vencido' },
 ]
 
 const TAB_TRIGGER_CLASS =
@@ -60,6 +65,8 @@ interface AlertsFilterBarProps {
   activeAlertsCount: number
   isLoading: boolean
   onRefresh: () => void
+  /** D12: pestaña de búsqueda forense, visible solo para supervisor+ */
+  showHistoryTab?: boolean
 }
 
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
@@ -88,12 +95,14 @@ export function AlertsFilterBar({
   activeAlertsCount,
   isLoading,
   onRefresh,
+  showHistoryTab = false,
 }: AlertsFilterBarProps) {
   const isMobile = useIsMobile()
   const [panelOpen, setPanelOpen] = useState(false)
 
   const segmentValue = SEGMENT_VIEWS.includes(statusView) ? statusView : ''
   const isDetailedView = !SEGMENT_VIEWS.includes(statusView)
+  const isHistoryView = statusView === 'historial'
   const panelStatusValue = PANEL_STATUS_OPTIONS.some(option => option.value === statusView) ? statusView : ''
   const selectedZone = PARK_ZONES.find(zone => String(zone.id) === zoneFilter)
 
@@ -233,10 +242,15 @@ export function AlertsFilterBar({
             <TabsTrigger value="all" className={TAB_TRIGGER_CLASS}>
               Todas
             </TabsTrigger>
+            {showHistoryTab && (
+              <TabsTrigger value="historial" className={TAB_TRIGGER_CLASS}>
+                Historial
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
 
-        {isMobile ? (
+        {isHistoryView ? null : isMobile ? (
           <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
             <SheetTrigger asChild>{filterButton}</SheetTrigger>
             <SheetContent
@@ -270,7 +284,7 @@ export function AlertsFilterBar({
         </Button>
       </div>
 
-      {activeFilterCount > 0 && (
+      {!isHistoryView && activeFilterCount > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {isDetailedView && (
             <FilterChip

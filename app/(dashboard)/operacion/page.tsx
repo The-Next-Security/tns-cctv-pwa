@@ -25,8 +25,10 @@ import {
   type CriticalityFilter,
   type StatusView,
 } from '@/components/operacion/alerts-filter-bar'
+import { AlertsHistory, type AlertsHistoryFilters } from '@/components/operacion/alerts-history'
 import { useRealtime } from '@/hooks/use-realtime'
 import { alerts as alertsApi } from '@/lib/api'
+import { useUser } from '@/lib/auth'
 import { PARK_ZONES } from '@/lib/constants'
 import { toast } from 'sonner'
 import { DEMO_ALERT_POPUP_KEY } from '@/lib/reset-demo'
@@ -35,11 +37,14 @@ import { UrgencyText } from '@/components/ui/urgency-badge'
 import type { Alert } from '@/lib/types'
 import { getAlertClass } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { ALERT_SORT_LABELS, ALERT_SORT_OPTIONS, sortAlerts, type AlertSortBy, type ZoneNameMap } from '@/lib/alert-list'
+import { ALERT_SORT_LABELS, ALERT_SORT_OPTIONS, isSlaOverdue, sortAlerts, type AlertSortBy, type ZoneNameMap } from '@/lib/alert-list'
 
 const VALID_STATUS_VIEWS: ReadonlyArray<StatusView> = [
-  'activas', 'pendiente', 'en_revision', 'escaladas', 'resueltas', 'criticas', 'baja_prioridad', 'all',
+  'activas', 'pendiente', 'en_revision', 'escaladas', 'resueltas', 'criticas', 'baja_prioridad', 'vencidas', 'all', 'historial',
 ]
+
+// D12: el historial forense es función de mando — espejo del guard del backend.
+const HISTORY_ROLES: ReadonlyArray<string> = ['supervisor', 'responsable_seguridad', 'admin_parque']
 const VALID_CRITICALITY_FILTERS: ReadonlyArray<CriticalityFilter> = ['all', 'critica', 'baja_prioridad']
 
 const ZONE_NAMES: ZoneNameMap = Object.fromEntries(PARK_ZONES.map(zone => [zone.id, zone.name]))
@@ -50,6 +55,7 @@ function parseEnumParam<T extends string>(raw: string | null, valid: ReadonlyArr
 
 const STATUS_VIEW_URGENCY: Partial<Record<StatusView, UrgencyLevel>> = {
   criticas: 'critical',
+  vencidas: 'critical',
   baja_prioridad: 'pending',
   pendiente: 'pending',
   en_revision: 'review',
@@ -95,6 +101,11 @@ function matchesStatusView(alert: Alert, view: StatusView): boolean {
         alert.status === 'en_revision' ||
         alert.status === 'escalada'
       )
+    case 'vencidas':
+      return isSlaOverdue(alert)
+    case 'historial':
+      // El historial no filtra el set operativo: se consulta al servidor aparte (D12).
+      return false
     case 'all':
       return true
     default:
@@ -106,9 +117,13 @@ function OperacionPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
+  const { user } = useUser()
 
-  // QA-03: los filtros y el orden viven en la URL — deep-links, sobreviven a refresh/PWA re-launch
-  const statusView = parseEnumParam(searchParams.get('view'), VALID_STATUS_VIEWS, 'activas')
+  // D12: la pestaña Historial es solo para supervisor+; un deep-link sin permiso cae en 'activas'.
+  const canSeeHistory = user != null && HISTORY_ROLES.includes(user.role)
+  const rawStatusView = parseEnumParam(searchParams.get('view'), VALID_STATUS_VIEWS, 'activas')
+  const statusView = rawStatusView === 'historial' && !canSeeHistory ? 'activas' : rawStatusView
+  const isHistoryView = statusView === 'historial'
   const criticalityFilter = parseEnumParam(searchParams.get('crit'), VALID_CRITICALITY_FILTERS, 'all')
   const sortBy = parseEnumParam(searchParams.get('sort'), ALERT_SORT_OPTIONS, 'recientes')
   const zoneParam = searchParams.get('zone')
@@ -141,6 +156,32 @@ function OperacionPageContent() {
     [updateParams]
   )
 
+  // D12: filtros del historial forense, también en la URL (deep-links de investigación)
+  const historyPageParam = parseInt(searchParams.get('hpage') ?? '1', 10)
+  const historyFilters: AlertsHistoryFilters = {
+    from: searchParams.get('hfrom') ?? '',
+    to: searchParams.get('hto') ?? '',
+    zone: searchParams.get('hzone') ?? 'all',
+    criticality: searchParams.get('hcrit') ?? 'all',
+    plate: searchParams.get('hplate') ?? '',
+    operator: searchParams.get('hop') ?? 'all',
+    page: Number.isFinite(historyPageParam) && historyPageParam >= 1 ? historyPageParam : 1,
+  }
+  const setHistoryFilters = useCallback(
+    (updates: Partial<AlertsHistoryFilters>) => {
+      const mapped: Record<string, string | null> = {}
+      if (updates.from !== undefined) mapped.hfrom = updates.from || null
+      if (updates.to !== undefined) mapped.hto = updates.to || null
+      if (updates.zone !== undefined) mapped.hzone = updates.zone === 'all' ? null : updates.zone
+      if (updates.criticality !== undefined) mapped.hcrit = updates.criticality === 'all' ? null : updates.criticality
+      if (updates.plate !== undefined) mapped.hplate = updates.plate || null
+      if (updates.operator !== undefined) mapped.hop = updates.operator === 'all' ? null : updates.operator
+      if (updates.page !== undefined) mapped.hpage = updates.page <= 1 ? null : String(updates.page)
+      updateParams(mapped)
+    },
+    [updateParams]
+  )
+
   const [priorityAlert, setPriorityAlert] = useState<Alert | null>(null)
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
   const [showPopup, setShowPopup] = useState(false)
@@ -150,7 +191,8 @@ function OperacionPageContent() {
 
   const loadAlerts = useCallback(async () => {
     try {
-      const res = await alertsApi.list()
+      // D12: la consola carga solo el conjunto operativo (abiertas + cerradas <48h)
+      const res = await alertsApi.list({ scope: 'operativa' })
       const items = (res as unknown as { data?: Alert[]; items?: Alert[] }).data
         ?? (res as unknown as { items?: Alert[] }).items
         ?? []
@@ -237,6 +279,7 @@ function OperacionPageContent() {
     inReview:           localAlerts.filter(a => a.status === 'en_revision').length,
     escalated:          localAlerts.filter(a => a.status === 'escalada').length,
     resolved:           localAlerts.filter(a => a.status === 'resuelta' || a.status === 'descartada').length,
+    slaOverdue:         localAlerts.filter(a => isSlaOverdue(a)).length,
   }
 
   const listHeadingUrgency = resolveListHeadingUrgency(statusView, stats)
@@ -416,6 +459,24 @@ function OperacionPageContent() {
           />
         </div>
 
+        {/* D12: alertas abiertas con SLA vencido — nunca se archivan, se destacan */}
+        {!isHistoryView && statusView !== 'vencidas' && stats.slaOverdue > 0 && (
+          <button
+            type="button"
+            onClick={() => setStatusView('vencidas')}
+            className="flex w-full items-center gap-2 rounded-xl border px-4 py-3 text-left text-xs sm:text-sm transition-colors hover:brightness-110"
+            style={{ backgroundColor: 'rgb(255 77 79 / 0.12)', borderColor: 'rgb(255 77 79 / 0.35)' }}
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0 text-ds-signal" aria-hidden />
+            <span className="text-ds-ink-body">
+              <span className="font-semibold text-ds-signal">
+                {stats.slaOverdue} alerta{stats.slaOverdue === 1 ? '' : 's'} con SLA vencido
+              </span>
+              {' '}— más de 48h sin resolver. Toque para revisarlas.
+            </span>
+          </button>
+        )}
+
         {/* Main panel */}
         <div className="soft-panel soft-card-compact overflow-hidden">
           {/* Filters bar — chips esenciales + panel de filtros (sin scroll horizontal en móvil) */}
@@ -430,10 +491,24 @@ function OperacionPageContent() {
               activeAlertsCount={stats.criticalPending + stats.lowPriorityPending + stats.inReview}
               isLoading={isLoading}
               onRefresh={handleRefresh}
+              showHistoryTab={canSeeHistory}
             />
           </div>
 
-          {/* List header + content */}
+          {/* D12: la pestaña Historial reemplaza la lista operativa por la búsqueda forense */}
+          {isHistoryView ? (
+            <div className="panel-compact space-y-3 sm:space-y-5">
+              <div className="min-w-0">
+                <h2 className="text-section text-sm sm:text-base font-semibold antialiased text-ds-ink-display">
+                  Historial forense
+                </h2>
+                <p className="text-xs sm:text-sm text-ds-ink-muted">
+                  Alertas cerradas hace más de 48h — búsqueda por fecha, zona, criticidad, patente y operador
+                </p>
+              </div>
+              <AlertsHistory filters={historyFilters} onFiltersChange={setHistoryFilters} />
+            </div>
+          ) : (
           <div className="panel-compact space-y-3 sm:space-y-5">
             <div className="flex items-start justify-between gap-2 sm:gap-3">
               <div className="min-w-0">
@@ -523,6 +598,7 @@ function OperacionPageContent() {
                   {statusView === 'resueltas'        && 'Aún no hay alertas cerradas en esta sesión.'}
                   {statusView === 'criticas'         && 'No hay alertas críticas sin atender en este momento.'}
                   {statusView === 'baja_prioridad'   && 'No hay alertas de baja prioridad pendientes.'}
+                  {statusView === 'vencidas'         && 'Ninguna alerta abierta supera las 48h. El SLA está al día.'}
                   {statusView === 'activas'          && 'No hay alertas activas. El sistema está funcionando correctamente.'}
                   {statusView === 'all'              && 'No hay alertas que coincidan con los filtros seleccionados.'}
                 </p>
@@ -566,6 +642,7 @@ function OperacionPageContent() {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
