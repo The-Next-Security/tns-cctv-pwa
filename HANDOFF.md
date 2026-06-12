@@ -1,10 +1,10 @@
 # HANDOFF — TNS CCTV PWA
 
 > **Para:** la próxima instancia de desarrollo (agente Claude o desarrollador humano).
-> **De:** sesiones del 2026-06-11/12 en la rama `claude/heuristic-yonath-8b3363`: (1) QA completo §5.2, (2) resolución de hallazgos #48–#56 (§6.R), (3) responsividad iOS de la PWA (§7).
+> **De:** sesiones del 2026-06-11/12 en la rama `claude/heuristic-yonath-8b3363`: (1) QA completo §5.2, (2) resolución de hallazgos #48–#56 (§6.R), (3) responsividad iOS de la PWA (§7), (4) filtros/orden de /operacion, (5) reportes CIOC desde BD (§9).
 > **Punto de partida obligatorio** de la próxima sesión. Léelo completo antes de tocar código.
 > **Misión global:** hito de pruebas con NVR reales (≈2026-06-25) y go-live (≈2026-07-02).
-> **🎯 Próxima sesión: ver §8** — validaciones manuales del PO (push E2E, instalar PWA, iPhone real), cierre de issues en GitHub, spike NVR físico si hay hardware.
+> **🎯 Próxima sesión: ver §8** — validaciones manuales del PO (push E2E, instalar PWA, iPhone real, reportes reales §9), cierre de issues en GitHub, spike NVR físico si hay hardware.
 
 ---
 
@@ -316,7 +316,7 @@ Tras validar: `gh issue close <n> --comment` con evidencia (aprobación del PO p
 
 1. **Spike NVR físico** (§3.1) si el hardware llegó — bloqueante del hito 25-jun, prioridad sobre todo lo demás. Incluye decisión #49 con heartbeats reales.
 2. **PR/merge de la rama a `dev`** (con aprobación): 25 commits acumulados; mientras más crezca, más caro el merge.
-3. **D11 tanda 1** (mocks→seed): `GET /tenants` + zonas; KPIs de /reportes desde BD (hoy tienen aviso de demo, falta el dato real).
+3. **D11 tanda 1** (mocks→seed): `GET /tenants` + zonas. ~~KPIs de /reportes desde BD~~ ✅ hecho en la sesión CIOC (§9).
 4. **Backlog pre-go-live §3.5** + corregir la línea `public/` de `.gitignore` (hoy obliga a `git add -f` por asset) + rotar `dev-ingest-key` y credenciales demo.
 
 ### 8.3 Reglas vigentes
@@ -328,4 +328,31 @@ Tras validar: `gh issue close <n> --comment` con evidencia (aprobación del PO p
 
 ---
 
-*Actualizado el 2026-06-12 al cierre de la sesión de responsividad iOS. Si este documento contradice al código, el código + la suite de tests son la verdad — y hay que corregir este documento.*
+## 9. RESULTADOS — sesión Reportes CIOC desde BD (2026-06-12)
+
+**Goal:** salto evolutivo del módulo `/reportes` (propuesta "Centro de Inteligencia Operativa y Cumplimiento" aprobada por el PO): KPIs reales desde la BD, accountability por operador, pista de auditoría y export CSV. Cubre la parte de reportes de **D11 tanda 1** (§8.2.3).
+
+**Verificación de cierre:** `npm test` **127/127** ✅ (18 archivos; incluye los tests de ordenamiento de la sesión de filtros y 19 nuevos de RBAC de reportes) · `npm run build` ✅ · E2E contra MySQL real: summary con 24 alertas/semana, KPIs cambian por período (Hoy: 6), audit-trail 63 registros paginados (5 páginas), CSV descarga con BOM, vigilante → 403 en todos los endpoints.
+
+### 9.1 Qué se construyó
+
+| Pieza | Dónde | Detalle |
+|---|---|---|
+| Agregaciones SQL | `src/mysqlStore.cjs` | `reportSummary` (KPIs + 5 series; MTTR y tiempo de toma desde `log_evento_timeline`), `reportOperators` (acciones/resueltas/descartadas/escaladas/llamadas + tiempo de toma por usuario), `reportAuditTrail` (UNION timeline operativo + `log_auditoria_api`, paginado, filtro `user_id`). Helper `reportRange` (default: última semana; fechas UTC). |
+| Endpoints | `src/reportsRoutes.cjs` (nuevo) montado en `src/app.js` | `GET /api/v1/reports/{summary,operators,audit-trail,export}`. RBAC servidor (patrón QA-05): `summary` → admin_parque·supervisor·responsable_seguridad·tecnico (= `reports.view`); `operators`/`audit-trail`/`export` → solo admin_parque·supervisor. Export CSV server-side (`;` + BOM para Excel es-CL). |
+| Cliente API + tipos | `lib/api.ts`, `lib/types.ts` | Reemplazados los 5 endpoints fantasma de `reports` (nunca existieron en el backend) por el contrato real. `exportCsv` devuelve Blob (no pasa por fetchApi/JSON). |
+| Página | `app/(dashboard)/reportes/page.tsx` | Fetch real, selector de período FUNCIONAL (hoy/semana/mes/año), skeletons, banner de error si el API falla, **aviso de demo retirado** (QA-15/D6 cumplido con dato real). |
+| Sección auditoría | `components/reports/audit-section.tsx` (nuevo) | "Actividad por Operador" + "Pista de Auditoría" paginada con acciones en español ("Tomó la alerta", "Escaló"...). Tras RoleGate admin_parque·supervisor (y 403 del servidor igualmente). |
+| Test de contrato | `tests/reports-rbac.contract.spec.js` | 19 casos: 403 por rol, 501 del store en memoria para roles permitidos (prueba que el guard deja pasar), 401 sin token. **Se suma a los tests de contrato intocables.** |
+
+### 9.2 Notas para la próxima sesión
+
+- **El API dev del PO (puerto 4000) requiere reinicio** para servir `/api/v1/reports/*` (Node no recarga; el dev web :3000 sí tomó la UI nueva por hot-reload).
+- Los rewrites de Next se hornean en el build: `next start` usa el `API_PROXY_TARGET` del momento del `next build` (hallazgo de tooling; el `.next` quedó con el default :4000).
+- Validación PO pendiente (sumar a §8.1): abrir `/reportes` como admin (KPIs reales + auditoría), como vigilante el menú no muestra Reportes y el API responde 403; probar "Exportar Reporte" (CSV con filtros activos).
+- Fase 4 del plan CIOC (post go-live, backlog): PDF firmado con hash, reportes programados por email, uptime histórico de fuentes (hoy `sal_*` sin datos reales — depende del spike NVR).
+- D11 restante: `GET /tenants` + zonas desde BD (la parte de reportes ya está).
+
+---
+
+*Actualizado el 2026-06-12 al cierre de la sesión de reportes CIOC. Si este documento contradice al código, el código + la suite de tests son la verdad — y hay que corregir este documento.*
