@@ -67,6 +67,37 @@
   "ok" por diseño (no se evalúa antigüedad hasta el primer heartbeat). Decisión
   pendiente del PO: estado "sin datos" explícito. No "corregir" sin esa decisión.
 
+- **RULE:** La columna de notas del timeline es `log_evento_timeline.comment_text`,
+  NO `comment` — el mapper de la API la renombra a `comment` al exponerla, así que
+  leer la salida del API no sirve para escribir SQL. Verificar nombres contra el
+  DDL (`01_04_tablas_log.sql`) antes de tocar queries (error real del fix #50).
+
+- **RULE:** `notes || target.decision` como comment es el mismo anti-patrón que los
+  alias de vocabulario: fosiliza un enum interno como dato de usuario. Sin nota del
+  operador, `comment_text` debe quedar NULL; la decisión vive en su propia columna
+  (`decision`). De ahí salía el "Resuelta: CONFIRMED" de QA-13 (#54). Guardias:
+  `tests/resolution-notes.contract.spec.js` y `tests/resolution-label.contract.spec.js`.
+
+- **RULE:** El tipo `User` tiene `nombre` Y `full_name`, pero `/auth/me` solo llena
+  `nombre`. Todo componente que muestre al usuario debe derivar
+  `nombre ?? full_name ?? email` (el avatar "U" de QA-14/#55 venía de leer solo
+  `full_name`). Ojo con el naming dual frontend/BD ya documentado para roles.
+
+- **RULE:** `.gitignore` ignora `public/` COMPLETO (línea `public/`) aunque el
+  comentario de arriba diga lo contrario. Todo asset nuevo de `public/` requiere
+  `git add -f` (así se versionaron `sw.js`, `tns-logo.png` y ahora los íconos PWA
+  de #48). Arreglar esa línea está en el backlog pre-go-live.
+
+- **RULE:** `beforeinstallprompt` NO dispara en Chrome headless — la instalabilidad
+  PWA se verifica por criterios (manifest con íconos 192/512 `purpose any` + SW
+  activo + start_url) y se confirma a mano en el Chrome del PO.
+
+- **RULE:** Para mostrar acciones de escalación fuera de la consola, replicar el
+  patrón del card (`alert-card.tsx`): forzar `status: 'en_revision'` SOLO para la
+  visibilidad de `CallContactsPopover`/`EscalateButton` (`showEscalationActions`
+  exige en_revision). El SP sí permite NEW→ESCALATING, así que el flujo
+  llamar→escalar desde una pendiente es válido server-side (#51).
+
 ## Estado al cierre de sesión 2026-06-11
 
 **Verificación:** `npm test` 76/76 verde (×2 desde cero) · `tsc --noEmit` limpio ·

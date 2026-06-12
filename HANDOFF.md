@@ -4,7 +4,7 @@
 > **De:** sesión QA 2026-06-11 (rama `claude/heuristic-yonath-8b3363`), que ejecutó completo el checklist §5.2, corrigió 4 bugs P1 con regresión y registró 9 issues en GitHub.
 > **Punto de partida obligatorio** de la próxima sesión. Léelo completo antes de tocar código.
 > **Misión global:** hito de pruebas con NVR reales (≈2026-06-25) y go-live (≈2026-07-02).
-> **🎯 Próxima sesión: RESOLUCIÓN DE HALLAZGOS QA — issues #48–#56 + push E2E manual** (ver §6; resultados QA en §5.2).
+> **🎯 Próxima sesión: validaciones manuales del PO (push E2E + instalar PWA), decisión #49, spike NVR físico** (ver §6.6; resultados de la sesión de resolución en §6).
 
 ---
 
@@ -231,6 +231,33 @@ No multi-tenant enforcement · no streaming en vivo · no ORM · no rehacer UI/d
 |---|---|---|
 | [#55](https://github.com/The-Next-Security/tns-cctv-pwa/issues/55) QA-14 | Inicial real en avatar; `collisionPadding`/max-width al popover de contactos | Sin scroll horizontal en 390×844 |
 | [#56](https://github.com/The-Next-Security/tns-cctv-pwa/issues/56) QA-15 | Mínimo: aviso "datos de demostración" en /reportes; ideal: tanda 1 de D11 (KPIs desde BD) + tokens ds-* en gráficos | Sin mock silencioso (D6) |
+
+### 6.R RESULTADOS — sesión de resolución 2026-06-11 (tarde)
+
+**Verificación de cierre:** `npm test` **99/99** ✅ (4 archivos de test nuevos: +2 de contrato) · `tsc --noEmit` ✅ · `npm run build` ✅ · scan de secretos limpio · cada fix verificado en navegador 390×844 y contra la BD (vía API).
+
+| Issue | Estado | Resumen del fix |
+|---|---|---|
+| #51 QA-10 | ✅ RESUELTO (pendiente cierre en GitHub) | Card de acciones unificado en `/operacion/alerta/[id]`: Atender/Revisada/Llamar/Escalar/Descartar con el patrón del card de consola (forzar `en_revision` para visibilidad). E2E verificado: timeline BD registra NEW→IN_REVIEW→CALL_REGISTERED→ESCALATING desde el detalle. |
+| #50 QA-09 | ✅ RESUELTO | `resolution_notes` = `comment_text` del último CLOSED del timeline; decisión del SP expuesta aparte como `resolution_decision`. Ojo: la columna es `comment_text`, no `comment`. Test: `resolution-notes.contract.spec.js`. |
+| #54 QA-13 | ✅ RESUELTO | `getResolutionLabel` + `RESOLUTION_DECISION_LABELS` en `lib/types.ts` (traduce CONFIRMED→confirmada, etc., incluso datos legacy); causa raíz adicional: `attendAlert` fosilizaba el enum como comment cuando no había nota (`notes \|\| target.decision` → `notes \|\| null`). Test: `resolution-label.contract.spec.js`. |
+| #48 QA-07 | ✅ Implementado — confirmar "Instalar app" a mano | Íconos 192/512 + maskable generados desde el logo (fondo blanco) en `public/brand/icon-*.png` y declarados en `app/manifest.ts`. ⚠️ `public/` está gitignored COMPLETO: los íconos requieren `git add -f`. `beforeinstallprompt` no dispara en headless. |
+| Push E2E | ⏳ Preparado — requiere PO | Claves VAPID generadas en `.env.local` (gitignored); backend `push enabled:true`. Falta el paso manual del PO (permiso de notificaciones + escalar). |
+| #49 QA-08 | ⏸ Sin implementar — decisión diferida | PO aclaró (2026-06-11): los NVR no están conectados y los datos de heartbeat en BD son inventados para pruebas. La decisión "sin datos" vs "ok" se retoma con el spike de NVR físico, cuando haya heartbeats reales. |
+| #52 QA-11 | ✅ RESUELTO | Leyenda del login corregida (la auth es real); accesos rápidos ya apuntaban a usuarios del seed. |
+| #53 QA-12 | ✅ RESUELTO | `USUARIOS_PRUEBA.md` e `INSTRUCCIONES_ACCESO.md` reescritos desde el seed real (9 usuarios, roles reales, auth JWT+bcrypt, sesión D10). |
+| #55 QA-14 | ✅ RESUELTO | Avatar: top-bar leía `full_name` pero `/auth/me` llena `nombre` → `displayName` con fallback. Popover: `collisionPadding={16}` + `max-w-[calc(100vw-2rem)]`; verificado contenido en 390px sin scroll horizontal. |
+| #56 QA-15 | ✅ RESUELTO (alcance mínimo) | Callout warning "Datos de demostración" en /reportes + gráficos migrados a tokens CSS (`var(--criticality-*)`, `var(--cctv-accent-blue)`, `var(--alert-success)`). KPIs desde BD = D11 (re-agendado). |
+
+**Commits:** 8 commits aprobados por el PO al cierre (sin push). **Cierre de issues en GitHub:** pendiente de la validación manual del PO (lista de validaciones por issue entregada en la sesión); #48 espera el check "Instalar app" y #49 quedó diferido.
+
+### 6.6 Plan de la siguiente sesión
+
+1. **Validaciones manuales del PO (15 min):** (a) push E2E — backend con VAPID de `.env.local`, otorgar permiso de notificaciones en Chrome, escalar una alerta, verificar notificación con app cerrada + clic abre detalle + fila `ale_notificacion` SENT; (b) Chrome → menú → "Instalar app" para cerrar #48.
+2. **#49:** decisión diferida al spike NVR físico — con heartbeats reales se decide entre `unknown`/"sin datos" (badge gris) o mantener el diseño actual.
+3. **Spike NVR físico** (§3.1) si el hardware llegó — sigue siendo el bloqueante del hito 25-jun.
+4. **D11 tanda 1** (mocks→seed: `GET /tenants` + zonas; KPIs de /reportes desde BD).
+5. Backlog pre-go-live §3.5 + corregir la línea `public/` de `.gitignore` (hoy obliga a `git add -f` para cada asset).
 
 ### 6.5 Reglas de la sesión
 
