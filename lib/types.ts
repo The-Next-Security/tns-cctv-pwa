@@ -653,3 +653,62 @@ export const EVENT_CODES_BY_CATEGORY: Record<EventCategory, EventCodeDef[]> = {
   trafico: EVENT_CODES.filter(e => e.category === 'trafico'),
   salud: EVENT_CODES.filter(e => e.category === 'salud'),
 }
+
+// --- Reportes (CIOC): contratos de /api/v1/reports/* ---
+
+export interface ReportKpis {
+  total: number
+  resueltas: number
+  descartadas: number
+  pendientes: number
+  escaladas: number
+  criticas: number
+  tasa_resolucion: number
+  tasa_falsos_positivos: number
+  tiempo_toma_promedio_s: number | null
+  tiempo_resolucion_promedio_s: number | null
+}
+
+export interface ReportSummary {
+  range: { from?: string; to?: string }
+  kpis: ReportKpis
+  alertas_por_zona: { zona: string; alertas: number }[]
+  distribucion_criticidad: { criticidad: Criticality | string; total: number }[]
+  incidentes_por_dia: { dia: string; total: number }[]
+  resolucion_por_tipo: { tipo: string; resueltas: number; pendientes: number }[]
+  tiempo_respuesta_por_hora: { hora: string; promedio: number | null }[]
+}
+
+export interface ReportOperator {
+  user_id: string
+  nombre: string
+  rol: string | null
+  acciones: number
+  tomadas: number
+  resueltas: number
+  descartadas: number
+  escaladas: number
+  llamadas: number
+  tiempo_toma_promedio_s: number | null
+}
+
+export interface ReportAuditEntry {
+  categoria: 'OPERACION' | 'ADMIN'
+  occurred_at: string
+  actor: string
+  actor_rol: string | null
+  accion: string
+  from_state: string | null
+  to_state: string | null
+  decision: string | null
+  detalle: string | null
+  recurso: string | null
+  recurso_id: string | null
+}
+
+export interface ReportAuditTrail {
+  total: number
+  page: number
+  page_size: number
+  items: ReportAuditEntry[]
+}

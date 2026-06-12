@@ -266,6 +266,18 @@ function toIso(value) {
   return s.includes('T') ? s : s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z');
 }
 
+// ISO UTC -> 'YYYY-MM-DD HH:MM:SS.mmm' para comparar contra DATETIME(3) (UTC, QA-04).
+// Sin from/to se asume la última semana.
+function reportRange(from, to) {
+  const toIsoSql = (d) => d.toISOString().replace('T', ' ').replace('Z', '');
+  const end = to ? new Date(to) : new Date();
+  const start = from ? new Date(from) : new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw Object.assign(new Error('INVALID_DATE_RANGE'), { code: 'INVALID_DATE_RANGE' });
+  }
+  return { from: toIsoSql(start), to: toIsoSql(end) };
+}
+
 const SOURCE_TYPE_TO_PLATE_SOURCE = { MANUAL: 'manual', ANPR: 'anpr', HYBRID: 'hybrid' };
 
 // adm_ingreso -> forma `VehicleEntry` del frontend.
@@ -1130,6 +1142,234 @@ class MysqlStore {
       [sourceCodeOrId, sourceCodeOrId]
     );
     return { updated: result.affectedRows > 0 };
+  }
+
+  // --- Reportes (CIOC): agregaciones sobre ale_evento + log_evento_timeline ---
+  // from/to llegan como ISO UTC; occurred_at se guarda en UTC (QA-04).
+
+  // KPIs + series para la página /reportes en una sola llamada.
+  async reportSummary({ from, to }) {
+    const range = reportRange(from, to);
+    const params = [range.from, range.to];
+
+    // Subconsultas del timeline: primera toma (IN_REVIEW) y último cierre por evento.
+    const ackJoin = `
+      LEFT JOIN (
+        SELECT id_evento, MIN(occurred_at) AS ack_at
+          FROM log_evento_timeline
+         WHERE to_state = 'IN_REVIEW'
+         GROUP BY id_evento
+      ) a ON a.id_evento = e.id_evento`;
+    const closeJoin = `
+      LEFT JOIN (
+        SELECT lt.id_evento, lt.decision, lt.occurred_at AS closed_at
+          FROM log_evento_timeline lt
+          JOIN (
+            SELECT id_evento, MAX(occurred_at) mx
+              FROM log_evento_timeline
+             WHERE to_state = 'CLOSED'
+             GROUP BY id_evento
+          ) m ON m.id_evento = lt.id_evento AND m.mx = lt.occurred_at AND lt.to_state = 'CLOSED'
+      ) c ON c.id_evento = e.id_evento`;
+
+    const [[kpiRows], [zoneRows], [sevRows], [dayRows], [typeRows], [hourRows]] = await Promise.all([
+      this.pool.query(
+        `SELECT COUNT(*) AS total,
+                SUM(e.state = 'CLOSED' AND c.decision = 'CONFIRMED') AS resueltas,
+                SUM(e.state = 'CLOSED' AND c.decision = 'FALSE_POSITIVE') AS descartadas,
+                SUM(e.state IN ('NEW', 'IN_REVIEW')) AS pendientes,
+                SUM(e.state = 'ESCALATING') AS escaladas,
+                SUM(e.severity >= 5) AS criticas,
+                AVG(CASE WHEN a.ack_at IS NOT NULL
+                         THEN TIMESTAMPDIFF(SECOND, e.occurred_at, a.ack_at) END) AS avg_ack_s,
+                AVG(CASE WHEN c.closed_at IS NOT NULL
+                         THEN TIMESTAMPDIFF(SECOND, e.occurred_at, c.closed_at) END) AS avg_resolucion_s
+           FROM ale_evento e ${ackJoin} ${closeJoin}
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?`,
+        params
+      ),
+      this.pool.query(
+        `SELECT COALESCE(e.zone_code, 'sin_zona') AS zone_code, COUNT(*) AS total
+           FROM ale_evento e
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY zone_code ORDER BY total DESC`,
+        params
+      ),
+      this.pool.query(
+        `SELECT e.severity, COUNT(*) AS total
+           FROM ale_evento e
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY e.severity`,
+        params
+      ),
+      this.pool.query(
+        `SELECT DATE(e.occurred_at) AS dia, COUNT(*) AS total
+           FROM ale_evento e
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY dia ORDER BY dia ASC`,
+        params
+      ),
+      this.pool.query(
+        `SELECT e.event_type,
+                SUM(e.state = 'CLOSED') AS resueltas,
+                SUM(e.state <> 'CLOSED') AS pendientes
+           FROM ale_evento e
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY e.event_type ORDER BY (resueltas + pendientes) DESC LIMIT 10`,
+        params
+      ),
+      this.pool.query(
+        `SELECT FLOOR(HOUR(e.occurred_at) / 4) * 4 AS hora_bloque,
+                AVG(TIMESTAMPDIFF(SECOND, e.occurred_at, a.ack_at)) AS avg_ack_s
+           FROM ale_evento e
+           JOIN (
+             SELECT id_evento, MIN(occurred_at) AS ack_at
+               FROM log_evento_timeline
+              WHERE to_state = 'IN_REVIEW'
+              GROUP BY id_evento
+           ) a ON a.id_evento = e.id_evento
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY hora_bloque ORDER BY hora_bloque ASC`,
+        params
+      ),
+    ]);
+
+    const k = kpiRows[0] || {};
+    const total = Number(k.total || 0);
+    const resueltas = Number(k.resueltas || 0);
+    const descartadas = Number(k.descartadas || 0);
+    return {
+      range: { from, to },
+      kpis: {
+        total,
+        resueltas,
+        descartadas,
+        pendientes: Number(k.pendientes || 0),
+        escaladas: Number(k.escaladas || 0),
+        criticas: Number(k.criticas || 0),
+        tasa_resolucion: total ? Math.round(((resueltas + descartadas) / total) * 100) : 0,
+        tasa_falsos_positivos: resueltas + descartadas
+          ? Math.round((descartadas / (resueltas + descartadas)) * 100)
+          : 0,
+        tiempo_toma_promedio_s: k.avg_ack_s != null ? Math.round(Number(k.avg_ack_s)) : null,
+        tiempo_resolucion_promedio_s: k.avg_resolucion_s != null ? Math.round(Number(k.avg_resolucion_s)) : null,
+      },
+      alertas_por_zona: zoneRows.map((r) => ({
+        zona: ZONE_NAMES[r.zone_code] || r.zone_code,
+        alertas: Number(r.total),
+      })),
+      distribucion_criticidad: sevRows.map((r) => ({
+        criticidad: severityToCriticality(r.severity),
+        total: Number(r.total),
+      })),
+      incidentes_por_dia: dayRows.map((r) => ({
+        dia: String(r.dia instanceof Date ? r.dia.toISOString().slice(0, 10) : r.dia).slice(0, 10),
+        total: Number(r.total),
+      })),
+      resolucion_por_tipo: typeRows.map((r) => ({
+        tipo: r.event_type,
+        resueltas: Number(r.resueltas || 0),
+        pendientes: Number(r.pendientes || 0),
+      })),
+      tiempo_respuesta_por_hora: hourRows.map((r) => ({
+        hora: `${String(r.hora_bloque).padStart(2, '0')}:00`,
+        promedio: r.avg_ack_s != null ? Math.round(Number(r.avg_ack_s)) : null,
+      })),
+    };
+  }
+
+  // Accountability: actividad operativa por usuario (acciones del timeline).
+  async reportOperators({ from, to }) {
+    const range = reportRange(from, to);
+    const [rows] = await this.pool.query(
+      `SELECT u.id_usuario, CONCAT(u.nombre, ' ', u.apellido) AS nombre, u.rol,
+              COUNT(*) AS acciones,
+              SUM(lt.to_state = 'IN_REVIEW') AS tomadas,
+              SUM(lt.to_state = 'CLOSED' AND lt.decision = 'CONFIRMED') AS resueltas,
+              SUM(lt.to_state = 'CLOSED' AND lt.decision = 'FALSE_POSITIVE') AS descartadas,
+              SUM(lt.to_state = 'ESCALATING') AS escaladas,
+              SUM(lt.action_type = 'CALL_REGISTERED') AS llamadas,
+              AVG(CASE WHEN lt.to_state = 'IN_REVIEW'
+                       THEN TIMESTAMPDIFF(SECOND, e.occurred_at, lt.occurred_at) END) AS avg_toma_s
+         FROM log_evento_timeline lt
+         JOIN gen_usuario u ON u.id_usuario = lt.actor_id_usuario
+         JOIN ale_evento e ON e.id_evento = lt.id_evento
+        WHERE lt.actor_type = 'USER'
+          AND lt.occurred_at >= ? AND lt.occurred_at < ?
+        GROUP BY u.id_usuario, nombre, u.rol
+        ORDER BY acciones DESC`,
+      [range.from, range.to]
+    );
+    return rows.map((r) => ({
+      user_id: r.id_usuario,
+      nombre: r.nombre,
+      rol: r.rol,
+      acciones: Number(r.acciones),
+      tomadas: Number(r.tomadas || 0),
+      resueltas: Number(r.resueltas || 0),
+      descartadas: Number(r.descartadas || 0),
+      escaladas: Number(r.escaladas || 0),
+      llamadas: Number(r.llamadas || 0),
+      tiempo_toma_promedio_s: r.avg_toma_s != null ? Math.round(Number(r.avg_toma_s)) : null,
+    }));
+  }
+
+  // Pista de auditoría unificada: timeline operativo + auditoría administrativa.
+  async reportAuditTrail({ from, to, userId, page = 1, pageSize = 25 } = {}) {
+    const range = reportRange(from, to);
+    const limit = Math.min(Math.max(parseInt(pageSize, 10) || 25, 1), 100);
+    const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
+    const userFilterOp = userId ? 'AND lt.actor_id_usuario = ?' : '';
+    const userFilterAdm = userId ? 'AND la.id_usuario = ?' : '';
+    const params = [
+      range.from, range.to, ...(userId ? [userId] : []),
+      range.from, range.to, ...(userId ? [userId] : []),
+    ];
+
+    const baseUnion = `
+      SELECT 'OPERACION' AS categoria, lt.occurred_at AS ts,
+             CONCAT(u.nombre, ' ', u.apellido) AS actor, u.rol AS actor_rol,
+             lt.action_type AS accion, lt.from_state, lt.to_state, lt.decision,
+             lt.comment_text AS detalle, e.event_type AS recurso, lt.id_evento AS recurso_id
+        FROM log_evento_timeline lt
+        LEFT JOIN gen_usuario u ON u.id_usuario = lt.actor_id_usuario
+        JOIN ale_evento e ON e.id_evento = lt.id_evento
+       WHERE lt.occurred_at >= ? AND lt.occurred_at < ? ${userFilterOp}
+      UNION ALL
+      SELECT 'ADMIN' AS categoria, la.creado_en AS ts,
+             CONCAT(u.nombre, ' ', u.apellido) AS actor, la.actor_role AS actor_rol,
+             la.action AS accion, NULL, NULL, NULL,
+             NULL AS detalle, la.resource_type AS recurso, la.resource_id AS recurso_id
+        FROM log_auditoria_api la
+        LEFT JOIN gen_usuario u ON u.id_usuario = la.id_usuario
+       WHERE la.creado_en >= ? AND la.creado_en < ? ${userFilterAdm}`;
+
+    const [[countRows], [rows]] = await Promise.all([
+      this.pool.query(`SELECT COUNT(*) AS total FROM (${baseUnion}) x`, params),
+      this.pool.query(
+        `SELECT * FROM (${baseUnion}) x ORDER BY ts DESC LIMIT ${limit} OFFSET ${offset}`,
+        params
+      ),
+    ]);
+
+    return {
+      total: Number(countRows[0]?.total || 0),
+      page: Math.floor(offset / limit) + 1,
+      page_size: limit,
+      items: rows.map((r) => ({
+        categoria: r.categoria,
+        occurred_at: toIso(r.ts),
+        actor: r.actor || 'Sistema',
+        actor_rol: r.actor_rol || null,
+        accion: r.accion,
+        from_state: r.from_state,
+        to_state: r.to_state,
+        decision: r.decision,
+        detalle: r.detalle,
+        recurso: r.recurso,
+        recurso_id: r.recurso_id,
+      })),
+    };
   }
 
   // src_fuente (NVR) -> forma `NvrHealth` del frontend.

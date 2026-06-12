@@ -10,6 +10,7 @@ const { errorEnvelope } = require('./errors');
 const { resolveJwtSecret } = require('./config');
 const { createAuthMiddleware, createIngestAuthMiddleware, requireRole } = require('./auth');
 const { createPushService } = require('./push');
+const { registerReportRoutes } = require('./reportsRoutes.cjs');
 
 const JWT_SECRET = resolveJwtSecret();
 
@@ -526,6 +527,9 @@ function createApp(deps = {}) {
     }
     return res.status(200).json({ ...result.entry, request_id: req.requestId });
   });
+
+  // --- Reportes (CIOC): KPIs reales, accountability y export CSV ---
+  registerReportRoutes(app, { store });
 
   app.use((_, res) => res.status(404).json(errorEnvelope('NOT_FOUND', 'route not found', `req_${crypto.randomUUID().slice(0, 8)}`)));
 

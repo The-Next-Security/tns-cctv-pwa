@@ -339,18 +339,36 @@ export const users = {
     }),
 }
 
-// Reportes
+// Reportes (CIOC): KPIs reales, accountability y export CSV
+function reportQuery(params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') searchParams.set(key, String(value))
+  })
+  const query = searchParams.toString()
+  return query ? `?${query}` : ''
+}
+
 export const reports = {
-  operationalNoise: (params: { from: string; to: string; zone_id?: number }) =>
-    fetchApi<unknown>(`/reports/operational-noise?from=${params.from}&to=${params.to}${params.zone_id ? `&zone_id=${params.zone_id}` : ''}`),
-  responseTimes: (params: { from: string; to: string }) =>
-    fetchApi<unknown>(`/reports/response-times?from=${params.from}&to=${params.to}`),
-  matchConfidence: (params: { from: string; to: string }) =>
-    fetchApi<unknown>(`/reports/match-confidence?from=${params.from}&to=${params.to}`),
-  registryQuality: (params: { from: string; to: string }) =>
-    fetchApi<unknown>(`/reports/registry-quality?from=${params.from}&to=${params.to}`),
-  sourceAvailability: (params: { from: string; to: string }) =>
-    fetchApi<unknown>(`/reports/source-availability?from=${params.from}&to=${params.to}`),
+  summary: (params: { from?: string; to?: string }) =>
+    fetchApi<import('./types').ReportSummary>(`/reports/summary${reportQuery(params)}`),
+  operators: (params: { from?: string; to?: string }) =>
+    fetchApi<{ items: import('./types').ReportOperator[]; total: number }>(
+      `/reports/operators${reportQuery(params)}`
+    ),
+  auditTrail: (params: { from?: string; to?: string; user_id?: string; page?: number; page_size?: number }) =>
+    fetchApi<import('./types').ReportAuditTrail>(`/reports/audit-trail${reportQuery(params)}`),
+  // CSV: descarga binaria con los mismos filtros de la vista (no pasa por fetchApi/JSON).
+  exportCsv: async (params: { type: 'summary' | 'audit'; from?: string; to?: string }) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('tns_token') : null
+    const response = await fetch(`${API_BASE}/reports/export${reportQuery(params)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+    if (!response.ok) {
+      throw new ApiError(response.status, 'EXPORT_FAILED', 'No se pudo exportar el reporte')
+    }
+    return response.blob()
+  },
 }
 
 // Salud técnica
