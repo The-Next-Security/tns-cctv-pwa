@@ -43,6 +43,8 @@ import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
 import { DISCARD_REASON_LABELS, CRITICALITY_LABELS, ALERT_STATUS_LABELS, getEventLabel } from '@/lib/types'
 import { EscalateSheet } from '@/components/operacion/escalate-sheet'
+import { ParkMap } from '@/components/operacion/park-map'
+import { MAP_ZONES, resolveAlertZoneCode } from '@/lib/park-map'
 import {
   CallContactsPopover,
   EscalateButton,
@@ -171,6 +173,11 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
     ...alert,
     llamada_at: llamadaAt ?? alert.llamada_at ?? null,
   }
+
+  // Plano de ubicación: solo si la zona de la alerta tiene polígono trazado
+  // (degradación silenciosa para zonas sin mapeo, ej. gap de Zona Logística).
+  const locationZoneCode = resolveAlertZoneCode(alert)
+  const hasMappedZone = locationZoneCode !== null && MAP_ZONES[locationZoneCode] !== undefined
 
   // Como en la consola (alert-card useReviewActions): las acciones Llamar/Escalar
   // se muestran también en pendiente; showEscalationActions exige en_revision,
@@ -473,6 +480,32 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Ubicación — locator enfocado en la zona de la alerta */}
+          {hasMappedZone && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Ubicación
+                </CardTitle>
+                {alert.zone?.name && (
+                  <CardDescription>
+                    {alert.zone.name}
+                    {alert.camera?.name ? ` · ${alert.camera.name}` : ''}
+                  </CardDescription>
+                )}
+              </CardHeader>
+              <CardContent>
+                <ParkMap
+                  alerts={[alert]}
+                  variant="locator"
+                  focusZoneCode={locationZoneCode}
+                  focusCameraName={alert.camera?.name ?? null}
+                />
               </CardContent>
             </Card>
           )}

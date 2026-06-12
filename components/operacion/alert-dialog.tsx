@@ -23,6 +23,8 @@ import { toast } from 'sonner'
 import { alerts as alertsApi } from '@/lib/api'
 import { resolveSnapshotUrl, resolveLiveFeedUrl } from '@/lib/demo-media'
 import { LiveCameraPanel } from '@/components/operacion/live-camera-panel'
+import { ParkMap } from '@/components/operacion/park-map'
+import { MAP_ZONES, resolveAlertZoneCode } from '@/lib/park-map'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
@@ -70,6 +72,10 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
     !isClosed && alert.status !== 'en_revision'
       ? { ...alert, status: 'en_revision' as const }
       : alert
+
+  // Mini-localizador: solo si la zona de la alerta tiene polígono trazado.
+  const locatorZoneCode = resolveAlertZoneCode(alert)
+  const hasMappedZone = locatorZoneCode !== null && MAP_ZONES[locatorZoneCode] !== undefined
 
   async function handleRevisar() {
     setIsLoading(true)
@@ -139,11 +145,12 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
           </DialogDescription>
         </DialogHeader>
 
-        {/* Snapshot / en vivo */}
+        {/* Snapshot / en vivo / mapa */}
         <Tabs defaultValue="snapshot">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className={cn('grid w-full', hasMappedZone ? 'grid-cols-3' : 'grid-cols-2')}>
             <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
             <TabsTrigger value="live">Video</TabsTrigger>
+            {hasMappedZone && <TabsTrigger value="mapa">Mapa</TabsTrigger>}
           </TabsList>
           <TabsContent value="snapshot" className="mt-3">
             <div className="relative aspect-video max-h-[40dvh] overflow-hidden rounded-lg bg-ds-muted sm:max-h-none">
@@ -170,6 +177,16 @@ export function AlertDialog({ alert, onClose, onAction, onEscalate, onLlamar }: 
               })}
             />
           </TabsContent>
+          {hasMappedZone && (
+            <TabsContent value="mapa" className="mt-3">
+              <ParkMap
+                alerts={[alert]}
+                variant="locator"
+                focusZoneCode={locatorZoneCode}
+                focusCameraName={alert.camera?.name ?? null}
+              />
+            </TabsContent>
+          )}
         </Tabs>
 
         <DialogFooter className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:flex-row sm:flex-wrap sm:justify-end">

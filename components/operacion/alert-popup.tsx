@@ -21,6 +21,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { LiveCameraPanel } from '@/components/operacion/live-camera-panel'
+import { ParkMap } from '@/components/operacion/park-map'
+import { MAP_ZONES, resolveAlertZoneCode } from '@/lib/park-map'
 import { resolveSnapshotUrl, resolveLiveFeedUrl } from '@/lib/demo-media'
 import { cn } from '@/lib/utils'
 import type { Alert } from '@/lib/types'
@@ -69,6 +71,10 @@ export function AlertPopup({
     !isClosed && alert.status !== 'en_revision'
       ? { ...alert, status: 'en_revision' as const }
       : alert
+
+  // Mini-localizador: solo si la zona de la alerta tiene polígono trazado.
+  const locatorZoneCode = resolveAlertZoneCode(alert)
+  const hasMappedZone = locatorZoneCode !== null && MAP_ZONES[locatorZoneCode] !== undefined
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,6 +158,20 @@ export function AlertPopup({
                 <p className="font-medium text-xs truncate">{alert.observation || getEventLabel(alert.event_code)}</p>
               </div>
             </div>
+
+            {/* Mini-localizador de la zona (sin interacción) */}
+            {hasMappedZone && (
+              <div>
+                <p className="text-ds-ink-muted text-xs mb-1">Ubicación en el parque</p>
+                <ParkMap
+                  alerts={[alert]}
+                  variant="locator"
+                  focusZoneCode={locatorZoneCode}
+                  focusCameraName={alert.camera?.name ?? null}
+                  className="mx-auto w-full max-w-[280px] sm:mx-0 sm:max-w-xs"
+                />
+              </div>
+            )}
           </div>
 
           {/* Panel lateral: oculto en móvil, visible desde sm */}

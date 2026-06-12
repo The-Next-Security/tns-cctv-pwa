@@ -647,7 +647,7 @@ function OperacionPageContent() {
       </div>
 
       {/* Columna derecha — contexto */}
-      <OperacionContextPanel alerts={localAlerts} />
+      <OperacionContextPanel alerts={localAlerts} onZoneSelect={setZoneFilter} />
 
       {/* Modales */}
       <AlertDialog

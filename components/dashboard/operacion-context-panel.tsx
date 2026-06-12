@@ -1,10 +1,15 @@
 'use client'
 
+import { useState } from 'react'
 import { RelativeTime } from '@/components/ui/relative-time'
-import { Activity, MapPin, Users, TrendingUp } from 'lucide-react'
+import { Activity, Expand, Map, MapPin, Users, TrendingUp } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { CRITICALITY_LABELS, getCriticalityBadgeClass } from '@/lib/constants'
+import { Button } from '@/components/ui/button'
+import { ParkMap } from '@/components/operacion/park-map'
+import { ParkMapDialog } from '@/components/operacion/park-map-dialog'
+import { CRITICALITY_LABELS, PARK_ZONES, getCriticalityBadgeClass } from '@/lib/constants'
 import { countAlertsToday, groupAlertsByHourSlot } from '@/lib/alert-stats'
+import type { ZoneCode } from '@/lib/park-map'
 import type { Alert } from '@/lib/types'
 import { getAlertRuleTitle } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -12,6 +17,8 @@ import { AlertId } from '@/components/ui/alert-id'
 
 interface OperacionContextPanelProps {
   alerts: Alert[]
+  /** Filtro por zona (id de PARK_ZONES como string) al hacer clic en el mapa. */
+  onZoneSelect?: (zoneId: string) => void
 }
 
 const ON_DUTY = [
@@ -20,7 +27,18 @@ const ON_DUTY = [
   { name: 'Pedro Nunez', role: 'Recepcion', status: 'away' as const },
 ]
 
-export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
+export function OperacionContextPanel({ alerts, onZoneSelect }: OperacionContextPanelProps) {
+  const [mapExpanded, setMapExpanded] = useState(false)
+
+  // El mapa habla en códigos estables (zone-1…); el filtro de la consola, en ids.
+  const handleZoneClick =
+    onZoneSelect !== undefined
+      ? (zoneCode: ZoneCode) => {
+          const zone = PARK_ZONES.find(z => z.code === zoneCode)
+          if (zone) onZoneSelect(String(zone.id))
+        }
+      : undefined
+
   const recentActivity = [...alerts]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 5)
@@ -42,6 +60,36 @@ export function OperacionContextPanel({ alerts }: OperacionContextPanelProps) {
 
   return (
     <aside className="flex flex-col gap-3 sm:gap-6 w-full xl:w-[340px] shrink-0">
+      {/* Mapa del parque — zonas encendidas según alertas activas */}
+      <section className="soft-card soft-card-compact panel-compact">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="icon-box icon-box-accent">
+              <Map className="h-4 w-4" />
+            </div>
+            <h3 className="text-section truncate">Mapa del parque</h3>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Expandir mapa del parque"
+            className="h-8 w-8 shrink-0 rounded-lg"
+            onClick={() => setMapExpanded(true)}
+          >
+            <Expand size={16} />
+          </Button>
+        </div>
+        <ParkMap alerts={alerts} variant="mini" onZoneClick={handleZoneClick} />
+        <p className="text-caption mt-2">Toque una zona para filtrar sus alertas</p>
+      </section>
+
+      <ParkMapDialog
+        alerts={alerts}
+        open={mapExpanded}
+        onOpenChange={setMapExpanded}
+        onZoneClick={handleZoneClick}
+      />
+
       {/* Actividad reciente — oculta en móvil para priorizar alertas */}
       <section className="soft-card soft-card-compact panel-compact hidden md:block">
         <div className="flex items-center gap-2 mb-4">
