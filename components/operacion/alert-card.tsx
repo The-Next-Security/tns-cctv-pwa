@@ -26,7 +26,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
-import { DISCARD_REASON_LABELS, getAlertRuleTitle, getAlertClass } from '@/lib/types'
+import { DISCARD_REASON_LABELS, getAlertRuleTitle, getAlertClass, getResolutionLabel } from '@/lib/types'
 import { RuleId } from '@/components/ui/rule-id'
 import { CRITICALITY_STYLES, CRITICALITY_LABELS } from '@/lib/constants'
 import { UrgencyBadge } from '@/components/ui/urgency-badge'
@@ -296,7 +296,7 @@ export function AlertCard({
 
               {!isPending && !isInReview && (alert.status === 'resuelta' || alert.status === 'descartada') && (
                 <UrgencyBadge level="resolved" className="text-xs">
-                  {alert.status === 'resuelta' && `Resuelta: ${alert.resolution_notes || 'Sin notas'}`}
+                  {alert.status === 'resuelta' && `Resuelta: ${getResolutionLabel(alert)}`}
                   {alert.status === 'descartada' && 'Descartada'}
                 </UrgencyBadge>
               )}

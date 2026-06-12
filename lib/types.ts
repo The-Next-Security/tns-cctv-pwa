@@ -163,6 +163,8 @@ export interface Alert {
   snapshot_url?: string | null
   resolved_at?: string | null
   resolution_notes?: string | null
+  /** Decisión del SP al cerrar (CONFIRMED/DISMISSED) — la nota va en resolution_notes (QA-09). */
+  resolution_decision?: string | null
   alert_class?: AlertClass
   // Relaciones expandidas
   camera?: Camera
@@ -334,6 +336,28 @@ export const ALERT_STATUS_LABELS: Record<AlertStatus, string> = {
   escalada: 'En Atención',
   en_revision: 'En Revision',
   resuelta: 'Resuelta'
+}
+
+// QA-13 (#54): decisiones del SP stpr_register_event_state traducidas para la UI.
+// El enum crudo (CONFIRMED/FALSE_POSITIVE/...) nunca debe pintarse sin traducir.
+export const RESOLUTION_DECISION_LABELS: Record<string, string> = {
+  CONFIRMED: 'confirmada',
+  FALSE_POSITIVE: 'falso positivo',
+  ESCALATED: 'escalada',
+  REACTIVATED: 'reactivada',
+  TOMAR: 'tomada para revisión',
+}
+
+/**
+ * Etiqueta de resolución para tarjetas cerradas: prioriza la nota del operador
+ * (resolution_notes, QA-09 #50); si la nota es un enum legacy de decisión o no
+ * existe, cae a la traducción de resolution_decision y por último a 'Sin notas'.
+ */
+export function getResolutionLabel(alert: Pick<Alert, 'resolution_notes' | 'resolution_decision'>): string {
+  const notes = alert.resolution_notes?.trim()
+  if (notes && !(notes in RESOLUTION_DECISION_LABELS)) return notes
+  const decision = notes || alert.resolution_decision || ''
+  return RESOLUTION_DECISION_LABELS[decision] || 'Sin notas'
 }
 
 export const MATCH_STATUS_LABELS: Record<MatchStatus, string> = {

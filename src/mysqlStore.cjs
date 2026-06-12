@@ -250,7 +250,10 @@ function mapAlertRow(r, maps = {}) {
     plate: r.plate,
     description: rule?.name || r.decision_reason || null,
     snapshot_url: null,
-    resolution_notes: r.decision_reason || null,
+    // QA-09 (#50): la nota del operador vive en el comment del último CLOSED
+    // del timeline; la decisión del SP (CONFIRMED/DISMISSED) se expone aparte.
+    resolution_notes: r.close_comment || null,
+    resolution_decision: r.close_decision || null,
     // D4: la llamada vive en el timeline (CALL_REGISTERED), no como columna de ale_evento.
     llamada_at: r.llamada_at ? toIso(r.llamada_at) : null,
     zone: zoneId ? { id: zoneId, name: ZONE_NAMES[r.zone_code] || r.zone_code, active: true } : undefined,
@@ -666,10 +669,10 @@ class MysqlStore {
   async listAlerts() {
     const maps = await this.loadEnrichmentMaps();
     const [rows] = await this.pool.query(
-      `SELECT e.*, t.decision AS close_decision, c.llamada_at
+      `SELECT e.*, t.decision AS close_decision, t.comment_text AS close_comment, c.llamada_at
          FROM ale_evento e
          LEFT JOIN (
-           SELECT lt.id_evento, lt.decision
+           SELECT lt.id_evento, lt.decision, lt.comment_text
              FROM log_evento_timeline lt
              JOIN (
                SELECT id_evento, MAX(occurred_at) mx
@@ -932,7 +935,9 @@ class MysqlStore {
       return this.reactivateAlert(eventId, notes, actorUserId);
     }
 
-    const comment = notes || target.decision;
+    // QA-13 (#54): sin nota del operador el comment queda NULL — nunca fosilizar
+    // el enum de decisión como comment_text (de ahí salía "Resuelta: CONFIRMED").
+    const comment = notes || null;
 
     // Transición multi-paso: el SP solo permite pasos atómicos válidos.
     if (target.toState === 'CLOSED' && current.state === 'NEW') {
@@ -1039,6 +1044,10 @@ class MysqlStore {
            WHERE lt.id_evento = e.id_evento AND lt.to_state = 'CLOSED'
            ORDER BY lt.occurred_at DESC LIMIT 1
         ) AS close_decision, (
+          SELECT lt.comment_text FROM log_evento_timeline lt
+           WHERE lt.id_evento = e.id_evento AND lt.to_state = 'CLOSED'
+           ORDER BY lt.occurred_at DESC LIMIT 1
+        ) AS close_comment, (
           SELECT MAX(lt.occurred_at) FROM log_evento_timeline lt
            WHERE lt.id_evento = e.id_evento AND lt.action_type = 'CALL_REGISTERED'
         ) AS llamada_at
@@ -1170,4 +1179,5 @@ class MysqlStore {
   }
 }
 
-module.exports = { MysqlStore };
+// mapAlertRow se exporta para los tests de contrato (QA-09 #50).
+module.exports = { MysqlStore, mapAlertRow };
