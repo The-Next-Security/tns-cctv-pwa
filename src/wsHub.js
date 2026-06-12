@@ -3,8 +3,8 @@ class WsHub {
     this.clients = new Set();
   }
 
-  register(ws) {
-    const context = { ws, filters: null };
+  register(ws, user = null) {
+    const context = { ws, filters: null, user };
     this.clients.add(context);
     ws.on('message', (raw) => {
       let msg;

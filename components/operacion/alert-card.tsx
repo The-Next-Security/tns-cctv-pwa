@@ -26,7 +26,8 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Alert, Criticality, DiscardReason } from '@/lib/types'
-import { DISCARD_REASON_LABELS, getAlertRuleTitle, getAlertClass } from '@/lib/types'
+import { DISCARD_REASON_LABELS, getAlertRuleTitle, getAlertClass, getResolutionLabel } from '@/lib/types'
+import { isSlaOverdue } from '@/lib/alert-list'
 import { RuleId } from '@/components/ui/rule-id'
 import { CRITICALITY_STYLES, CRITICALITY_LABELS } from '@/lib/constants'
 import { UrgencyBadge } from '@/components/ui/urgency-badge'
@@ -164,6 +165,8 @@ export function AlertCard({
   const isPending = alert.status === 'pendiente'
   const isInReview = alert.status === 'en_revision'
   const isEscalated = alert.status === 'escalada'
+  // D12: una alerta abierta >48h nunca se archiva; se destaca como vencida.
+  const slaOverdue = isSlaOverdue(alert)
   const isClosed = alert.status === 'resuelta' || alert.status === 'descartada'
   const alertClass = getAlertClass(alert.criticality)
   const isCriticalClass = alertClass === 'critica'
@@ -205,6 +208,7 @@ export function AlertCard({
           isPending && isCriticalClass && cn('ring-2', critStyles.ring, critStyles.borderSubtle),
           isPending && alert.criticality === 'alta' && 'ring-1 ring-[var(--criticality-alta)]/20 border-[var(--criticality-alta)]/35',
           isPending && !isCriticalClass && alert.criticality !== 'alta' && 'ring-1 ring-ds-hairline',
+          slaOverdue && 'border-[var(--urgency-critical-border)]/60',
           !isPending && 'opacity-[0.97] hover:opacity-100'
         )}
         onClick={handleCardClick}
@@ -287,6 +291,13 @@ export function AlertCard({
                 </Badge>
               )}
 
+              {/* D12: SLA de resolución vencido (alerta abierta >48h) */}
+              {slaOverdue && (
+                <UrgencyBadge level="critical" className="text-xs">
+                  SLA vencido — más de 48h sin resolver
+                </UrgencyBadge>
+              )}
+
               {/* Status for non-pending alerts */}
               {!isPending && !isInReview && isEscalated && (
                 <UrgencyBadge level="escalated" className="text-xs">
@@ -296,7 +307,7 @@ export function AlertCard({
 
               {!isPending && !isInReview && (alert.status === 'resuelta' || alert.status === 'descartada') && (
                 <UrgencyBadge level="resolved" className="text-xs">
-                  {alert.status === 'resuelta' && `Resuelta: ${alert.resolution_notes || 'Sin notas'}`}
+                  {alert.status === 'resuelta' && `Resuelta: ${getResolutionLabel(alert)}`}
                   {alert.status === 'descartada' && 'Descartada'}
                 </UrgencyBadge>
               )}

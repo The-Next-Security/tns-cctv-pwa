@@ -11,16 +11,30 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: '#121212',
     theme_color: '#121212',
     lang: 'es',
+    // QA-07 (#48): Chrome exige íconos cuadrados 192×192 y 512×512 (purpose any)
+    // para ofrecer la instalación; los maskable cubren el recorte de Android.
     icons: [
       {
-        src: '/brand/tns-logo.png',
-        sizes: '800x250',
+        src: '/brand/icon-192.png',
+        sizes: '192x192',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: '/brand/tns-logo.png',
-        sizes: '800x250',
+        src: '/brand/icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/brand/icon-maskable-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+      {
+        src: '/brand/icon-maskable-512.png',
+        sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',
       },

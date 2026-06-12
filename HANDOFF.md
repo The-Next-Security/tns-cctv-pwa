@@ -1,167 +1,358 @@
-# HANDOFF — Sesión de codificación TNS CCTV PWA
+# HANDOFF — TNS CCTV PWA
 
 > **Para:** la próxima instancia de desarrollo (agente Claude o desarrollador humano).
-> **De:** sesión de revisión de arquitectura y planificación, 2026-06-11.
-> **Contexto:** este documento vive en el repo junto a la documentación. Es el **punto de partida obligatorio** de la sesión de codificación. Léelo completo antes de tocar código.
-> **Misión global:** llevar el software al hito de pruebas con NVR reales (≈2026-06-25) y al go-live (≈2026-07-02) según `PRD-V2.md`.
+> **De:** sesiones del 2026-06-11/12 en la rama `claude/heuristic-yonath-8b3363`: (1) QA completo §5.2, (2) resolución de hallazgos #48–#56 (§6.R), (3) responsividad iOS de la PWA (§7), (4) filtros/orden de /operacion, (5) reportes CIOC desde BD (§9).
+> **Punto de partida obligatorio** de la próxima sesión. Léelo completo antes de tocar código.
+> **Misión global:** hito de pruebas con NVR reales (≈2026-06-25) y go-live (≈2026-07-02).
+> **🎯 Próxima sesión: ver §8** — validaciones manuales del PO (push E2E, instalar PWA, iPhone real, reportes reales §9), cierre de issues en GitHub, spike NVR físico si hay hardware.
 
 ---
 
 ## 0. Orden de lectura al iniciar la sesión
 
-1. **Este documento** (método + pasos + contexto crítico).
-2. `PRD-V2.md` — documento maestro: alcance, plan de 3 semanas, decisiones D1–D11, checklists de "done" por hito.
-3. `REVISION-ARQUITECTO.md` — fundamentos de las decisiones (por qué, no solo qué).
-4. `PRD-PRODUCTO.md` + `ARCHITECTURE.md` — estado real del código al 2026-06-11.
-5. Según la tarea: `API.md`, `DATA-MODEL.md`, `DATABASE-SPEC.md`, `SECURITY.md`, `STREAMING.md`.
-6. Para el conector NVR: `HTTP_API_3.26_DAHUA.md` (spec oficial; secciones clave ya extraídas en `PRD-V2.md` §3.1).
+1. **Este documento** (estado real + método + plan QA).
+2. `LECCIONES.md` — reglas destiladas de la sesión de código (formato RULE).
+3. `PRD-PRODUCTO.md` + `ARCHITECTURE.md` (02-design/) — diseño de referencia.
+4. Según la tarea: `API.md`, `DATA-MODEL.md`, `DATABASE-SPEC.md` (37 tablas), `SECURITY.md`.
+5. Para el conector NVR: `connector/README.md` + `01-prd/HTTP_API_3.26_DAHUA.md`.
 
-**Precedencia ante conflicto:** `PRD-V2.md` > `REVISION-ARQUITECTO.md` > `SPRINT-PLAN.md` (obsoleto como plan) > resto. `PRD_Original.md` sigue siendo la visión de negocio (MoSCoW, KPIs).
+⚠️ **Hallazgo de la sesión 2026-06-11:** `PRD-V2.md` y `REVISION-ARQUITECTO.md` se citaban como documentos maestros pero **no existen en el repo**. La precedencia efectiva es: este HANDOFF > LECCIONES.md > docs de `02-design/`. Las decisiones D1–D11 quedan registradas en §2 de este documento.
 
 ---
 
-## 1. Metodología de trabajo (obligatoria): Loop Engineering
+## 1. Metodología validada: Loop Engineering
 
-Basada en "How To Build AI Agents That Work While You Sleep (Using Claude Fable)". No es referencia opcional — es el método de ejecución de esta sesión.
+Basada en "How To Build AI Agents That Work While You Sleep (Using Claude Fable)". **Se aplicó completa en la sesión 2026-06-11 y funcionó** — mantenerla.
 
-### 1.1 El loop
+### 1.1 El loop (sin cambios)
 
 ```
-GOAL (claro, testeable — checklist o test, nunca "mejorar X")
-  ↓
-ATTEMPT (cambio de código acotado)
-  ↓
-FEEDBACK (tests, error de API, fixture que no parsea — feedback REAL, no opinión)
-  ↓
-SELF-CORRECT (diagnosticar antes de reintentar; prohibido repetir el mismo fix dos veces)
-  ↓
-VERIFY (verificación separada del trabajo: correr la suite completa, el checklist del hito,
-        o el flujo manual E2E — no autocomplacencia de "se ve bien")
-  ↓
-PASS → siguiente tarea | FAIL → volver a ATTEMPT con el gap identificado
+GOAL (testeable) → ATTEMPT (cambio acotado) → FEEDBACK (tests/errores reales)
+→ SELF-CORRECT (diagnóstico antes de reintentar) → VERIFY (suite completa + E2E)
+→ PASS → siguiente | FAIL → ATTEMPT con el gap identificado
 ```
 
-### 1.2 Reglas del método aplicadas a este proyecto
+### 1.2 Qué funcionó en la práctica (evidencia de la sesión)
 
-1. **Ningún goal sin criterio verificable.** Antes de empezar una tarea, escribe cómo sabrás que está terminada (test que pasa, item del checklist §6 del PRD-V2, flujo manual reproducible). Si no puedes escribirlo, la tarea está mal definida — descomponla.
-2. **El verificador es externo al trabajo.** "Terminé" lo declara la suite de tests + el checklist, no la sensación de avance. Para cambios de riesgo (auth, SP, conector), verificar en contexto limpio: correr `npm test` completo desde cero, no solo el test del módulo tocado.
-3. **Diagnóstico antes de reintento.** Si un fix falla, la siguiente acción es leer el error y formular hipótesis — no variar el código al azar.
-4. **Memoria entre sesiones (outer loop):** toda lección no obvia se destila como REGLA en `LECCIONES.md` (crearlo en la primera sesión si no existe). Formato: `RULE: [principio general aplicable]`, no notas del caso puntual. Leer `LECCIONES.md` al inicio de cada sesión. Ejemplos del tipo de cosa que va ahí: desviaciones del firmware Dahua vs spec, workarounds del parser multipart, comportamientos raros de MySQL 9 / Express 5 / Next 16.
-5. **Routing de esfuerzo:** las decisiones de diseño y diagnósticos duros merecen máxima atención; las tareas mecánicas con feedback automático (parser contra fixtures, migración mocks→seed, CRUD de tanda) son delegables a sub-agentes o ejecutables en lote. No gastar juicio en labor ni labor en juicio.
-6. **Stop condition por tarea:** máximo de intentos antes de escalar al PO (Felipe) — si tras 3 diagnósticos distintos una tarea del camino crítico no avanza, se reporta con hipótesis y alternativas, no se insiste en silencio.
+1. **Verificador antes que features (Paso 0) pagó de inmediato.** La suite pasó de 15 a 76 tests; cada bloque cerró con suite verde + `tsc --noEmit` + `db:verify`, lo que permitió detectar regresiones en minutos (ej.: el parser multipart fallaba SOLO con chunks de 1 byte — un test parametrizado `test.each([1,3,7,16])` lo atrapó; sin él habría llegado roto al hardware).
+2. **Diagnóstico antes de reintento evitó iteración ciega.** Dos casos reales: (a) el test de timeout WS fallaba porque `WS_AUTH_TIMEOUT_MS` se leía al cargar el módulo y no dentro de la factory — leído el error, una hipótesis, un fix; (b) el bug `RAW_NVR` del enum se diagnosticó leyendo el mensaje SQL exacto, no probando variantes.
+3. **Tests de contrato como guardia permanente.** `tests/alert-vocabulary.contract.spec.js` falla si el vocabulario legacy reaparece — el "no volverá a pasar" quedó ejecutable, no prometido.
+4. **Verificación E2E separada del trabajo.** El smoke test final contra MySQL real (login → ingest con API key → match de regla → alerta creada → heartbeat → salud) encontró 3 problemas que la suite unitaria no veía: seed sin conector edge, fuente identificada solo por CHAR(26), y el enum sin `RAW_NVR`. **Regla: la suite verde NO sustituye el flujo E2E con BD real.**
+5. **Routing de esfuerzo:** las tareas mecánicas (parser contra fixtures, CRUD) avanzaron en lote; el juicio se gastó en seguridad, SP y diagnósticos.
+6. **Outer loop:** todo lo no obvio quedó en `LECCIONES.md` (8 reglas). Leerlo evita re-derivar.
 
----
+### 1.3 Reglas operativas (vigentes)
 
-## 2. Los 6 pasos de ejecución (en orden — no saltarse ninguno)
-
-### Paso 0 — Construir el verificador antes que las features
-
-**Goal verificable:** `npm test` corre verde y es repetible dos veces seguidas desde cero.
-
-- Resolver la inestabilidad de la suite (mezcla CJS/ESM, dependencias). Ver `SPRINT-PLAN.md` §Tests CI.
-- Esto es prerrequisito de TODO lo demás. Sin suite verde, los refactors de los pasos 1–2 son apuestas a ciegas.
-- Mientras estés aquí: `npm run db:verify` debe pasar también (36 tablas, SP, evento).
-
-### Paso 1 — Reducir la superficie antes de ampliarla
-
-**Goal verificable:** un solo backend, un solo vocabulario de alertas, cero errores silenciados; suite verde tras cada cambio.
-
-- Archivar `backend/src/` → `docs/poc-security/` (decisión D1 — NO fusionar; sus patrones se portan después como tickets).
-- Vocabulario único `attendEvent` con acciones canónicas; eliminar `alerts.attend()` y alias legacy (`revisada`/`descartada`/`escalada`) — migrar `EscalateSheet` (D2). Agregar test de contrato que falle si reaparece el vocabulario viejo.
-- Eliminar todos los `.catch(() => {})`: toast de error + reconciliación con la respuesta del servidor (D3). La BD es la fuente de verdad del estado de la alerta.
-- `GET /alerts/:id` (falta el handler; `listAlerts` ya mapea la fila) — repara `/operacion/alerta/[id]`.
-- Fail-fast de secretos: en producción sin `JWT_SECRET`, el proceso no arranca (D7).
-
-### Paso 2 — Cerrar la seguridad (no negociable, va ANTES que el conector)
-
-**Goal verificable:** items de seguridad del checklist hito 25-jun (PRD-V2 §6): API inaccesible sin JWT válido; ingest inaccesible sin API key; WS rechaza conexión sin auth.
-
-- Middleware JWT en toda ruta excepto `/auth/login` y `/health/*`. Poblar `req.user` real (eliminar actor hardcoded `usr_01`).
-- API key máquina-a-máquina en `POST /ingest/events` (header `x-api-key` contra `src_conector_edge`).
-- Auth WebSocket: frame `auth` como primer mensaje, timeout 5 s, desconectar si no autentica. NO token en query string (queda en logs).
-- Orden importa: el conector (Paso 3) consumirá el ingest YA autenticado — al revés es retrabajo.
-
-### Paso 3 — Conector NVR con el patrón del loop aplicado literalmente
-
-**Goal verificable:** evento generado en NVR físico aparece como alerta en `/operacion` en <10 s con snapshot real (checklist hito 25-jun).
-
-- **Spike de validación (1 día, contra hardware real):** validar los 3 endpoints de la spec contra el firmware de los NVR del parque y **grabar streams crudos como fixtures** (golden files). Endpoints confirmados en spec V3.26 (detalle y secciones en `PRD-V2.md` §3.1):
-  - `GET /cgi-bin/snapManager.cgi?action=attachFileProc&channel=-1&heartbeat=5&Flags[0]=Event&Events=[...]` — eventos + snapshot JPEG en un solo stream multipart (vía principal; incluye ANPR `TrafficJunction` → `TrafficCar.PlateNumber`).
-  - `GET /cgi-bin/eventManager.cgi?action=attach&codes=[...]&heartbeat=5` — fallback eventos sin snapshot.
-  - `POST /cgi-bin/api/LogicDeviceManager/attachCameraState` — online/offline de cámaras (alimenta M6).
-  - Auth: HTTP **Digest RFC 7616** (401 → calcular → reintentar).
-  - Ojo: requests usan canal desde 1, respuestas desde 0 (spec §3.5.1) — normalizar en un solo punto.
-- **Desarrollo en loop cerrado contra fixtures:** el parser multipart/x-mixed-replace (streaming, chunks parciales, JPEG binario intercalado) se desarrolla con tests contra los golden files — sin depender del hardware en cada iteración. Este es el grueso del esfuerzo y la tarea ideal para iterar en loop.
-- Conector = proceso Node independiente (`connector/`), stateless, reconexión con backoff, `mapping.json` para código Dahua → `event_type` ingest, idempotency-key = hash(nvr_id, channel, code, PTS). Credenciales NVR en config local gitignored.
-- Snapshots → `dah_snapshot` + `ale_evidencia`; reemplazar `demo-media.ts` por resolución real.
-
-### Paso 4 — Flujos verticales, no capas
-
-**Goal verificable:** cada PR/bloque de trabajo completa un flujo E2E del checklist, nunca "avancé el backend de X".
-
-- Flujo crítico de referencia: login → `/operacion` → atender → llamar (timeline `CALL_REGISTERED`) → escalar → resolver → verificar en `log_evento_timeline`.
-- Resto de los Must en vertical: sesión 8 h (`/auth/me` + refresh rotativo 60 min/10 h, D10) → `CALL_REGISTERED` en SP+timeline (D4: NO columna) → M6 salud (heartbeat ≤5 min, incidente a >15 min, umbral en `gen_configuracion_*`) → push real (service worker + VAPID, registro en `ale_notificacion`, D9).
-- El checklist §6 del PRD-V2 es el definition of done de cada PR, no una verificación de última hora.
-
-### Paso 5 — Routing de tareas (si se trabaja con sub-agentes o en paralelo)
-
-| Trabajo | Quién / cómo |
-|---|---|
-| Diseño del conector, diagnóstico de bugs duros, cambios en SP, revisión de seguridad | Atención principal, contexto completo, sin delegar |
-| Parser multipart contra fixtures, migración mocks→seed (D11), endpoints CRUD de tanda, tests unitarios | Delegable: goal testeable + feedback automático + bajo riesgo |
-| Pruebas en terreno (semana 3), calibración de reglas por zona/horario | Solo humanos — feedback físico |
-
-- Migración mocks→seed (D11): los datos inventados se mudan del código frontend (`MOCK_TENANTS`, `MOCK_RULES`, `mock-case-files-api.ts`...) al seed SQL (`07_DatosIniciales` + migraciones en `08_Migraciones/`) y se exponen por API. Tanda 1: `GET /tenants` desde `gen_tenant`, zonas. Badge DEMO solo como estado transitorio de módulos aún no conectados.
-
-### Paso 6 — Outer loop: memoria del proyecto
-
-**Goal verificable:** al cierre de cada sesión, `LECCIONES.md` actualizado y, si cambió el alcance o una decisión, `PRD-V2.md` actualizado.
-
-- Crear `LECCIONES.md` en la primera sesión de código (formato §1.2.4 de este handoff).
-- Toda desviación firmware-vs-spec del Dahua se registra ahí Y en `PRD-V2.md` §3.3 si cambia el diseño.
-- Al cerrar sesión: dejar el repo en estado verde (suite pasando), commit con mensaje descriptivo, y anotar en `LECCIONES.md` qué quedó a medias y cuál es el siguiente paso exacto.
+- Ningún goal sin criterio verificable escrito antes de empezar.
+- Máximo 3 diagnósticos distintos por bloqueo antes de escalar al PO (Felipe).
+- Al cerrar sesión: repo verde, commits descriptivos, LECCIONES.md actualizado, este HANDOFF actualizado si cambió el alcance.
 
 ---
 
-## 3. Contexto crítico para no re-derivar (resumen de lo decidido)
+## 2. ESTADO REAL DEL CÓDIGO (al cierre 2026-06-11)
 
-### Decisiones vigentes (detalle en PRD-V2 §5 y REVISION-ARQUITECTO §1)
+**Verificación de cierre:** `npm test` 76/76 ✅ (repetible) · `tsc --noEmit` ✅ · `npm run build` ✅ · `npm run db:verify` ✅ (37 tablas) · E2E manual contra MySQL ✅.
 
-D1 archivar `backend/src/` · D2 `attendEvent` único · D3 UX optimista con reconciliación, BD fuente de verdad · D4 `llamada_at` = acción `CALL_REGISTERED` en timeline, no columna · D5 multi-tenant congelado (convención `ctx.tenant_id`) · D6 mocks visibles o muertos · D7 secretos fail-fast · D8 conector edge Dahua V3.26 · D9 push mínimo, email deseable · D10 access 60 min + refresh 10 h · D11 fuente única de datos = seed MySQL.
+**Rama:** `claude/heuristic-yonath-8b3363` — 7 commits sobre `dev` (`6ac0fe5..b15da5b`), sin push.
 
-### Fechas y restricciones del PO (2026-06-11)
+### 2.1 Completado esta sesión (por decisión)
 
-- Demos al cliente DURANTE el desarrollo → seguridad (Paso 2) y badge DEMO antes de cualquier demo.
-- **≈25-jun-2026:** pruebas con NVR reales (checklist en PRD-V2 §6). **≈02-jul-2026:** go-live.
-- Umbral M6: 15 minutos (configurable). Turnos guardia: 8 horas.
-- Si el calendario aprieta: cae primero email, luego filtros server-side, luego `alert:updated`. **Seguridad nunca se recorta.** CRUD reglas UI ya está fuera del go-live.
+| Decisión | Estado | Dónde |
+|---|---|---|
+| D1 archivar `backend/src/` | ✅ | `docs/poc-security/` (no fusionar; patrones ya portados) |
+| D2 vocabulario único `attendEvent` | ✅ | `lib/api.ts`, consumidores migrados; acciones canónicas: `acknowledge·resolve·escalate·discard·reactivate·activate·register_call`; test de contrato vigila |
+| D3 UX optimista + reconciliación | ✅ | Cero `.catch(() => {})`; toast + resincronización; BD = fuente de verdad |
+| D4 llamada = timeline | ✅ | Acción `register_call` → `CALL_REGISTERED` en `log_evento_timeline`; `llamada_at` se deriva por subconsulta (no es columna) |
+| D7 fail-fast secretos | ✅ | `src/config.js`: sin `JWT_SECRET` en producción no arranca; ídem `INGEST_API_KEY` si el store no valida por BD |
+| Paso 2 seguridad completa | ✅ | JWT en todo el API salvo `/auth/login`, `/auth/refresh`, `/health/*` (`src/auth.js`); ingest con `x-api-key` (SHA-256 vs `src_conector_edge.api_key_hash`); WS: frame `auth` primero, timeout 5 s, cierre 4401, sin token en query string |
+| D8 conector edge Dahua | ✅ código / ⏳ hardware | `connector/` completo (parser multipart streaming, Digest RFC 7616, mapper, idempotencia, backoff). Falta SOLO el spike contra NVR físico para grabar golden files |
+| D10 sesión 60 min/10 h | ✅ | `/auth/me` + `/auth/refresh` rotativo (un solo uso, tope absoluto 10 h); AuthProvider renueva cada 50 min |
+| M6 salud | ✅ | Heartbeat por fuente (`POST /ingest/heartbeat` + señal implícita del ingest); umbrales en `gen_configuracion_*`: degradado >5 min, incidente >15 min (configurable) |
+| D9 push mínimo | ✅ código / ⏳ claves | Web Push VAPID: `public/sw.js`, suscripciones (`ale_push_suscripcion`), envío a roles al escalar, registro en `ale_notificacion` canal `PUSH`. **Faltan claves VAPID en el entorno** |
+| `GET /alerts/:id` | ✅ | Repara `/operacion/alerta/[id]` |
 
-### Hechos del repo que ahorran tiempo
+### 2.2 Migraciones de BD — TODAS APLICADAS en la BD local del PO (2026-06-11)
 
-- Stack: Next.js 16 + React 19 + Tailwind v4 (frontend :3000), Express 5 en `src/` (:4000, `STORE=mysql`), MySQL 9.x esquema `tns_cctv` (36 tablas prefijadas), WS nativo en `/ws/operations`.
-- Arranque: `pnpm install` → `npm run demo:clean` (reset+seed+dev) o `dev:api`/`dev:web`. Login demo: `admin@agrolivo.cl` / `password123` (rotar antes de go-live).
-- Transiciones de estado SOLO vía SP `stpr_register_event_state` (transacción + timeline append-only). No escribir estados de `ale_evento` por fuera del SP.
-- `crear_base_datos.sql` usa `SOURCE` → solo cliente MySQL interactivo, no pipe batch.
-- `db/sql_files` en minúsculas (referencias históricas a `SQL_FILES` rompen en Linux).
-- `package.json` es `"type": "module"` con módulos `.cjs` mezclados — origen probable de la inestabilidad de tests.
-- Rama de referencia: `integracion/funcionalidad-escalar-ddbb_inicial`.
-- `INSTRUCCIONES_ACCESO.md` está desactualizado (describe auth mock) — actualizar antes del go-live.
+`08_08` api_key_hash · `08_09` salud M6 · `08_10` push · `08_11` seed conector edge · `08_12` enum RAW_NVR. Todas reflejadas también en `01_CreacionDesdeCero/` para instalaciones desde cero. Además se restauró `gen_usuario.rol='admin_parque'` para `admin@agrolivo.cl` (se había alterado en pruebas de CRUD; el menú filtra por rol).
 
-### Anti-objetivos (no hacer)
+### 2.3 Contratos clave que QA debe conocer
 
-No multi-tenant enforcement · no streaming en vivo (snapshots bastan para go-live; RTSP queda referenciado para P2) · no ORM · no rehacer UI/design system · no correlación S1/S2 · no fusionar `backend/src/` (archivar).
+- **Ingest:** `POST /api/v1/ingest/events` exige `x-api-key` (dev: `dev-ingest-key`) + `x-idempotency-key`. `source.source_id` acepta `id_fuente` CHAR(26) **o** `source_code` (`nvr-principal`/`nvr-secundario`). Respuestas: 202 `RECEIVED` (matcheó regla → alerta), 202 `STORED_RAW` (sin regla), 400 `UNKNOWN_SOURCE`, 409 conflicto idempotencia, 401 sin/mala API key.
+- **Auth:** login demo `admin@agrolivo.cl` / `password123` (rotar antes de go-live). Access 60 min; refresh rotativo (reusar un refresh token usado → 401). Sesiones de refresh viven en memoria: **reiniciar el backend invalida los refresh** (re-login).
+- **WS:** primer frame `{type:'auth',data:{token}}` → `auth.ack` → recién entonces `subscribe.filters`. Sin auth en 5 s → cierre 4401.
+- **Estados de alerta:** SOLO vía SP `stpr_register_event_state`. UI: pendiente→en_revision→(escalada)→resuelta/descartada, con `reactivate` desde cerrada y `register_call` sin cambio de estado.
+- **Entorno local:** el worktree necesita `db/connection-config.json` (gitignored — copiarlo del repo principal).
+
+### 2.4 Anti-objetivos (sin cambios)
+
+No multi-tenant enforcement · no streaming en vivo · no ORM · no rehacer UI/design system · no correlación S1/S2 · CRUD de reglas UI fuera del go-live.
+
+---
+
+## 3. Pendientes (backlog ordenado)
+
+1. **Spike NVR físico (1 día, antes del 25-jun):** validar los 3 endpoints contra firmware real, **grabar golden files** que reemplacen los fixtures sintéticos de `tests/connector.*.spec.js`, registrar desviaciones firmware-vs-spec en LECCIONES.md. Endpoint de estado de cámaras (`attachCameraState`) aún no implementado.
+2. **Claves VAPID:** `npx web-push generate-vapid-keys` → `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` en el entorno. Sin ellas el push queda deshabilitado (el backend lo loggea y no se cae).
+3. **D11 migración mocks→seed:** no iniciada. Tanda 1: `GET /tenants` desde `gen_tenant` + zonas. `MOCK_VEHICLE_ENTRIES` aún es fallback visible (toast "datos de demostración") en `/recepcion`.
+4. **Snapshots reales:** hoy el conector persiste JPEG a disco con URI `file://`; falta integrar `dah_snapshot` + `ale_evidencia` y reemplazar `demo-media.ts`.
+5. **Antes del go-live:** rotar `dev-ingest-key` (08_08/08_11), rotar credenciales demo, actualizar `INSTRUCCIONES_ACCESO.md` (describe auth mock obsoleta), revisar `public/` gitignored (assets sin versionar; `sw.js` ya se forzó), modernizar `VALUES()`→alias en seeds (deprecado MySQL 9, solo warnings).
 
 ---
 
 ## 4. Protocolo de inicio de la próxima sesión
 
 ```
-1. Leer HANDOFF.md (este) + LECCIONES.md (si existe) + PRD-V2.md
-2. git status / git log -5        → estado real del repo
-3. npm run db:verify              → esquema OK
-4. npm test                       → ¿verde? Si no: Paso 0 es la tarea.
-5. Identificar el primer goal pendiente según §2 y escribir su criterio verificable
-6. Trabajar en loop (§1.1). Al cerrar: §2 Paso 6.
+1. Leer HANDOFF.md (este) + LECCIONES.md
+2. git status / git log -10        → estado real (¿se pusheó/mergeó la rama?)
+3. cp del repo principal db/connection-config.json si el worktree no lo tiene
+4. npm install && npm run db:verify && npm test   → debe dar 76/76 verde
+5. npm run dev                     → :3000 web, :4000 api (STORE=mysql)
+6. Ejecutar el plan QA de §5 en orden
 ```
 
-*Generado el 2026-06-11. Si este documento contradice a `PRD-V2.md`, prevalece `PRD-V2.md` y debe corregirse este handoff.*
+---
+
+## 5. PLAN DE LA PRÓXIMA SESIÓN: QA / TESTING DE LA APLICACIÓN
+
+**Goal verificable de la sesión:** checklist §5.2 completo con evidencia (capturas/outputs), bugs registrados como issues de GitHub (`gh issue create`), y los bugs P1 corregidos con su test de regresión.
+
+### 5.1 Método
+
+- Cada caso QA = un goal del loop: ejecutar → registrar resultado real → si falla, diagnosticar y decidir (fix inmediato si P1, issue si P2/P3).
+- Probar **mobile-first** (viewport smartphone) en todas las vistas excepto el editor de reglas (desktop) — regla de oro del producto.
+- Backend con `STORE=mysql`; usar usuarios demo de `USUARIOS_PRUEBA.md` para probar permisos por rol.
+
+### 5.2 Checklist QA — RESULTADOS (sesión QA 2026-06-11, viewport 390×844 salvo reglas)
+
+**A. Autenticación y sesión (D10) — PASS**
+- [x] Login correcto / credenciales malas ("Correo o contraseña incorrectos"). Usuario inactivo: sin usuario INACTIVE en seed; validado en código (`mysqlStore.cjs:331` → 401).
+- [x] `GET /auth/me` 200 con token; 401 sin token y con token corrupto.
+- [x] Refresh rotativo: nuevo refresh distinto; replay del usado → 401.
+- [x] Logout limpia `tns_token` + `tns_refresh_token` (localStorage queda solo `theme`).
+- [x] Menú por rol: admin ve Administración completa (incl. Configuración); vigilante solo "Alertas".
+
+**B. Flujo crítico de alertas — PASS (2 bugs P1 detectados y corregidos)**
+- [x] Ingest curl → 202 RECEIVED, match Regla-0004, popup en `/operacion` <10 s vía WS.
+- [x] Cadena completa atender→llamar→escalar (checklist+observación)→resolver verificada en `log_evento_timeline` (NEW→IN_REVIEW; CALL_REGISTERED; NEW→ESCALATING; ESCALATING→CLOSED/CONFIRMED).
+- [x] Descartar con motivo (Falso positivo – vegetación); reactivar → vuelve a pendiente y exige nueva llamada antes de escalar.
+- [x] `action:'revisada'`/'escalada' → 400 VALIDATION_ERROR con enum canónico.
+- [x] `/operacion/alerta/[id]` carga desde API.
+- 🐛 **QA-03 (Alta, CORREGIDO):** `getAlertClass` degradaba `alta` a "Baja prioridad" contra PRD §5.3 → contador de críticas y popup mal. Fix en `lib/types.ts` + `tests/alert-class.contract.spec.js`.
+- 🐛 **QA-04 (Alta, CORREGIDO):** timestamps mezclados local/UTC en BD (timeline cronológicamente corrupto, "hace 4 horas" en alertas de minutos). Fix: `SET time_zone='+00:00'` por conexión en `db/lib/pool.cjs` + `tests/db-timezone.contract.spec.js`. Datos previos al fix quedan mezclados (solo dev).
+
+**C. Seguridad — PASS (1 bug Alta detectado y corregido)**
+- [x] events/alerts/users/rules/vehicle-entries sin token → 401.
+- [x] Ingest sin/mala API key → 401; JWT como reemplazo → 401.
+- [x] WS sin frame auth → 4401 AUTH_TIMEOUT a los 5.0 s; token inválido → 4401 INVALID_TOKEN inmediato; token en query string ignorado (4401). Control positivo: auth.ack OK.
+- 🐛 **QA-05 (Alta, CORREGIDO):** sin RBAC de servidor — un vigilante podía POST/PATCH /users (crear un admin). Fix: `requireRole('admin_parque')` en mutaciones de users (`src/auth.js` + `src/app.js`) + `tests/users-rbac.contract.spec.js`. GET /users queda abierto a autenticados (alimenta contactos de escalación).
+
+**D. Recepción vehicular — PASS**
+- [x] Listado desde BD; validación inline de campos requeridos; crear ingreso persiste (`adm_ingreso`, conductor/RUT/empresa/tipo OK); salida persiste `exit_at`.
+- [x] Backend caído → toast "Sin conexión con el servidor — mostrando datos de demostración".
+
+**E. Salud M6 — PASS (1 bug Alta corregido)**
+- [x] Heartbeat curl (`POST /ingest/heartbeat`, body `{source_id, status}`) actualiza `last_check`; los 3 estados observados en vivo: ok (recién reportado) → degraded (>5 min) → down (>15 min), umbrales leídos de `gen_configuracion_*`.
+- 🐛 **QA-06 (Alta, CORREGIDO):** `/salud` pintaba NVRs hardcodeados (3 NVRs falsos, "hace 2 segundos", CPU/memoria inventadas) aunque llamaba al API. Fix: la sección consume `/health/nvrs` real con fallback a mock + toast; métricas de hardware se omiten hasta que el API las exponga.
+- ⚠️ Decisión PO pendiente: fuente sin heartbeat jamás (`last_heartbeat_at NULL`) se muestra "ok" (NVR-Secundario, 30 h sin señal). Propuesta: estado "sin datos".
+
+**F. Push (D9) — PARCIAL (limitación del entorno)**
+- [x] Claves VAPID generadas; backend `push enabled:true`; `sw.js` activo con handlers; degradación elegante sin permiso ("push bloqueadas — la escalación se registrará igualmente"); tests unitarios del servicio verdes.
+- [ ] **PENDIENTE manual:** E2E notificación con app cerrada + clic abre detalle + fila `ale_notificacion` SENT. El perfil Chrome automatizado tiene las notificaciones denegadas y no se puede otorgar por script. Ejecutar a mano: definir VAPID en el entorno, permitir notificaciones en el navegador, escalar una alerta.
+
+**G. PWA mobile — PASS con 1 hallazgo**
+- [x] `sw.js` registra sin errores de consola; todas las vistas usables en 390×844 (operación, recepción, expedientes+detalle, reportes, salud, admin, login); editor de reglas correcto en desktop.
+- 🐛 **QA-07 (Media, ABIERTO):** los íconos del manifest son 800×250 (logo); Chrome exige 192×192 y 512×512 cuadrados para instalación → la PWA NO es instalable. Requiere assets de diseño.
+
+### 5.2b Issue log Media/Baja — REGISTRADOS EN GITHUB (2026-06-11)
+
+- **QA-07 (Media) → [#48](https://github.com/The-Next-Security/tns-cctv-pwa/issues/48):** manifest sin íconos cuadrados 192/512 → PWA no instalable.
+- **QA-08 (Media) → [#49](https://github.com/The-Next-Security/tns-cctv-pwa/issues/49):** `/salud` NVR sin heartbeat se muestra "ok" — falta estado "sin datos" (decisión PO).
+- **QA-09 (Media) → [#50](https://github.com/The-Next-Security/tns-cctv-pwa/issues/50):** `alerts.resolution_notes` devuelve la decisión (`CONFIRMED`) en lugar de la nota escrita; la nota vive solo en el timeline.
+- **QA-10 (Media) → [#51](https://github.com/The-Next-Security/tns-cctv-pwa/issues/51):** detalle de alerta sin acciones Llamar/Escalar — quien llega por deep-link/push no puede escalar desde ahí.
+- **QA-11 (Baja) → [#52](https://github.com/The-Next-Security/tns-cctv-pwa/issues/52):** login dice "Modo demo — cualquier contraseña funciona" pero el backend ya valida credenciales reales.
+- **QA-12 (Baja) → [#53](https://github.com/The-Next-Security/tns-cctv-pwa/issues/53):** `USUARIOS_PRUEBA.md` desactualizado respecto del seed real (también `INSTRUCCIONES_ACCESO.md`).
+- **QA-13 (Baja) → [#54](https://github.com/The-Next-Security/tns-cctv-pwa/issues/54):** tarjetas resueltas muestran "Resuelta: CONFIRMED" (enum crudo en inglés).
+- **QA-14 (Baja) → [#55](https://github.com/The-Next-Security/tns-cctv-pwa/issues/55):** avatar "U" genérica en mobile; popover de contactos desborda el viewport 390 px.
+- **QA-15 (Baja) → [#56](https://github.com/The-Next-Security/tns-cctv-pwa/issues/56):** /reportes con datos mock sin aviso y colores raw fuera del design system (ligado a D11).
+
+### 5.3 Cierre de la sesión QA 2026-06-11 — CUMPLIDO
+
+- Checklist §5.2 ejecutado completo con evidencia (outputs curl + capturas + verificación BD vía API).
+- 4 bugs P1/Alta corregidos en sesión con test de regresión: QA-03, QA-04, QA-05, QA-06.
+- Verificación final: `npm test` **90/90** ✅ · `tsc --noEmit` ✅ · `npm run build` ✅ · scan de secretos limpio.
+- `LECCIONES.md` actualizado (5 reglas nuevas).
+
+---
+
+## 6. PLAN DE LA PRÓXIMA SESIÓN: RESOLUCIÓN DE HALLAZGOS QA
+
+**Goal verificable de la sesión:** issues [#48](https://github.com/The-Next-Security/tns-cctv-pwa/issues/48)–[#56](https://github.com/The-Next-Security/tns-cctv-pwa/issues/56) cerrados (o re-priorizados con el PO), push E2E validado a mano, suite verde, y cada issue cerrado con evidencia en el comentario de cierre (`gh issue close <n> --comment`).
+
+### 6.0 Protocolo de inicio (igual que siempre + específico)
+
+```
+1. Protocolo de lectura (CLAUDE.md global + proyecto + LECCIONES_APRENDIDAS.md + confirmación)
+2. Leer este HANDOFF (§5.2 resultados QA y este §6) + LECCIONES.md
+3. git status / git log -10  → la rama qa dejó 7 commits sin push (f26420d..)
+4. cp db/connection-config.json del repo principal si el worktree no lo tiene
+5. npm install && npm run db:verify && npm test  → debe dar 90/90 verde
+6. gh issue list --state open  → confirmar el estado real de #48–#56
+7. npm run dev (web :3000, api :4000, STORE=mysql)
+```
+
+### 6.1 Tanda 1 — Flujo de alertas (Media, juntos porque comparten archivos)
+
+| Issue | Qué hacer | Criterio de cierre |
+|---|---|---|
+| [#51](https://github.com/The-Next-Security/tns-cctv-pwa/issues/51) QA-10 | Agregar Llamar/Escalar al detalle `/operacion/alerta/[id]` reutilizando `CallContactsPopover` + `EscalateButton` de `components/operacion/escalation-controls.tsx` | Desde el detalle de una alerta escalable se completa llamar→escalar; timeline en BD lo refleja |
+| [#50](https://github.com/The-Next-Security/tns-cctv-pwa/issues/50) QA-09 | `resolution_notes` debe devolver la nota del operador (comment del último CLOSED del timeline), no la decisión | GET /alerts/:id muestra la nota escrita; test de contrato |
+| [#54](https://github.com/The-Next-Security/tns-cctv-pwa/issues/54) QA-13 | Traducir decisión en tarjetas resueltas (depende de #50) | Pestaña Resueltas sin enums en inglés |
+
+### 6.2 Tanda 2 — PWA y push (cierra el bloque F pendiente)
+
+| Issue | Qué hacer | Criterio de cierre |
+|---|---|---|
+| [#48](https://github.com/The-Next-Security/tns-cctv-pwa/issues/48) QA-07 | Generar íconos 192×192 y 512×512 (+maskable) desde el logo TNS y declararlos en el manifest | Chrome ofrece "Instalar app"; Lighthouse PWA installable |
+| Push E2E (§5.2 F) | Con claves VAPID en el entorno y permiso de notificaciones otorgado A MANO en el navegador del PO: escalar alerta → notificación con app cerrada → clic abre `/operacion/alerta/[id]` → fila `ale_notificacion` channel PUSH status SENT | Evidencia (captura + SELECT) en el HANDOFF |
+
+⚠️ El permiso de notificaciones NO se puede otorgar por script — este paso necesita interacción manual del PO en su Chrome.
+
+### 6.3 Tanda 3 — Salud y coherencia demo (requiere 1 decisión del PO)
+
+| Issue | Qué hacer | Criterio de cierre |
+|---|---|---|
+| [#49](https://github.com/The-Next-Security/tns-cctv-pwa/issues/49) QA-08 | **Preguntar primero al PO:** ¿estado "sin datos" para fuentes sin heartbeat? Si sí: agregar `unknown` a `NvrHealthStatus`, badge gris en /salud | NVR-Secundario deja de mostrarse "ok" sin haber reportado jamás |
+| [#52](https://github.com/The-Next-Security/tns-cctv-pwa/issues/52) QA-11 | Corregir leyenda y accesos rápidos del login al modelo de auth real | Login sin textos falsos |
+| [#53](https://github.com/The-Next-Security/tns-cctv-pwa/issues/53) QA-12 | Reescribir `USUARIOS_PRUEBA.md` + `INSTRUCCIONES_ACCESO.md` desde el seed real | Docs alineados a `07_01_datos_iniciales.sql` |
+
+### 6.4 Tanda 4 — UI mobile y D11 (si queda tiempo; si no, re-agendar)
+
+| Issue | Qué hacer | Criterio de cierre |
+|---|---|---|
+| [#55](https://github.com/The-Next-Security/tns-cctv-pwa/issues/55) QA-14 | Inicial real en avatar; `collisionPadding`/max-width al popover de contactos | Sin scroll horizontal en 390×844 |
+| [#56](https://github.com/The-Next-Security/tns-cctv-pwa/issues/56) QA-15 | Mínimo: aviso "datos de demostración" en /reportes; ideal: tanda 1 de D11 (KPIs desde BD) + tokens ds-* en gráficos | Sin mock silencioso (D6) |
+
+### 6.R RESULTADOS — sesión de resolución 2026-06-11 (tarde)
+
+**Verificación de cierre:** `npm test` **99/99** ✅ (4 archivos de test nuevos: +2 de contrato) · `tsc --noEmit` ✅ · `npm run build` ✅ · scan de secretos limpio · cada fix verificado en navegador 390×844 y contra la BD (vía API).
+
+| Issue | Estado | Resumen del fix |
+|---|---|---|
+| #51 QA-10 | ✅ RESUELTO (pendiente cierre en GitHub) | Card de acciones unificado en `/operacion/alerta/[id]`: Atender/Revisada/Llamar/Escalar/Descartar con el patrón del card de consola (forzar `en_revision` para visibilidad). E2E verificado: timeline BD registra NEW→IN_REVIEW→CALL_REGISTERED→ESCALATING desde el detalle. |
+| #50 QA-09 | ✅ RESUELTO | `resolution_notes` = `comment_text` del último CLOSED del timeline; decisión del SP expuesta aparte como `resolution_decision`. Ojo: la columna es `comment_text`, no `comment`. Test: `resolution-notes.contract.spec.js`. |
+| #54 QA-13 | ✅ RESUELTO | `getResolutionLabel` + `RESOLUTION_DECISION_LABELS` en `lib/types.ts` (traduce CONFIRMED→confirmada, etc., incluso datos legacy); causa raíz adicional: `attendAlert` fosilizaba el enum como comment cuando no había nota (`notes \|\| target.decision` → `notes \|\| null`). Test: `resolution-label.contract.spec.js`. |
+| #48 QA-07 | ✅ Implementado — confirmar "Instalar app" a mano | Íconos 192/512 + maskable generados desde el logo (fondo blanco) en `public/brand/icon-*.png` y declarados en `app/manifest.ts`. ⚠️ `public/` está gitignored COMPLETO: los íconos requieren `git add -f`. `beforeinstallprompt` no dispara en headless. |
+| Push E2E | ⏳ Preparado — requiere PO | Claves VAPID generadas en `.env.local` (gitignored); backend `push enabled:true`. Falta el paso manual del PO (permiso de notificaciones + escalar). |
+| #49 QA-08 | ⏸ Sin implementar — decisión diferida | PO aclaró (2026-06-11): los NVR no están conectados y los datos de heartbeat en BD son inventados para pruebas. La decisión "sin datos" vs "ok" se retoma con el spike de NVR físico, cuando haya heartbeats reales. |
+| #52 QA-11 | ✅ RESUELTO | Leyenda del login corregida (la auth es real); accesos rápidos ya apuntaban a usuarios del seed. |
+| #53 QA-12 | ✅ RESUELTO | `USUARIOS_PRUEBA.md` e `INSTRUCCIONES_ACCESO.md` reescritos desde el seed real (9 usuarios, roles reales, auth JWT+bcrypt, sesión D10). |
+| #55 QA-14 | ✅ RESUELTO | Avatar: top-bar leía `full_name` pero `/auth/me` llena `nombre` → `displayName` con fallback. Popover: `collisionPadding={16}` + `max-w-[calc(100vw-2rem)]`; verificado contenido en 390px sin scroll horizontal. |
+| #56 QA-15 | ✅ RESUELTO (alcance mínimo) | Callout warning "Datos de demostración" en /reportes + gráficos migrados a tokens CSS (`var(--criticality-*)`, `var(--cctv-accent-blue)`, `var(--alert-success)`). KPIs desde BD = D11 (re-agendado). |
+
+**Commits:** 8 commits aprobados por el PO al cierre (sin push). **Cierre de issues en GitHub:** pendiente de la validación manual del PO (lista de validaciones por issue entregada en la sesión); #48 espera el check "Instalar app" y #49 quedó diferido.
+
+### 6.6 Plan de la siguiente sesión — SUPERSEDIDO por §8 (tras la sesión de responsividad §7)
+
+### 6.5 Reglas de la sesión
+
+- Un issue = un goal del loop (ejecutar → verificar → cerrar con evidencia). Commits con aprobación del PO referenciando el issue (`fix: ... (#51)`).
+- Mobile-first 390×844 para validar cada fix de UI; editor de reglas en desktop.
+- Los 4 tests de contrato nuevos (`alert-class`, `db-timezone`, `users-rbac`, `alert-vocabulary`) NO se tocan — si fallan, el fix está mal.
+- Mantener anti-objetivos §2.4. El **spike NVR físico** (§3.1) sigue siendo el bloqueante del hito 25-jun: si el hardware llega antes, ese spike tiene prioridad sobre las tandas 3 y 4.
+- Al cerrar: suite verde, `LECCIONES.md` con lo no obvio, este HANDOFF actualizado (§6 marcado con resultados + plan de la siguiente sesión).
+
+---
+
+## 7. RESULTADOS — sesión de responsividad iOS (2026-06-11/12)
+
+**Goal:** PWA sin desplazamiento lateral fuera de los bordes y menús/navegación perfectos; el PO reportó mal comportamiento en iOS.
+
+**Verificación de cierre:** las 13 rutas (login, operación, detalle de alerta, recepción, expedientes, reportes, salud, admin + 6 subpáginas) con `scrollWidth` = viewport exacto en **390×844 y 375×667**, cero elementos fuera de bordes, `window.scrollTo(500,0)` no mueve la página. Menú móvil completo: abre, cubre el bottom nav, expande submenú Admin, navega, se auto-cierra. `npm test` 99/99 ✅ · `tsc` ✅ · `build` ✅.
+
+### 7.1 Causas raíz corregidas (commit `7cdb16b`)
+
+| Síntoma iOS | Causa raíz | Fix |
+|---|---|---|
+| Paneo lateral de toda la página | `sr-only` `position:absolute` del botón refresh sin ancestro posicionado → containing block = body → escapaba el clip de la fila de chips y expandía `body.scrollWidth` a 956px | `position: relative` en `.mobile-scroll-x` (`app/globals.css`) |
+| `overflow-x: hidden` no bloquea el paneo táctil | Limitación conocida del root scroller en iOS Safari | `overflow-x: clip` en html/body vía `@supports` AL FINAL del layer base (el minificador colapsa fallbacks duplicados en una misma regla) |
+| Topbar bajo el notch / nav bajo el home indicator (PWA instalada) | Faltaba `viewportFit: 'cover'` → `env(safe-area-inset-*)` = 0 | `viewportFit: 'cover'` en el export `viewport` (`app/layout.tsx`) |
+| Pie del menú lateral fuera de pantalla con barra de URL visible | `h-screen` (100vh = viewport grande) en elemento fixed | `h-full` (en fixed, el % sigue el viewport dinámico) en `app-sidebar.tsx` |
+| Menú lateral tapado por el bottom nav | Ambos z-50 y el nav va después en el DOM | Overlay del menú a z-[55]/z-[60] + botón contextual "Cerrar menú" (prop `mobile` en `AppSidebar`) |
+
+⚠️ **Hallazgo de tooling (LECCIONES.md):** turbopack en dev no recompiló un `@apply` editado (sirvió el chunk con otros cambios del MISMO archivo pero sin ese). Verificar el chunk CSS servido, no solo el fuente; declaraciones críticas en CSS plano.
+
+### 7.2 Pendiente de validación en dispositivo real
+
+No hay Safari/iOS en el entorno de desarrollo (Puppeteer = Blink). Los fixes atacan los mecanismos documentados de iOS, pero la confirmación final es **en el iPhone del PO**: arrastre lateral en operación/reportes/salud, menú hamburguesa con barra de URL visible, topbar vs notch en modo instalado.
+
+---
+
+## 8. PLAN DE LA PRÓXIMA SESIÓN
+
+**Estado de partida:** rama `claude/heuristic-yonath-8b3363` en `7cdb16b`, **sincronizada con `origin/feature/t_0126143d`** (mismo HEAD verificado 2026-06-12); son **25 commits sobre `dev`**, aún sin merge. Suite **99/99** en 17 archivos (6 tests de contrato intocables: `alert-class`, `db-timezone`, `users-rbac`, `alert-vocabulary`, `resolution-notes`, `resolution-label`). Issues #48–#56 **abiertos en GitHub a propósito** (el PO pidió cerrarlos solo tras su validación manual). Claves VAPID en `.env.local` (gitignored — regenerar con `npx web-push generate-vapid-keys` si se pierde). Para levantar la app con push: `set -a; source .env.local; set +a; npm run dev`.
+
+### 8.0 Protocolo de inicio
+
+```
+1. Protocolo de lectura (CLAUDE.md global + proyecto + LECCIONES_APRENDIDAS.md + confirmación)
+2. Leer este HANDOFF (§6.R, §7 y este §8) + LECCIONES.md (25 reglas)
+3. git status / git log -25  → HEAD debe seguir sincronizado con origin/feature/t_0126143d; decidir merge/PR a dev con el PO
+4. npm install && npm run db:verify && npm test  → debe dar 99/99 verde
+5. set -a; source .env.local; set +a; npm run dev  → web :3000, api :4000 (push enabled:true)
+```
+
+### 8.1 Bloque 1 — Validaciones manuales del PO (≈20 min, desbloquea los cierres)
+
+| Validación | Cómo | Cierra |
+|---|---|---|
+| Push E2E | Chrome del PO → login admin → permitir notificaciones → atender+llamar+escalar una alerta → cerrar pestaña → notificación llega → clic abre detalle → SELECT (solo lectura, protocolo BD) de `ale_notificacion` channel PUSH status SENT | Bloque F §5.2 |
+| Instalar PWA | Chrome → menú ⋮ → "Instalar app" en localhost:3000 | #48 |
+| iPhone real | Arrastre lateral en operación/reportes/salud; menú hamburguesa; topbar vs notch instalada | §7.2 |
+| Fixes #50–#56 | Lista de validaciones por issue entregada en la sesión (resolución con/sin nota, leyenda login, avatar "C", popover 390px, aviso /reportes) | #50–#56 |
+
+Tras validar: `gh issue close <n> --comment` con evidencia (aprobación del PO por tanda). #49 queda abierto (decisión diferida al spike NVR — los heartbeats actuales son datos inventados, dixit PO 2026-06-11).
+
+### 8.2 Bloque 2 — Trabajo de desarrollo (en orden)
+
+1. **Spike NVR físico** (§3.1) si el hardware llegó — bloqueante del hito 25-jun, prioridad sobre todo lo demás. Incluye decisión #49 con heartbeats reales.
+2. **PR/merge de la rama a `dev`** (con aprobación): 25 commits acumulados; mientras más crezca, más caro el merge.
+3. **D11 tanda 1** (mocks→seed): `GET /tenants` + zonas. ~~KPIs de /reportes desde BD~~ ✅ hecho en la sesión CIOC (§9).
+4. **Backlog pre-go-live §3.5** + corregir la línea `public/` de `.gitignore` (hoy obliga a `git add -f` por asset) + rotar `dev-ingest-key` y credenciales demo.
+
+### 8.3 Reglas vigentes
+
+- Un goal verificable por tarea; máximo 3 diagnósticos por bloqueo antes de escalar al PO.
+- Mobile-first 390×844 (editor de reglas en desktop). Los 6 tests de contrato NO se tocan.
+- Commits/push/cierres de issues con aprobación explícita del PO. Checklist de secretos antes de cada commit.
+- Al cerrar: suite verde, LECCIONES.md con lo no obvio, este HANDOFF actualizado (§8 marcado con resultados + plan siguiente).
+
+---
+
+## 9. RESULTADOS — sesión Reportes CIOC desde BD (2026-06-12)
+
+**Goal:** salto evolutivo del módulo `/reportes` (propuesta "Centro de Inteligencia Operativa y Cumplimiento" aprobada por el PO): KPIs reales desde la BD, accountability por operador, pista de auditoría y export CSV. Cubre la parte de reportes de **D11 tanda 1** (§8.2.3).
+
+**Verificación de cierre:** `npm test` **127/127** ✅ (18 archivos; incluye los tests de ordenamiento de la sesión de filtros y 19 nuevos de RBAC de reportes) · `npm run build` ✅ · E2E contra MySQL real: summary con 24 alertas/semana, KPIs cambian por período (Hoy: 6), audit-trail 63 registros paginados (5 páginas), CSV descarga con BOM, vigilante → 403 en todos los endpoints.
+
+### 9.1 Qué se construyó
+
+| Pieza | Dónde | Detalle |
+|---|---|---|
+| Agregaciones SQL | `src/mysqlStore.cjs` | `reportSummary` (KPIs + 5 series; MTTR y tiempo de toma desde `log_evento_timeline`), `reportOperators` (acciones/resueltas/descartadas/escaladas/llamadas + tiempo de toma por usuario), `reportAuditTrail` (UNION timeline operativo + `log_auditoria_api`, paginado, filtro `user_id`). Helper `reportRange` (default: última semana; fechas UTC). |
+| Endpoints | `src/reportsRoutes.cjs` (nuevo) montado en `src/app.js` | `GET /api/v1/reports/{summary,operators,audit-trail,export}`. RBAC servidor (patrón QA-05): `summary` → admin_parque·supervisor·responsable_seguridad·tecnico (= `reports.view`); `operators`/`audit-trail`/`export` → solo admin_parque·supervisor. Export CSV server-side (`;` + BOM para Excel es-CL). |
+| Cliente API + tipos | `lib/api.ts`, `lib/types.ts` | Reemplazados los 5 endpoints fantasma de `reports` (nunca existieron en el backend) por el contrato real. `exportCsv` devuelve Blob (no pasa por fetchApi/JSON). |
+| Página | `app/(dashboard)/reportes/page.tsx` | Fetch real, selector de período FUNCIONAL (hoy/semana/mes/año), skeletons, banner de error si el API falla, **aviso de demo retirado** (QA-15/D6 cumplido con dato real). |
+| Sección auditoría | `components/reports/audit-section.tsx` (nuevo) | "Actividad por Operador" + "Pista de Auditoría" paginada con acciones en español ("Tomó la alerta", "Escaló"...). Tras RoleGate admin_parque·supervisor (y 403 del servidor igualmente). |
+| Test de contrato | `tests/reports-rbac.contract.spec.js` | 19 casos: 403 por rol, 501 del store en memoria para roles permitidos (prueba que el guard deja pasar), 401 sin token. **Se suma a los tests de contrato intocables.** |
+
+### 9.2 Notas para la próxima sesión
+
+- **El API dev del PO (puerto 4000) requiere reinicio** para servir `/api/v1/reports/*` (Node no recarga; el dev web :3000 sí tomó la UI nueva por hot-reload).
+- Los rewrites de Next se hornean en el build: `next start` usa el `API_PROXY_TARGET` del momento del `next build` (hallazgo de tooling; el `.next` quedó con el default :4000).
+- Validación PO pendiente (sumar a §8.1): abrir `/reportes` como admin (KPIs reales + auditoría), como vigilante el menú no muestra Reportes y el API responde 403; probar "Exportar Reporte" (CSV con filtros activos).
+- Fase 4 del plan CIOC (post go-live, backlog): PDF firmado con hash, reportes programados por email, uptime histórico de fuentes (hoy `sal_*` sin datos reales — depende del spike NVR).
+- D11 restante: `GET /tenants` + zonas desde BD (la parte de reportes ya está).
+
+---
+
+*Actualizado el 2026-06-12 al cierre de la sesión de reportes CIOC. Si este documento contradice al código, el código + la suite de tests son la verdad — y hay que corregir este documento.*

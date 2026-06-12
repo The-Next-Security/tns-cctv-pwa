@@ -110,7 +110,10 @@ export default function RecepcionPage() {
         setEntries(items)
       })
       .catch(() => {
-        if (!cancelled) setEntries(MOCK_VEHICLE_ENTRIES)
+        if (cancelled) return
+        // Mock visible, nunca silencioso (D6): se informa que son datos demo.
+        setEntries(MOCK_VEHICLE_ENTRIES)
+        toast.warning('Sin conexión con el servidor — mostrando datos de demostración')
       })
     return () => {
       cancelled = true
@@ -278,8 +281,12 @@ export default function RecepcionPage() {
         ? { ...e, exit_at: exitAt }
         : e
     ))
-    // Persistencia best-effort (requiere columna exit_at en adm_ingreso).
-    vehicleEntriesApi.update(exitingEntry.id, { exit_at: exitAt }).catch(() => {})
+    // UX optimista con reconciliación (D3): si el servidor rechaza, se revierte.
+    const entryId = exitingEntry.id
+    vehicleEntriesApi.update(entryId, { exit_at: exitAt }).catch(() => {
+      setEntries(prev => prev.map(e => (e.id === entryId ? { ...e, exit_at: null } : e)))
+      toast.error('No se pudo registrar la salida en el servidor. Intente nuevamente.')
+    })
     toast.success('Salida registrada correctamente')
     setExitDialogOpen(false)
     setExitingEntry(null)

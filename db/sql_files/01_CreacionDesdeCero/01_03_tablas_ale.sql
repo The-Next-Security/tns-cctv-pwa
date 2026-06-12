@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS ale_notificacion (
   id_site            CHAR(26)      NOT NULL,
   id_evento          CHAR(26)      NULL,
   id_caso_velocidad  CHAR(26)      NULL,
-  channel            ENUM('IN_APP','WS','EMAIL_INTERNAL') NOT NULL,
+  channel            ENUM('IN_APP','WS','EMAIL_INTERNAL','PUSH') NOT NULL,
   target_type        ENUM('USER','ROLE','GROUP') NOT NULL,
   target_value       VARCHAR(160)  NOT NULL,
   message_body       TEXT          NOT NULL,
@@ -111,4 +111,24 @@ CREATE TABLE IF NOT EXISTS ale_notificacion (
     (id_evento IS NOT NULL AND id_caso_velocidad IS NULL)
     OR (id_evento IS NULL AND id_caso_velocidad IS NOT NULL)
   )
+) ENGINE=InnoDB;
+
+-- D9: suscripciones Web Push (VAPID) por usuario. El envío se registra en
+-- ale_notificacion con channel='PUSH'.
+CREATE TABLE IF NOT EXISTS ale_push_suscripcion (
+  id_push_suscripcion  CHAR(26)     PRIMARY KEY,
+  id_tenant            CHAR(26)     NOT NULL,
+  id_usuario           CHAR(26)     NOT NULL,
+  endpoint             VARCHAR(512) NOT NULL,
+  p256dh               VARCHAR(255) NOT NULL,
+  auth_secret          VARCHAR(255) NOT NULL,
+  user_agent           VARCHAR(255) NULL,
+  activo               TINYINT(1)   NOT NULL DEFAULT 1,
+  creado_en            DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  actualizado_en       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+                                     ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_push_susc_tenant FOREIGN KEY (id_tenant) REFERENCES gen_tenant(id_tenant),
+  CONSTRAINT fk_push_susc_usuario FOREIGN KEY (id_usuario) REFERENCES gen_usuario(id_usuario),
+  CONSTRAINT uk_push_susc_endpoint UNIQUE (endpoint(255)),
+  INDEX idx_push_susc_usuario (id_usuario, activo)
 ) ENGINE=InnoDB;

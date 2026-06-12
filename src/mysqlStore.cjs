@@ -250,7 +250,15 @@ function mapAlertRow(r, maps = {}) {
     plate: r.plate,
     description: rule?.name || r.decision_reason || null,
     snapshot_url: null,
-    resolution_notes: r.decision_reason || null,
+    // QA-09 (#50): la nota del operador vive en el comment del último CLOSED
+    // del timeline; la decisión del SP (CONFIRMED/DISMISSED) se expone aparte.
+    resolution_notes: r.close_comment || null,
+    resolution_decision: r.close_decision || null,
+    // Ciclo de vida: fecha/actor del último CLOSED del timeline; null si sigue abierta.
+    resolved_at: r.closed_at ? toIso(r.closed_at) : null,
+    resolved_by: r.closed_by ?? null,
+    // D4: la llamada vive en el timeline (CALL_REGISTERED), no como columna de ale_evento.
+    llamada_at: r.llamada_at ? toIso(r.llamada_at) : null,
     zone: zoneId ? { id: zoneId, name: ZONE_NAMES[r.zone_code] || r.zone_code, active: true } : undefined,
   };
 }
@@ -259,6 +267,63 @@ function toIso(value) {
   if (!value) return null;
   const s = String(value);
   return s.includes('T') ? s : s.replace(' ', 'T') + (s.endsWith('Z') ? '' : 'Z');
+}
+
+// Ciclo de vida de alertas: una alerta cerrada permanece en la vista operativa
+// durante la ventana SLA (48h) y luego pasa al historial forense. El corte es
+// lógico (condición de query sobre el cierre del timeline), sin archivado físico.
+const OPERATIONAL_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+// ISO/Date -> 'YYYY-MM-DD HH:MM:SS.mmm' para comparar contra DATETIME(3) (UTC, QA-04).
+function toSqlDateTime(d) {
+  return d.toISOString().replace('T', ' ').replace('Z', '');
+}
+
+function operationalCutoffSql() {
+  return toSqlDateTime(new Date(Date.now() - OPERATIONAL_WINDOW_MS));
+}
+
+// FROM compartido entre listAlerts y searchAlertHistory: enriquece cada evento
+// con el último cierre del timeline (decisión, nota, fecha y actor) y la llamada.
+const ALERT_FROM_SQL = `
+     FROM ale_evento e
+     LEFT JOIN (
+       SELECT lt.id_evento, lt.decision, lt.comment_text, lt.occurred_at AS closed_at, lt.actor_id_usuario AS closed_by
+         FROM log_evento_timeline lt
+         JOIN (
+           SELECT id_evento, MAX(occurred_at) mx
+             FROM log_evento_timeline
+            WHERE to_state = 'CLOSED'
+            GROUP BY id_evento
+         ) m ON m.id_evento = lt.id_evento AND m.mx = lt.occurred_at AND lt.to_state = 'CLOSED'
+     ) t ON t.id_evento = e.id_evento
+     LEFT JOIN (
+       SELECT id_evento, MAX(occurred_at) AS llamada_at
+         FROM log_evento_timeline
+        WHERE action_type = 'CALL_REGISTERED'
+        GROUP BY id_evento
+     ) c ON c.id_evento = e.id_evento`;
+
+const ALERT_SELECT_SQL = `SELECT e.*, t.decision AS close_decision, t.comment_text AS close_comment, t.closed_at, t.closed_by, c.llamada_at${ALERT_FROM_SQL}`;
+
+// criticality del frontend -> condición sobre severity (inversa de severityToCriticality).
+const CRITICALITY_SQL = {
+  critica: 'e.severity >= 5',
+  alta: 'e.severity = 4',
+  media: 'e.severity = 3',
+  baja: 'e.severity <= 2',
+};
+
+// ISO UTC -> 'YYYY-MM-DD HH:MM:SS.mmm' para comparar contra DATETIME(3) (UTC, QA-04).
+// Sin from/to se asume la última semana.
+function reportRange(from, to) {
+  const toIsoSql = (d) => d.toISOString().replace('T', ' ').replace('Z', '');
+  const end = to ? new Date(to) : new Date();
+  const start = from ? new Date(from) : new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw Object.assign(new Error('INVALID_DATE_RANGE'), { code: 'INVALID_DATE_RANGE' });
+  }
+  return { from: toIsoSql(start), to: toIsoSql(end) };
 }
 
 const SOURCE_TYPE_TO_PLATE_SOURCE = { MANUAL: 'manual', ANPR: 'anpr', HYBRID: 'hybrid' };
@@ -393,10 +458,23 @@ class MysqlStore {
         payload.source.channel ??
         null;
 
+      // El conector puede identificar la fuente por id_fuente o por source_code:
+      // dah_evento_crudo exige el id_fuente real (FK), así que se resuelve aquí.
+      const [fuenteRows] = await conn.query(
+        `SELECT id_fuente FROM src_fuente
+          WHERE id_tenant = ? AND (id_fuente = ? OR source_code = ?)
+          LIMIT 1`,
+        [payload.tenant_id, payload.source.source_id, payload.source.source_id]
+      );
+      if (!fuenteRows[0]) {
+        await conn.rollback();
+        return { invalidSource: true };
+      }
+
       const pipelineResult = await processNvrRawEvent(conn, {
         tenantId: payload.tenant_id,
         siteId: payload.site_id,
-        sourceId: payload.source.source_id,
+        sourceId: fuenteRows[0].id_fuente,
         channel,
         eventType: payload.event.event_type,
         zoneCode: payload.event.zone_code || null,
@@ -648,25 +726,67 @@ class MysqlStore {
     return { user: users.find((u) => u.id === userId) };
   }
 
-  async listAlerts() {
+  async listAlerts({ scope } = {}) {
     const maps = await this.loadEnrichmentMaps();
+    // scope=operativa: toda alerta abierta (sin importar antigüedad) + las
+    // cerradas dentro de la ventana SLA. Las demás viven en el historial.
+    const where = scope === 'operativa' ? `WHERE e.state <> 'CLOSED' OR t.closed_at >= ?` : '';
+    const params = scope === 'operativa' ? [operationalCutoffSql()] : [];
     const [rows] = await this.pool.query(
-      `SELECT e.*, t.decision AS close_decision
-         FROM ale_evento e
-         LEFT JOIN (
-           SELECT lt.id_evento, lt.decision
-             FROM log_evento_timeline lt
-             JOIN (
-               SELECT id_evento, MAX(occurred_at) mx
-                 FROM log_evento_timeline
-                WHERE to_state = 'CLOSED'
-                GROUP BY id_evento
-             ) m ON m.id_evento = lt.id_evento AND m.mx = lt.occurred_at AND lt.to_state = 'CLOSED'
-         ) t ON t.id_evento = e.id_evento
+      `${ALERT_SELECT_SQL}
+        ${where}
         ORDER BY e.occurred_at DESC
-        LIMIT 200`
+        LIMIT 200`,
+      params
     );
     return rows.map((r) => mapAlertRow(r, maps));
+  }
+
+  // Historial forense: alertas cerradas fuera de la ventana operativa de 48h,
+  // con filtros de investigación y paginación server-side.
+  async searchAlertHistory({ from, to, zoneId, criticality, plate, resolvedBy, page = 1, pageSize = 25 } = {}) {
+    const maps = await this.loadEnrichmentMaps();
+    const where = [`e.state = 'CLOSED'`, `t.closed_at < ?`];
+    const params = [operationalCutoffSql()];
+
+    if (from) {
+      where.push(`e.occurred_at >= ?`);
+      params.push(toSqlDateTime(new Date(from)));
+    }
+    if (to) {
+      where.push(`e.occurred_at <= ?`);
+      params.push(toSqlDateTime(new Date(to)));
+    }
+    if (zoneId != null) {
+      where.push(`e.zone_code = ?`);
+      params.push(`zone-${zoneId}`);
+    }
+    if (criticality && CRITICALITY_SQL[criticality]) {
+      where.push(CRITICALITY_SQL[criticality]);
+    }
+    if (plate) {
+      where.push(`REPLACE(REPLACE(UPPER(e.plate), '-', ''), ' ', '') LIKE ?`);
+      params.push(`%${String(plate).replace(/[^A-Za-z0-9]/g, '').toUpperCase()}%`);
+    }
+    if (resolvedBy) {
+      where.push(`t.closed_by = ?`);
+      params.push(resolvedBy);
+    }
+
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+    const [countRows] = await this.pool.query(
+      `SELECT COUNT(*) AS total${ALERT_FROM_SQL} ${whereSql}`,
+      params
+    );
+    const total = countRows[0]?.total ?? 0;
+    const [rows] = await this.pool.query(
+      `${ALERT_SELECT_SQL}
+        ${whereSql}
+        ORDER BY e.occurred_at DESC
+        LIMIT ? OFFSET ?`,
+      [...params, pageSize, (page - 1) * pageSize]
+    );
+    return { items: rows.map((r) => mapAlertRow(r, maps)), total };
   }
 
   // --- Ingresos vehiculares (adm_ingreso) ---
@@ -799,6 +919,94 @@ class MysqlStore {
     return { entry: await this.getVehicleEntry(ingresoId) };
   }
 
+  // Auth máquina-a-máquina del ingest (Paso 2): la api key se compara por
+  // SHA-256 contra src_conector_edge.api_key_hash (migración 08_08).
+  async validateIngestApiKey(apiKey) {
+    const hash = crypto.createHash('sha256').update(apiKey).digest('hex');
+    const [rows] = await this.pool.query(
+      `SELECT id_conector_edge, id_tenant, id_site, code
+         FROM src_conector_edge
+        WHERE api_key_hash = ? AND status = 'ACTIVE'
+        LIMIT 1`,
+      [hash]
+    );
+    return rows[0] || null;
+  }
+
+  // --- Web Push (D9) ---
+  async savePushSubscription(userId, { endpoint, p256dh, auth, userAgent }) {
+    const [users] = await this.pool.query(
+      `SELECT id_tenant FROM gen_usuario WHERE id_usuario = ? LIMIT 1`,
+      [userId]
+    );
+    if (!users[0]) return { notFound: true };
+    await this.pool.query(
+      `INSERT INTO ale_push_suscripcion
+         (id_push_suscripcion, id_tenant, id_usuario, endpoint, p256dh, auth_secret, user_agent, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+       ON DUPLICATE KEY UPDATE
+         id_usuario = VALUES(id_usuario),
+         p256dh = VALUES(p256dh),
+         auth_secret = VALUES(auth_secret),
+         user_agent = VALUES(user_agent),
+         activo = 1`,
+      [genId('PS'), users[0].id_tenant, userId, endpoint, p256dh, auth, userAgent || null]
+    );
+    return { ok: true };
+  }
+
+  async listPushSubscriptionsByRoles(tenantId, roles) {
+    if (!roles?.length) return [];
+    const [rows] = await this.pool.query(
+      `SELECT s.endpoint, s.p256dh, s.auth_secret, s.id_usuario
+         FROM ale_push_suscripcion s
+         JOIN gen_usuario u ON u.id_usuario = s.id_usuario
+        WHERE s.activo = 1
+          AND s.id_tenant = ?
+          AND u.status = 'ACTIVE'
+          AND u.rol IN (?)`,
+      [tenantId, roles]
+    );
+    return rows;
+  }
+
+  async deactivatePushSubscription(endpoint) {
+    await this.pool.query(
+      `UPDATE ale_push_suscripcion SET activo = 0 WHERE endpoint = ?`,
+      [endpoint]
+    );
+  }
+
+  async recordPushNotification({ tenantId, eventId, userId, body, status, errorMessage }) {
+    let siteId = null;
+    if (eventId) {
+      const [ev] = await this.pool.query(`SELECT id_site FROM ale_evento WHERE id_evento = ?`, [eventId]);
+      siteId = ev[0]?.id_site ?? null;
+    }
+    if (!siteId) {
+      const [sites] = await this.pool.query(`SELECT id_site FROM gen_site WHERE id_tenant = ? LIMIT 1`, [tenantId]);
+      siteId = sites[0]?.id_site;
+      if (!siteId) return;
+    }
+    await this.pool.query(
+      `INSERT INTO ale_notificacion
+         (id_notificacion, id_tenant, id_site, id_evento, channel, target_type, target_value,
+          message_body, status, attempts, last_attempt_at, sent_at, error_message)
+       VALUES (?, ?, ?, ?, 'PUSH', 'USER', ?, ?, ?, 1, CURRENT_TIMESTAMP(3), ?, ?)`,
+      [
+        genId('NT'),
+        tenantId,
+        siteId,
+        eventId,
+        userId,
+        body,
+        status,
+        status === 'SENT' ? new Date() : null,
+        errorMessage,
+      ]
+    );
+  }
+
   async attendAlert(eventId, action, notes, actorUserId) {
     const ACTION_MAP = {
       acknowledge: { toState: 'IN_REVIEW', decision: 'TOMAR' },
@@ -807,11 +1015,12 @@ class MysqlStore {
       discard: { toState: 'CLOSED', decision: 'FALSE_POSITIVE' },
       reactivate: { toState: 'NEW', decision: 'REACTIVATED' },
       activate: { toState: 'NEW', decision: 'REACTIVATED' },
-      // alias del vocabulario del frontend existente
-      revisada: { toState: 'CLOSED', decision: 'CONFIRMED' },
-      descartada: { toState: 'CLOSED', decision: 'FALSE_POSITIVE' },
-      escalada: { toState: 'ESCALATING', decision: 'ESCALATED' },
     };
+    // D4: registrar llamada NO cambia el estado — solo agrega CALL_REGISTERED al timeline.
+    if (action === 'register_call') {
+      return this.registerCall(eventId, notes, actorUserId);
+    }
+
     const target = ACTION_MAP[action];
     if (!target) return { invalid: true, reason: 'UNKNOWN_ACTION' };
 
@@ -822,7 +1031,9 @@ class MysqlStore {
       return this.reactivateAlert(eventId, notes, actorUserId);
     }
 
-    const comment = notes || target.decision;
+    // QA-13 (#54): sin nota del operador el comment queda NULL — nunca fosilizar
+    // el enum de decisión como comment_text (de ahí salía "Resuelta: CONFIRMED").
+    const comment = notes || null;
 
     // Transición multi-paso: el SP solo permite pasos atómicos válidos.
     if (target.toState === 'CLOSED' && current.state === 'NEW') {
@@ -838,6 +1049,27 @@ class MysqlStore {
 
     const res = await this.changeState(eventId, target.toState, target.decision, comment, actorUserId);
     if (res.notFound || res.invalid) return res;
+    return { alert: await this.getAlert(eventId) };
+  }
+
+  // D4: llamada_at = acción CALL_REGISTERED en el timeline append-only, NO columna.
+  async registerCall(eventId, notes, actorUserId) {
+    const [rows] = await this.pool.query(
+      `SELECT id_tenant, state FROM ale_evento WHERE id_evento = ?`,
+      [eventId]
+    );
+    if (!rows[0]) return { notFound: true };
+    if (rows[0].state === 'CLOSED') return { invalid: true, reason: 'ALERT_CLOSED' };
+
+    const actor = await this.resolveActorWithPermission(rows[0].id_tenant, 'alerts.attend', actorUserId);
+    await this.pool.query(
+      `INSERT INTO log_evento_timeline (
+          id_evento_timeline, id_tenant, id_evento, action_type,
+          from_state, to_state, decision, comment_text,
+          actor_type, actor_id_usuario, occurred_at, request_id
+        ) VALUES (?, ?, ?, 'CALL_REGISTERED', NULL, NULL, NULL, ?, 'USER', ?, CURRENT_TIMESTAMP(3), NULL)`,
+      [genId('TL'), rows[0].id_tenant, eventId, notes || 'Llamada registrada', actor]
+    );
     return { alert: await this.getAlert(eventId) };
   }
 
@@ -907,7 +1139,22 @@ class MysqlStore {
           SELECT lt.decision FROM log_evento_timeline lt
            WHERE lt.id_evento = e.id_evento AND lt.to_state = 'CLOSED'
            ORDER BY lt.occurred_at DESC LIMIT 1
-        ) AS close_decision
+        ) AS close_decision, (
+          SELECT lt.comment_text FROM log_evento_timeline lt
+           WHERE lt.id_evento = e.id_evento AND lt.to_state = 'CLOSED'
+           ORDER BY lt.occurred_at DESC LIMIT 1
+        ) AS close_comment, (
+          SELECT lt.occurred_at FROM log_evento_timeline lt
+           WHERE lt.id_evento = e.id_evento AND lt.to_state = 'CLOSED'
+           ORDER BY lt.occurred_at DESC LIMIT 1
+        ) AS closed_at, (
+          SELECT lt.actor_id_usuario FROM log_evento_timeline lt
+           WHERE lt.id_evento = e.id_evento AND lt.to_state = 'CLOSED'
+           ORDER BY lt.occurred_at DESC LIMIT 1
+        ) AS closed_by, (
+          SELECT MAX(lt.occurred_at) FROM log_evento_timeline lt
+           WHERE lt.id_evento = e.id_evento AND lt.action_type = 'CALL_REGISTERED'
+        ) AS llamada_at
         FROM ale_evento e WHERE e.id_evento = ?`,
       [eventId]
     );
@@ -963,12 +1210,271 @@ class MysqlStore {
     };
   }
 
+  // Lee un parámetro de gen_configuracion_* (valor activo o valor_default).
+  async getConfigValue(rutaCompleta, fallback) {
+    const [rows] = await this.pool.query(
+      `SELECT COALESCE(v.valor, p.valor_default) AS valor
+         FROM gen_configuracion_parametros p
+         LEFT JOIN gen_configuracion_valores v
+           ON v.id_configuracion_parametros = p.id_configuracion_parametros AND v.activo = 1
+        WHERE p.ruta_completa = ? AND p.activo = 1
+        ORDER BY v.version DESC
+        LIMIT 1`,
+      [rutaCompleta]
+    );
+    return rows[0]?.valor ?? fallback;
+  }
+
+  // M6: heartbeat de una fuente (lo reporta el conector o el ingest de eventos).
+  async recordSourceHeartbeat(sourceCodeOrId) {
+    const [result] = await this.pool.query(
+      `UPDATE src_fuente
+          SET last_heartbeat_at = CURRENT_TIMESTAMP(3)
+        WHERE source_code = ? OR id_fuente = ?`,
+      [sourceCodeOrId, sourceCodeOrId]
+    );
+    return { updated: result.affectedRows > 0 };
+  }
+
+  // --- Reportes (CIOC): agregaciones sobre ale_evento + log_evento_timeline ---
+  // from/to llegan como ISO UTC; occurred_at se guarda en UTC (QA-04).
+
+  // KPIs + series para la página /reportes en una sola llamada.
+  async reportSummary({ from, to }) {
+    const range = reportRange(from, to);
+    const params = [range.from, range.to];
+
+    // Subconsultas del timeline: primera toma (IN_REVIEW) y último cierre por evento.
+    const ackJoin = `
+      LEFT JOIN (
+        SELECT id_evento, MIN(occurred_at) AS ack_at
+          FROM log_evento_timeline
+         WHERE to_state = 'IN_REVIEW'
+         GROUP BY id_evento
+      ) a ON a.id_evento = e.id_evento`;
+    const closeJoin = `
+      LEFT JOIN (
+        SELECT lt.id_evento, lt.decision, lt.occurred_at AS closed_at
+          FROM log_evento_timeline lt
+          JOIN (
+            SELECT id_evento, MAX(occurred_at) mx
+              FROM log_evento_timeline
+             WHERE to_state = 'CLOSED'
+             GROUP BY id_evento
+          ) m ON m.id_evento = lt.id_evento AND m.mx = lt.occurred_at AND lt.to_state = 'CLOSED'
+      ) c ON c.id_evento = e.id_evento`;
+
+    const [[kpiRows], [zoneRows], [sevRows], [dayRows], [typeRows], [hourRows]] = await Promise.all([
+      this.pool.query(
+        `SELECT COUNT(*) AS total,
+                SUM(e.state = 'CLOSED' AND c.decision = 'CONFIRMED') AS resueltas,
+                SUM(e.state = 'CLOSED' AND c.decision = 'FALSE_POSITIVE') AS descartadas,
+                SUM(e.state IN ('NEW', 'IN_REVIEW')) AS pendientes,
+                SUM(e.state = 'ESCALATING') AS escaladas,
+                SUM(e.severity >= 5) AS criticas,
+                AVG(CASE WHEN a.ack_at IS NOT NULL
+                         THEN TIMESTAMPDIFF(SECOND, e.occurred_at, a.ack_at) END) AS avg_ack_s,
+                AVG(CASE WHEN c.closed_at IS NOT NULL
+                         THEN TIMESTAMPDIFF(SECOND, e.occurred_at, c.closed_at) END) AS avg_resolucion_s
+           FROM ale_evento e ${ackJoin} ${closeJoin}
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?`,
+        params
+      ),
+      this.pool.query(
+        `SELECT COALESCE(e.zone_code, 'sin_zona') AS zone_code, COUNT(*) AS total
+           FROM ale_evento e
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY zone_code ORDER BY total DESC`,
+        params
+      ),
+      this.pool.query(
+        `SELECT e.severity, COUNT(*) AS total
+           FROM ale_evento e
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY e.severity`,
+        params
+      ),
+      this.pool.query(
+        `SELECT DATE(e.occurred_at) AS dia, COUNT(*) AS total
+           FROM ale_evento e
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY dia ORDER BY dia ASC`,
+        params
+      ),
+      this.pool.query(
+        `SELECT e.event_type,
+                SUM(e.state = 'CLOSED') AS resueltas,
+                SUM(e.state <> 'CLOSED') AS pendientes
+           FROM ale_evento e
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY e.event_type ORDER BY (resueltas + pendientes) DESC LIMIT 10`,
+        params
+      ),
+      this.pool.query(
+        `SELECT FLOOR(HOUR(e.occurred_at) / 4) * 4 AS hora_bloque,
+                AVG(TIMESTAMPDIFF(SECOND, e.occurred_at, a.ack_at)) AS avg_ack_s
+           FROM ale_evento e
+           JOIN (
+             SELECT id_evento, MIN(occurred_at) AS ack_at
+               FROM log_evento_timeline
+              WHERE to_state = 'IN_REVIEW'
+              GROUP BY id_evento
+           ) a ON a.id_evento = e.id_evento
+          WHERE e.occurred_at >= ? AND e.occurred_at < ?
+          GROUP BY hora_bloque ORDER BY hora_bloque ASC`,
+        params
+      ),
+    ]);
+
+    const k = kpiRows[0] || {};
+    const total = Number(k.total || 0);
+    const resueltas = Number(k.resueltas || 0);
+    const descartadas = Number(k.descartadas || 0);
+    return {
+      range: { from, to },
+      kpis: {
+        total,
+        resueltas,
+        descartadas,
+        pendientes: Number(k.pendientes || 0),
+        escaladas: Number(k.escaladas || 0),
+        criticas: Number(k.criticas || 0),
+        tasa_resolucion: total ? Math.round(((resueltas + descartadas) / total) * 100) : 0,
+        tasa_falsos_positivos: resueltas + descartadas
+          ? Math.round((descartadas / (resueltas + descartadas)) * 100)
+          : 0,
+        tiempo_toma_promedio_s: k.avg_ack_s != null ? Math.round(Number(k.avg_ack_s)) : null,
+        tiempo_resolucion_promedio_s: k.avg_resolucion_s != null ? Math.round(Number(k.avg_resolucion_s)) : null,
+      },
+      alertas_por_zona: zoneRows.map((r) => ({
+        zona: ZONE_NAMES[r.zone_code] || r.zone_code,
+        alertas: Number(r.total),
+      })),
+      distribucion_criticidad: sevRows.map((r) => ({
+        criticidad: severityToCriticality(r.severity),
+        total: Number(r.total),
+      })),
+      incidentes_por_dia: dayRows.map((r) => ({
+        dia: String(r.dia instanceof Date ? r.dia.toISOString().slice(0, 10) : r.dia).slice(0, 10),
+        total: Number(r.total),
+      })),
+      resolucion_por_tipo: typeRows.map((r) => ({
+        tipo: r.event_type,
+        resueltas: Number(r.resueltas || 0),
+        pendientes: Number(r.pendientes || 0),
+      })),
+      tiempo_respuesta_por_hora: hourRows.map((r) => ({
+        hora: `${String(r.hora_bloque).padStart(2, '0')}:00`,
+        promedio: r.avg_ack_s != null ? Math.round(Number(r.avg_ack_s)) : null,
+      })),
+    };
+  }
+
+  // Accountability: actividad operativa por usuario (acciones del timeline).
+  async reportOperators({ from, to }) {
+    const range = reportRange(from, to);
+    const [rows] = await this.pool.query(
+      `SELECT u.id_usuario, CONCAT(u.nombre, ' ', u.apellido) AS nombre, u.rol,
+              COUNT(*) AS acciones,
+              SUM(lt.to_state = 'IN_REVIEW') AS tomadas,
+              SUM(lt.to_state = 'CLOSED' AND lt.decision = 'CONFIRMED') AS resueltas,
+              SUM(lt.to_state = 'CLOSED' AND lt.decision = 'FALSE_POSITIVE') AS descartadas,
+              SUM(lt.to_state = 'ESCALATING') AS escaladas,
+              SUM(lt.action_type = 'CALL_REGISTERED') AS llamadas,
+              AVG(CASE WHEN lt.to_state = 'IN_REVIEW'
+                       THEN TIMESTAMPDIFF(SECOND, e.occurred_at, lt.occurred_at) END) AS avg_toma_s
+         FROM log_evento_timeline lt
+         JOIN gen_usuario u ON u.id_usuario = lt.actor_id_usuario
+         JOIN ale_evento e ON e.id_evento = lt.id_evento
+        WHERE lt.actor_type = 'USER'
+          AND lt.occurred_at >= ? AND lt.occurred_at < ?
+        GROUP BY u.id_usuario, nombre, u.rol
+        ORDER BY acciones DESC`,
+      [range.from, range.to]
+    );
+    return rows.map((r) => ({
+      user_id: r.id_usuario,
+      nombre: r.nombre,
+      rol: r.rol,
+      acciones: Number(r.acciones),
+      tomadas: Number(r.tomadas || 0),
+      resueltas: Number(r.resueltas || 0),
+      descartadas: Number(r.descartadas || 0),
+      escaladas: Number(r.escaladas || 0),
+      llamadas: Number(r.llamadas || 0),
+      tiempo_toma_promedio_s: r.avg_toma_s != null ? Math.round(Number(r.avg_toma_s)) : null,
+    }));
+  }
+
+  // Pista de auditoría unificada: timeline operativo + auditoría administrativa.
+  async reportAuditTrail({ from, to, userId, page = 1, pageSize = 25 } = {}) {
+    const range = reportRange(from, to);
+    const limit = Math.min(Math.max(parseInt(pageSize, 10) || 25, 1), 100);
+    const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
+    const userFilterOp = userId ? 'AND lt.actor_id_usuario = ?' : '';
+    const userFilterAdm = userId ? 'AND la.id_usuario = ?' : '';
+    const params = [
+      range.from, range.to, ...(userId ? [userId] : []),
+      range.from, range.to, ...(userId ? [userId] : []),
+    ];
+
+    const baseUnion = `
+      SELECT 'OPERACION' AS categoria, lt.occurred_at AS ts,
+             CONCAT(u.nombre, ' ', u.apellido) AS actor, u.rol AS actor_rol,
+             lt.action_type AS accion, lt.from_state, lt.to_state, lt.decision,
+             lt.comment_text AS detalle, e.event_type AS recurso, lt.id_evento AS recurso_id
+        FROM log_evento_timeline lt
+        LEFT JOIN gen_usuario u ON u.id_usuario = lt.actor_id_usuario
+        JOIN ale_evento e ON e.id_evento = lt.id_evento
+       WHERE lt.occurred_at >= ? AND lt.occurred_at < ? ${userFilterOp}
+      UNION ALL
+      SELECT 'ADMIN' AS categoria, la.creado_en AS ts,
+             CONCAT(u.nombre, ' ', u.apellido) AS actor, la.actor_role AS actor_rol,
+             la.action AS accion, NULL, NULL, NULL,
+             NULL AS detalle, la.resource_type AS recurso, la.resource_id AS recurso_id
+        FROM log_auditoria_api la
+        LEFT JOIN gen_usuario u ON u.id_usuario = la.id_usuario
+       WHERE la.creado_en >= ? AND la.creado_en < ? ${userFilterAdm}`;
+
+    const [[countRows], [rows]] = await Promise.all([
+      this.pool.query(`SELECT COUNT(*) AS total FROM (${baseUnion}) x`, params),
+      this.pool.query(
+        `SELECT * FROM (${baseUnion}) x ORDER BY ts DESC LIMIT ${limit} OFFSET ${offset}`,
+        params
+      ),
+    ]);
+
+    return {
+      total: Number(countRows[0]?.total || 0),
+      page: Math.floor(offset / limit) + 1,
+      page_size: limit,
+      items: rows.map((r) => ({
+        categoria: r.categoria,
+        occurred_at: toIso(r.ts),
+        actor: r.actor || 'Sistema',
+        actor_rol: r.actor_rol || null,
+        accion: r.accion,
+        from_state: r.from_state,
+        to_state: r.to_state,
+        decision: r.decision,
+        detalle: r.detalle,
+        recurso: r.recurso,
+        recurso_id: r.recurso_id,
+      })),
+    };
+  }
+
   // src_fuente (NVR) -> forma `NvrHealth` del frontend.
-  // La latencia reportada es el roundtrip real de las consultas a MySQL.
+  // M6: estado según antigüedad del heartbeat con umbrales configurables
+  // (heartbeat ≤5 min OK; sin señal > umbral (15 min default) = incidente/down).
   async listNvrHealth() {
     const started = Date.now();
+    const heartbeatMaxS = Number(await this.getConfigValue('health.nvr_heartbeat_max_s', '300'));
+    const incidentMin = Number(await this.getConfigValue('health.incident_threshold_min', '15'));
+
     const [nvrs] = await this.pool.query(
-      `SELECT id_fuente, source_code, display_name, status, actualizado_en
+      `SELECT id_fuente, source_code, display_name, status, actualizado_en, last_heartbeat_at,
+              TIMESTAMPDIFF(SECOND, COALESCE(last_heartbeat_at, actualizado_en), CURRENT_TIMESTAMP(3)) AS heartbeat_age_s
        FROM src_fuente
        WHERE source_type = 'NVR'
        ORDER BY source_code`
@@ -982,15 +1488,28 @@ class MysqlStore {
     );
     const latencyMs = Date.now() - started;
     const camerasByNvr = new Map(cams.map((c) => [c.nvr_code, Number(c.total)]));
-    return nvrs.map((r) => ({
-      id: surrogateId(r.id_fuente),
-      code: r.display_name || r.source_code,
-      status: r.status === 'ACTIVE' ? 'ok' : 'down',
-      last_check: toIso(r.actualizado_en),
-      latency_ms: latencyMs,
-      connected_cameras: camerasByNvr.get(r.source_code) || 0,
-    }));
+
+    return nvrs.map((r) => {
+      let status = 'ok';
+      if (r.status !== 'ACTIVE') {
+        status = 'down';
+      } else if (r.last_heartbeat_at !== null) {
+        // Solo se evalúa antigüedad cuando la fuente ya reporta heartbeats reales.
+        const ageS = Number(r.heartbeat_age_s ?? 0);
+        if (ageS > incidentMin * 60) status = 'down';
+        else if (ageS > heartbeatMaxS) status = 'degraded';
+      }
+      return {
+        id: surrogateId(r.id_fuente),
+        code: r.display_name || r.source_code,
+        status,
+        last_check: toIso(r.last_heartbeat_at || r.actualizado_en),
+        latency_ms: latencyMs,
+        connected_cameras: camerasByNvr.get(r.source_code) || 0,
+      };
+    });
   }
 }
 
-module.exports = { MysqlStore };
+// mapAlertRow se exporta para los tests de contrato (QA-09 #50).
+module.exports = { MysqlStore, mapAlertRow };

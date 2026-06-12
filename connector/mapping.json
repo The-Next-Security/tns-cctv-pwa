@@ -1,0 +1,13 @@
+{
+  "CrossLineDetection": { "event_type": "CrossLineDetection", "severity": "CRITICAL" },
+  "CrossRegionDetection": { "event_type": "CrossRegionDetection", "severity": "HIGH" },
+  "WanderDetection": { "event_type": "WanderDetection", "severity": "HIGH" },
+  "SmartMotionHuman": { "event_type": "SmartMotionHuman", "severity": "MEDIUM" },
+  "LeftDetection": { "event_type": "LeftDetection", "severity": "MEDIUM" },
+  "TrafficJunction": { "event_type": "TrafficJunction", "severity": "LOW" },
+  "TrafficOverSpeed": { "event_type": "TrafficOverSpeed", "severity": "HIGH" },
+  "VideoBlind": { "event_type": "VideoBlind", "severity": "HIGH" },
+  "VideoLoss": { "event_type": "VideoLoss", "severity": "MEDIUM" },
+  "VideoMotion": { "event_type": "VideoMotion", "severity": "LOW" },
+  "StorageFailure": { "event_type": "StorageFailure", "severity": "MEDIUM" }
+}

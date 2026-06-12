@@ -47,6 +47,9 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
       .slice(0, 2)
   }
 
+  // QA-14 (#55): el provider llena `nombre` (de /auth/me), no `full_name`.
+  const displayName = user?.nombre ?? user?.full_name ?? user?.email?.split('@')[0]
+
   async function handleLogout() {
     await logout()
     router.push('/login')
@@ -91,11 +94,11 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
               <Button variant="ghost" className="flex items-center gap-2 px-1.5 sm:px-2 rounded-xl touch-target h-9 sm:h-10">
                 <Avatar className="h-8 w-8 sm:h-9 sm:w-9 ring-2 ring-primary/20">
                   <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
-                    {getInitials(user.full_name)}
+                    {getInitials(displayName)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden flex-col items-start text-left md:flex">
-                  <span className="text-sm font-medium text-ds-ink-display antialiased">{user.full_name}</span>
+                  <span className="text-sm font-medium text-ds-ink-display antialiased">{displayName}</span>
                   <span className="text-xs text-ds-ink-muted font-medium antialiased">
                     {ROLE_LABELS[user.role]}
                   </span>
@@ -105,7 +108,7 @@ export function TopBar({ onMobileMenuClick, sidebarCollapsed }: TopBarProps) {
             <DropdownMenuContent align="end" className="w-56 glass-strong">
               <DropdownMenuLabel>
                 <div className="flex flex-col">
-                  <span>{user.full_name}</span>
+                  <span>{displayName}</span>
                   <span className="text-xs font-normal text-ds-ink-muted font-ds-body">
                     {user.email}
                   </span>

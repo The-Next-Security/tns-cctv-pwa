@@ -64,6 +64,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // iOS: sin viewport-fit=cover los env(safe-area-inset-*) son 0 y las
+  // utilidades .safe-top/.safe-bottom no hacen nada (notch/home indicator).
+  viewportFit: 'cover',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#121212' },
     { media: '(prefers-color-scheme: dark)', color: '#121212' },
@@ -78,6 +81,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
+      data-scroll-behavior="smooth"
       suppressHydrationWarning
     >
       <head>

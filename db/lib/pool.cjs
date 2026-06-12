@@ -33,6 +33,13 @@ function getPool() {
     charset: 'utf8mb4',
     dateStrings: true,
   });
+  // QA-04: sin esto, NOW()/CURRENT_TIMESTAMP y los DEFAULT de las tablas escriben
+  // en el timezone del SO del servidor, mientras occurred_at llega en UTC — la
+  // misma tabla mezcla husos y el API etiqueta todo como 'Z'. La sesión SIEMPRE
+  // opera en UTC; la conversión a hora local es responsabilidad de la UI.
+  pool.pool.on('connection', conn => {
+    conn.query("SET time_zone = '+00:00'");
+  });
   return pool;
 }
 

@@ -239,3 +239,16 @@ INSERT INTO adm_ingreso (id_ingreso, id_tenant, id_site, plate, visitor_id, visi
   ('IG000000000000000000000005', 'TN000000000000000000000001', 'ST000000000000000000000001', 'QRST-23', '16.789.012-3', 'Roberto Diaz', 'MetalInd', 'ANPR', 'UTILITARIO', 95, '2026-06-09 11:40:00.000', NULL, 'Equipo de mantenimiento', 0, 'US000000000000000000000004')
 ON DUPLICATE KEY UPDATE notes=VALUES(notes), destination_company=VALUES(destination_company), vehicle_type=VALUES(vehicle_type), anpr_confidence=VALUES(anpr_confidence);
 
+
+-- Conector edge de desarrollo (Paso 3): valida el x-api-key del ingest.
+-- Clave de desarrollo 'dev-ingest-key' — ROTAR antes del go-live.
+INSERT INTO src_conector_edge (
+  id_conector_edge, id_tenant, id_site, code, version, status, api_key_hash, metadata_json
+) VALUES (
+  'CE000000000000000000000001', 'TN000000000000000000000001', 'ST000000000000000000000001',
+  'conector-agrolivo-01', '0.1.0', 'ACTIVE', SHA2('dev-ingest-key', 256),
+  JSON_OBJECT('descripcion', 'Conector edge NVR Dahua — Parque Agrolivo')
+)
+ON DUPLICATE KEY UPDATE
+  status = VALUES(status),
+  api_key_hash = VALUES(api_key_hash);

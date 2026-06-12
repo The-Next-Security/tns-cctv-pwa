@@ -168,3 +168,7 @@ public/
 .DS_Store
 .claude/
 .aider*
+
+# Conector edge: credenciales NVR y snapshots locales
+connector/config.json
+connector/snapshots/

@@ -66,14 +66,8 @@ export function useRealtime(handlers: UseRealtimeHandlers) {
       socketRef.current = ws
 
       ws.onopen = () => {
-        attempts = 0
-        setConnected(true)
-        ws.send(JSON.stringify({ type: 'subscribe.filters', data: {} }))
-        heartbeatTimer = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'presence.heartbeat' }))
-          }
-        }, HEARTBEAT_INTERVAL_MS)
+        // Primer frame obligatorio: auth (el backend cierra la conexión a los 5 s sin él).
+        ws.send(JSON.stringify({ type: 'auth', data: { token } }))
       }
 
       ws.onmessage = (event) => {
@@ -84,6 +78,17 @@ export function useRealtime(handlers: UseRealtimeHandlers) {
           return
         }
         switch (msg.type) {
+          case 'auth.ack':
+            // Autenticado: recién ahora se suscribe y se inicia el heartbeat.
+            attempts = 0
+            setConnected(true)
+            ws.send(JSON.stringify({ type: 'subscribe.filters', data: {} }))
+            heartbeatTimer = setInterval(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'presence.heartbeat' }))
+              }
+            }, HEARTBEAT_INTERVAL_MS)
+            break
           case 'event.popup':
             handlersRef.current.onEventPopup?.(msg.data as EventPopupData)
             break

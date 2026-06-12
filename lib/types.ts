@@ -22,9 +22,9 @@ export const ALERT_CLASS_LABELS: Record<AlertClass, string> = {
   baja_prioridad: 'Baja Prioridad',
 }
 
-/** Solo 'critica' → 'critica'; alta + media + baja → 'baja_prioridad' */
+/** PRD §5.3: 'critica' = severidad alta o crítica; 'baja_prioridad' = media o baja */
 export function getAlertClass(criticality: Criticality): AlertClass {
-  return criticality === 'critica' ? 'critica' : 'baja_prioridad'
+  return criticality === 'critica' || criticality === 'alta' ? 'critica' : 'baja_prioridad'
 }
 
 export type AlertStatus = 'pendiente' | 'revisada' | 'descartada' | 'escalada' | 'en_revision' | 'resuelta'
@@ -162,7 +162,11 @@ export interface Alert {
   plate?: string
   snapshot_url?: string | null
   resolved_at?: string | null
+  /** id_usuario (CHAR 26) del actor que cerró la alerta, según el timeline */
+  resolved_by?: string | null
   resolution_notes?: string | null
+  /** Decisión del SP al cerrar (CONFIRMED/DISMISSED) — la nota va en resolution_notes (QA-09). */
+  resolution_decision?: string | null
   alert_class?: AlertClass
   // Relaciones expandidas
   camera?: Camera
@@ -334,6 +338,28 @@ export const ALERT_STATUS_LABELS: Record<AlertStatus, string> = {
   escalada: 'En Atención',
   en_revision: 'En Revision',
   resuelta: 'Resuelta'
+}
+
+// QA-13 (#54): decisiones del SP stpr_register_event_state traducidas para la UI.
+// El enum crudo (CONFIRMED/FALSE_POSITIVE/...) nunca debe pintarse sin traducir.
+export const RESOLUTION_DECISION_LABELS: Record<string, string> = {
+  CONFIRMED: 'confirmada',
+  FALSE_POSITIVE: 'falso positivo',
+  ESCALATED: 'escalada',
+  REACTIVATED: 'reactivada',
+  TOMAR: 'tomada para revisión',
+}
+
+/**
+ * Etiqueta de resolución para tarjetas cerradas: prioriza la nota del operador
+ * (resolution_notes, QA-09 #50); si la nota es un enum legacy de decisión o no
+ * existe, cae a la traducción de resolution_decision y por último a 'Sin notas'.
+ */
+export function getResolutionLabel(alert: Pick<Alert, 'resolution_notes' | 'resolution_decision'>): string {
+  const notes = alert.resolution_notes?.trim()
+  if (notes && !(notes in RESOLUTION_DECISION_LABELS)) return notes
+  const decision = notes || alert.resolution_decision || ''
+  return RESOLUTION_DECISION_LABELS[decision] || 'Sin notas'
 }
 
 export const MATCH_STATUS_LABELS: Record<MatchStatus, string> = {
@@ -628,4 +654,63 @@ export const EVENT_CODES_BY_CATEGORY: Record<EventCategory, EventCodeDef[]> = {
   perimetro: EVENT_CODES.filter(e => e.category === 'perimetro'),
   trafico: EVENT_CODES.filter(e => e.category === 'trafico'),
   salud: EVENT_CODES.filter(e => e.category === 'salud'),
+}
+
+// --- Reportes (CIOC): contratos de /api/v1/reports/* ---
+
+export interface ReportKpis {
+  total: number
+  resueltas: number
+  descartadas: number
+  pendientes: number
+  escaladas: number
+  criticas: number
+  tasa_resolucion: number
+  tasa_falsos_positivos: number
+  tiempo_toma_promedio_s: number | null
+  tiempo_resolucion_promedio_s: number | null
+}
+
+export interface ReportSummary {
+  range: { from?: string; to?: string }
+  kpis: ReportKpis
+  alertas_por_zona: { zona: string; alertas: number }[]
+  distribucion_criticidad: { criticidad: Criticality | string; total: number }[]
+  incidentes_por_dia: { dia: string; total: number }[]
+  resolucion_por_tipo: { tipo: string; resueltas: number; pendientes: number }[]
+  tiempo_respuesta_por_hora: { hora: string; promedio: number | null }[]
+}
+
+export interface ReportOperator {
+  user_id: string
+  nombre: string
+  rol: string | null
+  acciones: number
+  tomadas: number
+  resueltas: number
+  descartadas: number
+  escaladas: number
+  llamadas: number
+  tiempo_toma_promedio_s: number | null
+}
+
+export interface ReportAuditEntry {
+  categoria: 'OPERACION' | 'ADMIN'
+  occurred_at: string
+  actor: string
+  actor_rol: string | null
+  accion: string
+  from_state: string | null
+  to_state: string | null
+  decision: string | null
+  detalle: string | null
+  recurso: string | null
+  recurso_id: string | null
+}
+
+export interface ReportAuditTrail {
+  total: number
+  page: number
+  page_size: number
+  items: ReportAuditEntry[]
 }

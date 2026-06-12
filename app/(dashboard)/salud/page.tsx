@@ -1,12 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { formatDistanceToNow } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AlertCircle, CheckCircle, XCircle, Zap, Clock, Database, Wifi } from 'lucide-react'
 import { useUser } from '@/lib/auth'
 import { RoleGate } from '@/components/role-gate'
+import { health as healthApi } from '@/lib/api'
+import type { NvrHealth } from '@/lib/types'
 
 interface NVRStatus {
   id: string
@@ -16,12 +21,29 @@ interface NVRStatus {
   conectadas: number
   totalCamaras: number
   ultimaConexion: string
-  cpu: number
-  memoria: number
-  almacenamiento: number
+  // Métricas de hardware: el API de salud aún no las expone (pendiente spike
+  // NVR físico); si vienen undefined la UI las omite en lugar de inventarlas.
+  cpu?: number
+  memoria?: number
+  almacenamiento?: number
 }
 
-const nvrData: NVRStatus[] = [
+function mapNvrHealth(n: NvrHealth): NVRStatus {
+  return {
+    id: String(n.id),
+    nombre: n.code,
+    ip: '',
+    estado: n.status === 'ok' ? 'online' : n.status === 'down' ? 'offline' : 'degradado',
+    conectadas: n.connected_cameras,
+    totalCamaras: n.connected_cameras,
+    ultimaConexion: n.last_check
+      ? `Hace ${formatDistanceToNow(new Date(n.last_check), { addSuffix: false, locale: es })}`
+      : 'Sin datos',
+  }
+}
+
+// Fallback demo si el backend no responde (mock visible, nunca silencioso — D6).
+const MOCK_NVR_DATA: NVRStatus[] = [
   {
     id: '1',
     nombre: 'NVR Principal',
@@ -75,6 +97,27 @@ const colasData: ColaStatus[] = [
 
 export default function SaludPage() {
   const user = useUser()
+  const [nvrData, setNvrData] = useState<NVRStatus[]>([])
+
+  // Carga real desde /health/nvrs (src_fuente + heartbeats M6); fallback a mock
+  // visible si el backend no responde — mismo patrón que /recepcion.
+  useEffect(() => {
+    let cancelled = false
+    healthApi
+      .nvrs()
+      .then(items => {
+        if (cancelled) return
+        setNvrData(items.map(mapNvrHealth))
+      })
+      .catch(() => {
+        if (cancelled) return
+        setNvrData(MOCK_NVR_DATA)
+        toast.warning('Sin conexión con el servidor — mostrando datos de demostración')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const getStatusColor = (estado: string) => {
     switch (estado) {
@@ -176,7 +219,7 @@ export default function SaludPage() {
                   {getStatusIcon(nvr.estado)}
                   <div>
                     <h3 className="font-semibold">{nvr.nombre}</h3>
-                    <p className="text-sm text-ds-ink-muted">{nvr.ip}</p>
+                    {nvr.ip && <p className="text-sm text-ds-ink-muted">{nvr.ip}</p>}
                   </div>
                 </div>
                 <Badge className={getStatusColor(nvr.estado)}>
@@ -195,49 +238,57 @@ export default function SaludPage() {
                   <p className="text-ds-ink-muted">Última Conexión</p>
                   <p className="font-semibold">{nvr.ultimaConexion}</p>
                 </div>
-                <div>
-                  <p className="text-ds-ink-muted">CPU</p>
-                  <p className={`font-semibold ${getMetricColor(nvr.cpu)}`}>{nvr.cpu}%</p>
-                </div>
-                <div>
-                  <p className="text-ds-ink-muted">Memoria</p>
-                  <p className={`font-semibold ${getMetricColor(nvr.memoria)}`}>{nvr.memoria}%</p>
-                </div>
-                <div>
-                  <p className="text-ds-ink-muted">Almacenamiento</p>
-                  <p className={`font-semibold ${getMetricColor(nvr.almacenamiento)}`}>{nvr.almacenamiento}%</p>
-                </div>
+                {nvr.cpu !== undefined && (
+                  <div>
+                    <p className="text-ds-ink-muted">CPU</p>
+                    <p className={`font-semibold ${getMetricColor(nvr.cpu)}`}>{nvr.cpu}%</p>
+                  </div>
+                )}
+                {nvr.memoria !== undefined && (
+                  <div>
+                    <p className="text-ds-ink-muted">Memoria</p>
+                    <p className={`font-semibold ${getMetricColor(nvr.memoria)}`}>{nvr.memoria}%</p>
+                  </div>
+                )}
+                {nvr.almacenamiento !== undefined && (
+                  <div>
+                    <p className="text-ds-ink-muted">Almacenamiento</p>
+                    <p className={`font-semibold ${getMetricColor(nvr.almacenamiento)}`}>{nvr.almacenamiento}%</p>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-ds-ink-muted w-16">CPU</span>
-                  <div className="flex-1 h-2 bg-ds-hairline/40 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${nvr.cpu > 80 ? 'bg-ds-signal' : nvr.cpu > 60 ? 'bg-ds-accent-darker' : 'bg-ds-accent'}`}
-                      style={{ width: `${nvr.cpu}%` }}
-                    />
+              {nvr.cpu !== undefined && nvr.memoria !== undefined && nvr.almacenamiento !== undefined && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-ds-ink-muted w-16">CPU</span>
+                    <div className="flex-1 h-2 bg-ds-hairline/40 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${nvr.cpu > 80 ? 'bg-ds-signal' : nvr.cpu > 60 ? 'bg-ds-accent-darker' : 'bg-ds-accent'}`}
+                        style={{ width: `${nvr.cpu}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-ds-ink-muted w-16">Memoria</span>
+                    <div className="flex-1 h-2 bg-ds-hairline/40 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${nvr.memoria > 80 ? 'bg-ds-signal' : nvr.memoria > 60 ? 'bg-ds-accent-darker' : 'bg-ds-accent'}`}
+                        style={{ width: `${nvr.memoria}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-ds-ink-muted w-16">Almac.</span>
+                    <div className="flex-1 h-2 bg-ds-hairline/40 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${nvr.almacenamiento > 80 ? 'bg-ds-signal' : nvr.almacenamiento > 60 ? 'bg-ds-accent-darker' : 'bg-ds-accent'}`}
+                        style={{ width: `${nvr.almacenamiento}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-ds-ink-muted w-16">Memoria</span>
-                  <div className="flex-1 h-2 bg-ds-hairline/40 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${nvr.memoria > 80 ? 'bg-ds-signal' : nvr.memoria > 60 ? 'bg-ds-accent-darker' : 'bg-ds-accent'}`}
-                      style={{ width: `${nvr.memoria}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-ds-ink-muted w-16">Almac.</span>
-                  <div className="flex-1 h-2 bg-ds-hairline/40 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${nvr.almacenamiento > 80 ? 'bg-ds-signal' : nvr.almacenamiento > 60 ? 'bg-ds-accent-darker' : 'bg-ds-accent'}`}
-                      style={{ width: `${nvr.almacenamiento}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           ))}
         </CardContent>

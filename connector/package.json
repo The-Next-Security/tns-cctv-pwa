@@ -1,0 +1,11 @@
+{
+  "name": "tns-cctv-connector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Conector edge TNS CCTV ⇄ NVR Dahua (HTTP API V3.26). Proceso Node independiente.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  }
+}

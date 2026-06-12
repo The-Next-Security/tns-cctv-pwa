@@ -8,14 +8,15 @@ import useSWR from 'swr'
 import { format } from 'date-fns'
 import { RelativeTime } from '@/components/ui/relative-time'
 import { es } from 'date-fns/locale'
-import { 
-  ArrowLeft, 
-  Camera, 
-  Clock, 
-  MapPin, 
-  Check, 
-  X, 
+import {
+  ArrowLeft,
+  Camera,
+  Clock,
+  MapPin,
+  Check,
+  X,
   ChevronDown,
+  Eye,
   Info,
   AlertTriangle
 } from 'lucide-react'
@@ -83,14 +84,25 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
   const isInReview = alert?.status === 'en_revision'
   const isEscalated = alert?.status === 'escalada'
 
+  async function handleAcknowledge() {
+    if (!alert) return
+    setIsLoading(true)
+    try {
+      await alertsApi.attendEvent(alert.id, 'acknowledge')
+      toast.success('Alerta tomada para revisión')
+      await mutate()
+    } catch (error) {
+      toast.error('Error al procesar la alerta')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   async function handleRevisar() {
     if (!alert) return
     setIsLoading(true)
     try {
-      await alertsApi.attend(alert.id, { 
-        action: 'revisada',
-        observation: observation || undefined,
-      })
+      await alertsApi.attendEvent(alert.id, 'resolve', observation || undefined)
       toast.success('Alerta marcada como revisada')
       mutate()
       router.push('/operacion')
@@ -105,11 +117,8 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
     if (!alert) return
     setIsLoading(true)
     try {
-      await alertsApi.attend(alert.id, {
-        action: 'descartada',
-        discard_reason: reason,
-        observation: observation || undefined,
-      })
+      const notes = [DISCARD_REASON_LABELS[reason], observation].filter(Boolean).join(' — ')
+      await alertsApi.attendEvent(alert.id, 'discard', notes)
       toast.success('Alerta descartada')
       mutate()
       router.push('/operacion')
@@ -162,6 +171,13 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
     ...alert,
     llamada_at: llamadaAt ?? alert.llamada_at ?? null,
   }
+
+  // Como en la consola (alert-card useReviewActions): las acciones Llamar/Escalar
+  // se muestran también en pendiente; showEscalationActions exige en_revision,
+  // por eso se fuerza el estado solo para la visibilidad de esos controles.
+  const escalationAlert: Alert = isPending
+    ? { ...operationalAlert, status: 'en_revision' as const }
+    : operationalAlert
 
   return (
     <div className="space-y-4">
@@ -343,14 +359,31 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
 
         {/* Right column - Actions & Context */}
         <div className="space-y-4">
-          {/* Actions */}
-          {isPending && (
+          {/* Actions — mismo set que el card de consola (QA-10 / #51) */}
+          {(isPending || isInReview) && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Acciones</CardTitle>
+                {alert.rule?.can_escalate === true && (
+                  <CardDescription>
+                    Para escalar, primero contacte a los responsables definidos en la regla.
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent className="space-y-2">
+                {isPending && (
+                  <Button
+                    className="w-full"
+                    onClick={handleAcknowledge}
+                    disabled={isLoading}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Atender
+                  </Button>
+                )}
+
                 <Button
+                  variant={isPending ? 'outline' : 'default'}
                   className="w-full"
                   onClick={handleRevisar}
                   disabled={isLoading}
@@ -358,6 +391,27 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                   <Check className="h-4 w-4 mr-2" />
                   Marcar como revisada
                 </Button>
+
+                <CallContactsPopover
+                  alert={escalationAlert}
+                  onLlamar={() => {
+                    setLlamadaAt(new Date().toISOString())
+                    // D4: la llamada se persiste como CALL_REGISTERED en el timeline.
+                    alertsApi.attendEvent(alert.id, 'register_call').catch(() => {
+                      toast.error('No se pudo registrar la llamada en el servidor.')
+                      setLlamadaAt(null)
+                    })
+                  }}
+                  disabled={isLoading}
+                  className="w-full"
+                />
+                <EscalateButton
+                  alert={escalationAlert}
+                  onEscalate={() => setEscalateOpen(true)}
+                  disabled={isLoading}
+                  wrapperClassName="w-full"
+                  className="w-full"
+                />
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -378,33 +432,6 @@ export default function AlertaDetallePage({ params }: { params: Promise<{ id: st
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-
-              </CardContent>
-            </Card>
-          )}
-
-          {isInReview && operationalAlert.rule?.can_escalate === true && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Escalación</CardTitle>
-                <CardDescription>
-                  Primero contacte a los responsables definidos en la regla.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <CallContactsPopover
-                  alert={operationalAlert}
-                  onLlamar={() => setLlamadaAt(new Date().toISOString())}
-                  disabled={isLoading}
-                  className="w-full"
-                />
-                <EscalateButton
-                  alert={operationalAlert}
-                  onEscalate={() => setEscalateOpen(true)}
-                  disabled={isLoading}
-                  wrapperClassName="w-full"
-                  className="w-full"
-                />
               </CardContent>
             </Card>
           )}

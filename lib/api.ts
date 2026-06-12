@@ -52,9 +52,15 @@ async function fetchApi<T>(
 // Auth
 export const auth = {
   login: (email: string, password: string) =>
-    fetchApi<{ token: string; user: import('./types').User }>('/auth/login', {
+    fetchApi<{ token: string; refresh_token: string; expires_in: number; user: import('./types').User }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    }),
+  // D10: refresh rotativo — el token usado queda invalidado y llega uno nuevo.
+  refresh: (refreshToken: string) =>
+    fetchApi<{ token: string; refresh_token: string; expires_in: number; user: import('./types').User }>('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: refreshToken }),
     }),
   logout: () => fetchApi<void>('/auth/logout', { method: 'POST' }),
   me: () => fetchApi<import('./types').User>('/auth/me'),
@@ -64,7 +70,13 @@ export const auth = {
 export const alerts = {
   list: (params?: {
     status?: string
+    /** Ciclo de vida (D12): 'operativa' = abiertas + cerradas <48h; 'historial' = forense (supervisor+) */
+    scope?: 'operativa' | 'historial'
     zone_id?: number
+    criticality?: import('./types').Criticality
+    plate?: string
+    /** id_usuario del operador que cerró la alerta (solo scope=historial) */
+    resolved_by?: string
     from?: string
     to?: string
     page?: number
@@ -84,29 +96,26 @@ export const alerts = {
     )
   },
   get: (id: number) => fetchApi<import('./types').Alert>(`/alerts/${id}`),
-  attend: (
-    id: number,
-    data: {
-      action: 'revisada' | 'descartada' | 'escalada'
-      discard_reason?: string
-      discard_note?: string
-      escalated_to?: number
-      observation?: string
-    }
-  ) =>
-    fetchApi<import('./types').Alert>(`/alerts/${id}/attend`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  // Atiende una alerta por su event_id real (CHAR(26)) usando el vocabulario del backend MySQL.
+  // Vocabulario canónico único (decisión D2). Acepta el event_id real (CHAR(26))
+  // o el id numérico de UI: el backend resuelve ambos vía resolveEventId.
   attendEvent: (
-    eventId: string,
-    action: 'acknowledge' | 'resolve' | 'escalate' | 'discard' | 'reactivate' | 'activate',
+    eventId: string | number,
+    action: 'acknowledge' | 'resolve' | 'escalate' | 'discard' | 'reactivate' | 'activate' | 'register_call',
     notes?: string
   ) =>
     fetchApi<import('./types').Alert>(`/alerts/${eventId}/attend`, {
       method: 'POST',
       body: JSON.stringify({ action, notes }),
+    }),
+}
+
+// Web Push (D9)
+export const push = {
+  publicKey: () => fetchApi<{ enabled: boolean; public_key: string | null }>('/push/public-key'),
+  subscribe: (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    fetchApi<{ status: string }>('/push/subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(subscription),
     }),
 }
 
@@ -336,18 +345,36 @@ export const users = {
     }),
 }
 
-// Reportes
+// Reportes (CIOC): KPIs reales, accountability y export CSV
+function reportQuery(params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') searchParams.set(key, String(value))
+  })
+  const query = searchParams.toString()
+  return query ? `?${query}` : ''
+}
+
 export const reports = {
-  operationalNoise: (params: { from: string; to: string; zone_id?: number }) =>
-    fetchApi<unknown>(`/reports/operational-noise?from=${params.from}&to=${params.to}${params.zone_id ? `&zone_id=${params.zone_id}` : ''}`),
-  responseTimes: (params: { from: string; to: string }) =>
-    fetchApi<unknown>(`/reports/response-times?from=${params.from}&to=${params.to}`),
-  matchConfidence: (params: { from: string; to: string }) =>
-    fetchApi<unknown>(`/reports/match-confidence?from=${params.from}&to=${params.to}`),
-  registryQuality: (params: { from: string; to: string }) =>
-    fetchApi<unknown>(`/reports/registry-quality?from=${params.from}&to=${params.to}`),
-  sourceAvailability: (params: { from: string; to: string }) =>
-    fetchApi<unknown>(`/reports/source-availability?from=${params.from}&to=${params.to}`),
+  summary: (params: { from?: string; to?: string }) =>
+    fetchApi<import('./types').ReportSummary>(`/reports/summary${reportQuery(params)}`),
+  operators: (params: { from?: string; to?: string }) =>
+    fetchApi<{ items: import('./types').ReportOperator[]; total: number }>(
+      `/reports/operators${reportQuery(params)}`
+    ),
+  auditTrail: (params: { from?: string; to?: string; user_id?: string; page?: number; page_size?: number }) =>
+    fetchApi<import('./types').ReportAuditTrail>(`/reports/audit-trail${reportQuery(params)}`),
+  // CSV: descarga binaria con los mismos filtros de la vista (no pasa por fetchApi/JSON).
+  exportCsv: async (params: { type: 'summary' | 'audit'; from?: string; to?: string }) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('tns_token') : null
+    const response = await fetch(`${API_BASE}/reports/export${reportQuery(params)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+    if (!response.ok) {
+      throw new ApiError(response.status, 'EXPORT_FAILED', 'No se pudo exportar el reporte')
+    }
+    return response.blob()
+  },
 }
 
 // Salud técnica

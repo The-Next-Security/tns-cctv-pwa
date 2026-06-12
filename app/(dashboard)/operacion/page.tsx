@@ -1,11 +1,16 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { AlertTriangle, ArrowUpRight, Filter, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { AlertTriangle, ArrowUpDown, ArrowUpRight, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { StatCard } from '@/components/dashboard/stat-card'
 import { IncomingAlertsStatGroup } from '@/components/dashboard/incoming-alerts-stat-group'
 import { OperacionContextPanel } from '@/components/dashboard/operacion-context-panel'
@@ -14,33 +19,43 @@ import { AlertDialog } from '@/components/operacion/alert-dialog'
 import { AlertPopup } from '@/components/operacion/alert-popup'
 import { EscalateSheet } from '@/components/operacion/escalate-sheet'
 import { ConnectionStatus } from '@/components/operacion/connection-status'
+import {
+  AlertsFilterBar,
+  STATUS_VIEW_LABELS,
+  type CriticalityFilter,
+  type StatusView,
+} from '@/components/operacion/alerts-filter-bar'
+import { AlertsHistory, type AlertsHistoryFilters } from '@/components/operacion/alerts-history'
 import { useRealtime } from '@/hooks/use-realtime'
 import { alerts as alertsApi } from '@/lib/api'
+import { useUser } from '@/lib/auth'
 import { PARK_ZONES } from '@/lib/constants'
 import { toast } from 'sonner'
 import { DEMO_ALERT_POPUP_KEY } from '@/lib/reset-demo'
 import { URGENCY_STYLES, type UrgencyLevel } from '@/lib/constants'
-import { UrgencyBadge, UrgencyText } from '@/components/ui/urgency-badge'
+import { UrgencyText } from '@/components/ui/urgency-badge'
 import type { Alert } from '@/lib/types'
 import { getAlertClass } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { sortAlertsByMostRecent } from '@/lib/alert-list'
+import { ALERT_SORT_LABELS, ALERT_SORT_OPTIONS, isSlaOverdue, sortAlerts, type AlertSortBy, type ZoneNameMap } from '@/lib/alert-list'
 
-type StatusView = 'activas' | 'pendiente' | 'en_revision' | 'escaladas' | 'resueltas' | 'criticas' | 'baja_prioridad' | 'all'
+const VALID_STATUS_VIEWS: ReadonlyArray<StatusView> = [
+  'activas', 'pendiente', 'en_revision', 'escaladas', 'resueltas', 'criticas', 'baja_prioridad', 'vencidas', 'all', 'historial',
+]
 
-const STATUS_VIEW_LABELS: Record<StatusView, string> = {
-  activas: 'Alertas activas',
-  pendiente: 'Pendientes de atención',
-  en_revision: 'En revisión',
-  escaladas: 'Alertas escaladas',
-  resueltas: 'Resueltas hoy',
-  criticas: 'Críticas sin atender',
-  baja_prioridad: 'Baja prioridad sin atender',
-  all: 'Todas las alertas',
+// D12: el historial forense es función de mando — espejo del guard del backend.
+const HISTORY_ROLES: ReadonlyArray<string> = ['supervisor', 'responsable_seguridad', 'admin_parque']
+const VALID_CRITICALITY_FILTERS: ReadonlyArray<CriticalityFilter> = ['all', 'critica', 'baja_prioridad']
+
+const ZONE_NAMES: ZoneNameMap = Object.fromEntries(PARK_ZONES.map(zone => [zone.id, zone.name]))
+
+function parseEnumParam<T extends string>(raw: string | null, valid: ReadonlyArray<T>, fallback: T): T {
+  return raw !== null && valid.includes(raw as T) ? (raw as T) : fallback
 }
 
 const STATUS_VIEW_URGENCY: Partial<Record<StatusView, UrgencyLevel>> = {
   criticas: 'critical',
+  vencidas: 'critical',
   baja_prioridad: 'pending',
   pendiente: 'pending',
   en_revision: 'review',
@@ -86,6 +101,11 @@ function matchesStatusView(alert: Alert, view: StatusView): boolean {
         alert.status === 'en_revision' ||
         alert.status === 'escalada'
       )
+    case 'vencidas':
+      return isSlaOverdue(alert)
+    case 'historial':
+      // El historial no filtra el set operativo: se consulta al servidor aparte (D12).
+      return false
     case 'all':
       return true
     default:
@@ -93,10 +113,75 @@ function matchesStatusView(alert: Alert, view: StatusView): boolean {
   }
 }
 
-export default function OperacionPage() {
-  const [statusView, setStatusView] = useState<StatusView>('activas')
-  const [zoneFilter, setZoneFilter] = useState<string>('all')
-  const [criticalityFilter, setCriticalityFilter] = useState<string>('all')
+function OperacionPageContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const { user } = useUser()
+
+  // D12: la pestaña Historial es solo para supervisor+; un deep-link sin permiso cae en 'activas'.
+  const canSeeHistory = user != null && HISTORY_ROLES.includes(user.role)
+  const rawStatusView = parseEnumParam(searchParams.get('view'), VALID_STATUS_VIEWS, 'activas')
+  const statusView = rawStatusView === 'historial' && !canSeeHistory ? 'activas' : rawStatusView
+  const isHistoryView = statusView === 'historial'
+  const criticalityFilter = parseEnumParam(searchParams.get('crit'), VALID_CRITICALITY_FILTERS, 'all')
+  const sortBy = parseEnumParam(searchParams.get('sort'), ALERT_SORT_OPTIONS, 'recientes')
+  const zoneParam = searchParams.get('zone')
+  const zoneFilter = zoneParam !== null && PARK_ZONES.some(zone => String(zone.id) === zoneParam) ? zoneParam : 'all'
+
+  const updateParams = useCallback((updates: Record<string, string | null>) => {
+    const params = new URLSearchParams(searchParams.toString())
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) params.delete(key)
+      else params.set(key, value)
+    }
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }, [searchParams, router, pathname])
+
+  const setStatusView = useCallback(
+    (view: StatusView) => updateParams({ view: view === 'activas' ? null : view }),
+    [updateParams]
+  )
+  const setCriticalityFilter = useCallback(
+    (value: CriticalityFilter) => updateParams({ crit: value === 'all' ? null : value }),
+    [updateParams]
+  )
+  const setZoneFilter = useCallback(
+    (value: string) => updateParams({ zone: value === 'all' ? null : value }),
+    [updateParams]
+  )
+  const setSortBy = useCallback(
+    (value: AlertSortBy) => updateParams({ sort: value === 'recientes' ? null : value }),
+    [updateParams]
+  )
+
+  // D12: filtros del historial forense, también en la URL (deep-links de investigación)
+  const historyPageParam = parseInt(searchParams.get('hpage') ?? '1', 10)
+  const historyFilters: AlertsHistoryFilters = {
+    from: searchParams.get('hfrom') ?? '',
+    to: searchParams.get('hto') ?? '',
+    zone: searchParams.get('hzone') ?? 'all',
+    criticality: searchParams.get('hcrit') ?? 'all',
+    plate: searchParams.get('hplate') ?? '',
+    operator: searchParams.get('hop') ?? 'all',
+    page: Number.isFinite(historyPageParam) && historyPageParam >= 1 ? historyPageParam : 1,
+  }
+  const setHistoryFilters = useCallback(
+    (updates: Partial<AlertsHistoryFilters>) => {
+      const mapped: Record<string, string | null> = {}
+      if (updates.from !== undefined) mapped.hfrom = updates.from || null
+      if (updates.to !== undefined) mapped.hto = updates.to || null
+      if (updates.zone !== undefined) mapped.hzone = updates.zone === 'all' ? null : updates.zone
+      if (updates.criticality !== undefined) mapped.hcrit = updates.criticality === 'all' ? null : updates.criticality
+      if (updates.plate !== undefined) mapped.hplate = updates.plate || null
+      if (updates.operator !== undefined) mapped.hop = updates.operator === 'all' ? null : updates.operator
+      if (updates.page !== undefined) mapped.hpage = updates.page <= 1 ? null : String(updates.page)
+      updateParams(mapped)
+    },
+    [updateParams]
+  )
+
   const [priorityAlert, setPriorityAlert] = useState<Alert | null>(null)
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
   const [showPopup, setShowPopup] = useState(false)
@@ -106,7 +191,8 @@ export default function OperacionPage() {
 
   const loadAlerts = useCallback(async () => {
     try {
-      const res = await alertsApi.list()
+      // D12: la consola carga solo el conjunto operativo (abiertas + cerradas <48h)
+      const res = await alertsApi.list({ scope: 'operativa' })
       const items = (res as unknown as { data?: Alert[]; items?: Alert[] }).data
         ?? (res as unknown as { items?: Alert[] }).items
         ?? []
@@ -184,7 +270,7 @@ export default function OperacionPage() {
     return true
   })
 
-  const sortedFilteredAlerts = sortAlertsByMostRecent(filteredAlerts)
+  const sortedFilteredAlerts = sortAlerts(filteredAlerts, sortBy, ZONE_NAMES)
 
   // Stats
   const stats = {
@@ -193,6 +279,7 @@ export default function OperacionPage() {
     inReview:           localAlerts.filter(a => a.status === 'en_revision').length,
     escalated:          localAlerts.filter(a => a.status === 'escalada').length,
     resolved:           localAlerts.filter(a => a.status === 'resuelta' || a.status === 'descartada').length,
+    slaOverdue:         localAlerts.filter(a => isSlaOverdue(a)).length,
   }
 
   const listHeadingUrgency = resolveListHeadingUrgency(statusView, stats)
@@ -227,8 +314,11 @@ export default function OperacionPage() {
       }
       return a
     }))
-    // Persistencia best-effort en el backend (no bloquea la UX optimista).
-    alertsApi.attendEvent(eventId, action, notes).catch(() => {})
+    // UX optimista con reconciliación (D3): la BD es la fuente de verdad.
+    alertsApi.attendEvent(eventId, action, notes).catch(() => {
+      toast.error('No se pudo registrar la acción en el servidor. Sincronizando estado real...')
+      loadAlerts()
+    })
     setPriorityAlert(null)
 
     if (action === 'acknowledge') {
@@ -258,7 +348,10 @@ export default function OperacionPage() {
           }
         : a
     ))
-    alertsApi.attendEvent(eventId, 'reactivate').catch(() => {})
+    alertsApi.attendEvent(eventId, 'reactivate').catch(() => {
+      toast.error('No se pudo reactivar la alerta en el servidor. Sincronizando estado real...')
+      loadAlerts()
+    })
     toast.success('Alerta reactivada — vuelve al inicio del flujo')
 
     if (!alert) {
@@ -283,6 +376,12 @@ export default function OperacionPage() {
     setPriorityAlert(prev => prev ? markCalled(prev) : prev)
     setSelectedAlert(prev => prev ? markCalled(prev) : prev)
     setEscalateAlert(prev => prev ? markCalled(prev) : prev)
+
+    // D4: la llamada se persiste como acción CALL_REGISTERED en el timeline.
+    alertsApi.attendEvent(resolveEventId(alertId), 'register_call').catch(() => {
+      toast.error('No se pudo registrar la llamada en el servidor. Sincronizando estado real...')
+      loadAlerts()
+    })
   }
 
   function handleShowDetails(alert: Alert) {
@@ -360,113 +459,56 @@ export default function OperacionPage() {
           />
         </div>
 
+        {/* D12: alertas abiertas con SLA vencido — nunca se archivan, se destacan */}
+        {!isHistoryView && statusView !== 'vencidas' && stats.slaOverdue > 0 && (
+          <button
+            type="button"
+            onClick={() => setStatusView('vencidas')}
+            className="flex w-full items-center gap-2 rounded-xl border px-4 py-3 text-left text-xs sm:text-sm transition-colors hover:brightness-110"
+            style={{ backgroundColor: 'rgb(255 77 79 / 0.12)', borderColor: 'rgb(255 77 79 / 0.35)' }}
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0 text-ds-signal" aria-hidden />
+            <span className="text-ds-ink-body">
+              <span className="font-semibold text-ds-signal">
+                {stats.slaOverdue} alerta{stats.slaOverdue === 1 ? '' : 's'} con SLA vencido
+              </span>
+              {' '}— más de 48h sin resolver. Toque para revisarlas.
+            </span>
+          </button>
+        )}
+
         {/* Main panel */}
         <div className="soft-panel soft-card-compact overflow-hidden">
-          {/* Filters bar */}
+          {/* Filters bar — chips esenciales + panel de filtros (sin scroll horizontal en móvil) */}
           <div className="border-b border-ds-hairline/60 panel-compact pb-3 sm:pb-4">
-            <div className="mobile-scroll-x scroll-fade-x">
-              <div className="filter-scroll-row">
-                <Filter className="h-4 w-4 text-ds-ink-muted shrink-0 hidden sm:block" />
-
-                <Tabs value={statusView} onValueChange={(v) => setStatusView(v as StatusView)} className="w-auto shrink-0">
-                  <TabsList className="h-9 sm:h-10 rounded-xl bg-ds-muted p-0.5 sm:p-1">
-                    <TabsTrigger value="activas" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md">
-                      Activas
-                      {(stats.criticalPending + stats.lowPriorityPending + stats.inReview) > 0 && (
-                        <Badge
-                          variant="secondary"
-                          className="ml-1.5 h-5 px-1.5 border-0 text-[10px] font-semibold tabular-nums bg-ds-accent-faded text-ds-accent"
-                        >
-                          {stats.criticalPending + stats.lowPriorityPending + stats.inReview}
-                        </Badge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="criticas"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-[var(--urgency-critical-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-critical)] text-[var(--urgency-critical)]"
-                    >
-                      Crít.
-                      {stats.criticalPending > 0 && (
-                        <UrgencyBadge level="critical" pulse className="ml-1.5 h-5 px-1.5 py-0 text-[10px]">
-                          {stats.criticalPending}
-                        </UrgencyBadge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="baja_prioridad"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
-                    >
-                      Baja Prior.
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="en_revision"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-review)]"
-                    >
-                      Revisión
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="escaladas"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-[var(--urgency-escalated-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-escalated)] text-[var(--urgency-escalated)]"
-                    >
-                      Escal.
-                      {stats.escalated > 0 && (
-                        <UrgencyBadge level="escalated" className="ml-1.5 h-5 px-1.5 py-0 text-[10px]">
-                          {stats.escalated}
-                        </UrgencyBadge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="resueltas"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-resolved)]"
-                    >
-                      Resueltas
-                    </TabsTrigger>
-                    <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md">Todas</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-
-                {/* Filtro rápido por clase */}
-                <Tabs value={criticalityFilter} onValueChange={setCriticalityFilter} className="w-auto shrink-0">
-                  <TabsList className="h-9 sm:h-10 rounded-xl bg-ds-muted p-0.5 sm:p-1">
-                    <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md">Todas</TabsTrigger>
-                    <TabsTrigger
-                      value="critica"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-[var(--urgency-critical-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-critical)] text-[var(--urgency-critical)]"
-                    >
-                      Críticas
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="baja_prioridad"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
-                    >
-                      Baja Prior.
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-
-                <Select value={zoneFilter} onValueChange={setZoneFilter}>
-                  <SelectTrigger className="w-[130px] sm:w-[180px] h-9 sm:h-10 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm shrink-0">
-                    <SelectValue placeholder="Zona" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las zonas</SelectItem>
-                    {PARK_ZONES.map(zone => (
-                      <SelectItem key={zone.id} value={String(zone.id)}>
-                        {zone.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Button variant="outline" size="icon" onClick={handleRefresh} className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl border-0 bg-ds-muted shadow-none hover:bg-ds-muted/70 shrink-0">
-                  <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
-                  <span className="sr-only">Actualizar</span>
-                </Button>
-              </div>
-            </div>
+            <AlertsFilterBar
+              statusView={statusView}
+              onStatusViewChange={setStatusView}
+              criticalityFilter={criticalityFilter}
+              onCriticalityFilterChange={setCriticalityFilter}
+              zoneFilter={zoneFilter}
+              onZoneFilterChange={setZoneFilter}
+              activeAlertsCount={stats.criticalPending + stats.lowPriorityPending + stats.inReview}
+              isLoading={isLoading}
+              onRefresh={handleRefresh}
+              showHistoryTab={canSeeHistory}
+            />
           </div>
 
-          {/* List header + content */}
+          {/* D12: la pestaña Historial reemplaza la lista operativa por la búsqueda forense */}
+          {isHistoryView ? (
+            <div className="panel-compact space-y-3 sm:space-y-5">
+              <div className="min-w-0">
+                <h2 className="text-section text-sm sm:text-base font-semibold antialiased text-ds-ink-display">
+                  Historial forense
+                </h2>
+                <p className="text-xs sm:text-sm text-ds-ink-muted">
+                  Alertas cerradas hace más de 48h — búsqueda por fecha, zona, criticidad, patente y operador
+                </p>
+              </div>
+              <AlertsHistory filters={historyFilters} onFiltersChange={setHistoryFilters} />
+            </div>
+          ) : (
           <div className="panel-compact space-y-3 sm:space-y-5">
             <div className="flex items-start justify-between gap-2 sm:gap-3">
               <div className="min-w-0">
@@ -484,11 +526,35 @@ export default function OperacionPage() {
                   {filteredAlerts.length} alerta{filteredAlerts.length === 1 ? '' : 's'} en esta vista
                 </p>
               </div>
-              {statusView !== 'activas' && (
-                <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="h-8 sm:h-9 shrink-0 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm">
-                  Volver
-                </Button>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label="Ordenar alertas"
+                      className="h-8 sm:h-9 gap-1.5 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm"
+                    >
+                      <ArrowUpDown className="h-4 w-4" />
+                      <span className="hidden sm:inline">{ALERT_SORT_LABELS[sortBy]}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuRadioGroup value={sortBy} onValueChange={value => setSortBy(value as AlertSortBy)}>
+                      {ALERT_SORT_OPTIONS.map(option => (
+                        <DropdownMenuRadioItem key={option} value={option}>
+                          {ALERT_SORT_LABELS[option]}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {statusView !== 'activas' && (
+                  <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="h-8 sm:h-9 shrink-0 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm">
+                    Volver
+                  </Button>
+                )}
+              </div>
             </div>
 
             <p className="hidden sm:block text-caption rounded-xl bg-ds-accent-faded px-4 py-3 border border-ds-accent/20">
@@ -532,6 +598,7 @@ export default function OperacionPage() {
                   {statusView === 'resueltas'        && 'Aún no hay alertas cerradas en esta sesión.'}
                   {statusView === 'criticas'         && 'No hay alertas críticas sin atender en este momento.'}
                   {statusView === 'baja_prioridad'   && 'No hay alertas de baja prioridad pendientes.'}
+                  {statusView === 'vencidas'         && 'Ninguna alerta abierta supera las 48h. El SLA está al día.'}
                   {statusView === 'activas'          && 'No hay alertas activas. El sistema está funcionando correctamente.'}
                   {statusView === 'all'              && 'No hay alertas que coincidan con los filtros seleccionados.'}
                 </p>
@@ -575,6 +642,7 @@ export default function OperacionPage() {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
@@ -616,5 +684,14 @@ export default function OperacionPage() {
         }}
       />
     </div>
+  )
+}
+
+// useSearchParams exige un límite de Suspense en App Router
+export default function OperacionPage() {
+  return (
+    <Suspense fallback={null}>
+      <OperacionPageContent />
+    </Suspense>
   )
 }
