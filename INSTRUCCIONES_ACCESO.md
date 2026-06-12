@@ -1,78 +1,75 @@
 # TNS Track - Instrucciones de Acceso
 
-## URL Principal
+> La autenticación es **real** (JWT + bcrypt contra MySQL) desde el Paso 2 de seguridad.
+> Usuarios y contraseña de desarrollo: ver [USUARIOS_PRUEBA.md](./USUARIOS_PRUEBA.md).
+> Actualizado: 2026-06-11 (QA-12 / [#53](https://github.com/The-Next-Security/tns-cctv-pwa/issues/53)).
 
-Accede a: **http://localhost:3000**
+## Levantar el entorno
 
-Serás redirigido automáticamente a: **http://localhost:3000/login**
+```bash
+npm install
+npm run db:verify   # valida el bundle SQL (37 tablas)
+npm run dev         # web :3000 + api :4000 (STORE=mysql)
+```
 
-## Cómo Hacer Login
+Requisitos:
+- MySQL local con el schema de `db/sql_files/` aplicado (orquestador en `db/`).
+- `db/connection-config.json` presente (gitignored — copiarlo del repo principal
+  si trabajas en un worktree).
+- Para Web Push (D9): `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY` en el entorno
+  (generar con `npx web-push generate-vapid-keys`; sin ellas el push queda
+  deshabilitado y el backend solo lo loggea).
 
-### Opción 1: Usar los Botones de Prueba (Recomendado)
+## Cómo hacer login
 
-1. En la página de login, verás una sección "USUARIOS DE PRUEBA" al pie del formulario
-2. Haz click en uno de estos botones:
-   - **Admin** → admin@agrolivo.cl
-   - **Operador** → operador@agrolivo.cl
-   - **Recepcionista** → recepcionista@agrolivo.cl
-3. El formulario se auto-rellena automáticamente
-4. Haz click en "Iniciar sesión"
-5. Serás redirigido a la Consola Operativa
+1. Abre **http://localhost:3000** (redirige a `/login`).
+2. Opción rápida: botones **Admin / Operador / Recepción** — auto-rellenan email
+   y contraseña de desarrollo.
+3. Opción manual: email del seed + `password123`.
+4. Click en "Iniciar sesión" → redirige a la Consola Operativa (`/operacion`).
 
-### Opción 2: Escribir Manualmente
+⚠️ Una contraseña incorrecta devuelve **401 "Correo o contraseña incorrectos"**
+(el modo "cualquier contraseña funciona" ya no existe).
 
-1. Correo: `admin@agrolivo.cl` (o cualquier usuario de prueba)
-2. Contraseña: `password123` (o cualquier contraseña)
-3. Haz click en "Iniciar sesión"
+## Sesión
 
-## Problemas Comunes
+- El access token dura 60 min; el AuthProvider lo renueva solo (refresh rotativo,
+  tope 10 h).
+- Si reinicias el backend, los refresh tokens se invalidan → vuelve a loguear.
+- Para salir: botón de logout (limpia `tns_token` y `tns_refresh_token`).
 
-### El navegador muestra una página en blanco
+## Páginas disponibles después del login
 
-**Solución:**
-- Presiona F5 para recargar la página
-- Abre la consola de desarrollador (F12) y revisa si hay errores en rojo
-- Intenta vaciar el caché: Ctrl+Shift+Del
+El menú se filtra por rol (ver USUARIOS_PRUEBA.md). Con `admin_parque` ves todo:
 
-### Se queda en la página de login después de hacer click en "Iniciar sesión"
+- **Consola Operativa** (`/operacion`) — alertas en tiempo real (WS autenticado)
+- **Registro Vehicular** (`/recepcion`) — ingreso/salida de vehículos (BD real)
+- **Expedientes** (`/expedientes`) — gestión de infracciones
+- **Reglas Operativas** (`/reglas`) — editor de reglas (desktop)
+- **Reportes** (`/reportes`) — gráficos y KPIs
+- **Salud Técnica** (`/salud`) — estado real de NVRs vía `/health/nvrs`
+- **Administración** (`/admin`) — usuarios, zonas, cámaras, NVRs, tenants, configuración
+- **Design system** (`/admin/design-system`) — referencia de UI
 
-**Solución:**
-- Asegúrate de que ingresaste un correo válido
-- La contraseña puede ser cualquiera en modo demo
-- Intenta con: admin@agrolivo.cl / password123
-- Si persiste, recarga la página (F5)
+## Problemas comunes
 
-### El servidor dice que no está disponible
+### "Correo o contraseña incorrectos"
+- Verifica que usas un usuario del seed con `password123` (USUARIOS_PRUEBA.md).
+- Si cambiaste datos de usuarios en pruebas, re-aplica el seed
+  (`07_01_datos_iniciales.sql` es idempotente: `ON DUPLICATE KEY UPDATE`).
 
-**Solución:**
-- El servidor dev debe estar corriendo en puerto 3000
-- Si se detiene, necesita ser reiniciado: `pnpm dev` en la carpeta del proyecto
+### La sesión se cierra sola tras reiniciar el backend
+- Esperado: las sesiones de refresh viven en memoria (D10). Vuelve a loguear.
 
-## Páginas Disponibles Después de Login
+### El API responde 401 en todo
+- El token expiró o el backend se reinició. Logout + login.
+- Recuerda: solo `/auth/login`, `/auth/refresh` y `/health/*` son públicos.
 
-Una vez autenticado, tienes acceso a:
-
-- **Consola Operativa** (`/operacion`) - Monitoreo de alertas en tiempo real
-- **Registro Vehicular** (`/recepcion`) - Ingreso/salida de vehículos
-- **Expedientes** (`/expedientes`) - Gestión de infracciones
-- **Reglas Operativas** (`/reglas`) - Configuración de reglas
-- **Reportes** (`/reportes`) - Gráficos y KPIs
-- **Salud Técnica** (`/salud`) - Estado del sistema
-- **Administración** (`/admin`) - Gestión de usuarios, zonas, cámaras, etc.
-
-## Navegación
-
-- Usa el **sidebar lateral** para navegar entre secciones
-- El **top bar** muestra tu usuario y estado del sistema
-- En pantallas pequeñas (móvil), haz click en el ícono de menú (hamburguesa)
-
-## Información Técnica
-
-- **Autenticación:** Mock en localStorage (para desarrollo)
-- **Base de datos:** No hay backend real (interfaz de demostración)
-- **Sesión:** Se mantiene mientras tengas las cookies
-- **Para salir:** Recarga la página o borra el localStorage
+### El servidor no está disponible
+- `npm run dev` debe estar corriendo (web :3000, api :4000).
+- Si la web carga pero los datos no, revisa que el api esté arriba y que
+  `db/connection-config.json` exista.
 
 ---
 
-¿Necesitas ayuda? Revisa la sección README.md para más detalles técnicos.
+¿Más detalle técnico? `README.md`, `HANDOFF.md` y `02-design/ARCHITECTURE.md`.

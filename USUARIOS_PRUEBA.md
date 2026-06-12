@@ -1,154 +1,63 @@
 # TNS Track - Usuarios y Credenciales de Prueba
 
-## Usuarios Disponibles
+> Fuente de verdad: `db/sql_files/07_DatosIniciales/07_01_datos_iniciales.sql` (seed real).
+> La autenticación es **real** (JWT + bcrypt contra MySQL) — "cualquier contraseña" **NO** funciona.
+> Actualizado: 2026-06-11 (QA-12 / [#53](https://github.com/The-Next-Security/tns-cctv-pwa/issues/53)).
 
-El sistema está configurado con autenticación mockeada para permitir acceso rápido durante el desarrollo. **Cualquier combinación de email y contraseña válida funcionará**. A continuación se proporcionan usuarios sugeridos para cada rol:
+## Credenciales
 
-### 1. Administrador de Parque
-**Email:** `admin@agrolivo.cl`  
-**Contraseña:** `password123` (o cualquier contraseña)  
-**Rol:** `admin_parque`  
-**Acceso a:** Todas las módulos (Operación, Recepción, Expedientes, Reglas, Reportes, Salud, Admin)  
-**Descripción:** Acceso completo al sistema. Puede gestionar usuarios, zonas, cámaras, NVRs, crear reglas y ver todos los reportes.
+Todos los usuarios del seed comparten la contraseña de desarrollo: **`password123`**.
+⚠️ Rotar antes del go-live (backlog HANDOFF §3.5).
 
----
+## Usuarios del seed
 
-### 2. Jefe de Seguridad
-**Email:** `jefe.seguridad@agrolivo.cl`  
-**Contraseña:** `password123` (o cualquier contraseña)  
-**Rol:** `jefe_seguridad`  
-**Acceso a:** Operación, Recepción, Expedientes, Reportes, Salud  
-**Descripción:** Control total de operaciones de seguridad. Puede ver alertas, gestionar infracciones vehiculares, crear reglas y acceder a reportes.
+| # | Email | Rol (`gen_usuario.rol`) | Nombre | Teléfono |
+|---|---|---|---|---|
+| 1 | `admin@agrolivo.cl` | `admin_parque` | Carlos Rodriguez | +56977432219 |
+| 2 | `supervisor@agrolivo.cl` | `supervisor` | Maria Gonzalez | +56991035567 |
+| 3 | `operador@agrolivo.cl` | `vigilante` | Juan Perez | +56987654321 |
+| 4 | `recepcionista@agrolivo.cl` | `recepcionista` | Ana Silva | +56976543210 |
+| 5 | `tecnico@agrolivo.cl` | `tecnico` | Roberto Diaz | +56228910045 |
+| 6 | `seguridad@agrolivo.cl` | `responsable_seguridad` | Patricia Morales | +56988214430 |
+| 7 | `andres@thenextsecurity.cl` | `admin_parque` | Andres Vasquez | +56911112222 |
+| 8 | `felipe@thenextsecurity.cl` | `admin_parque` | Felipe Vásquez | +56933334444 |
+| 9 | `raimundo@thenextsecurity.cl` | `admin_parque` | Raimundo Sanchez | +56955556666 |
 
----
+Los roles `jefe_seguridad`, `operador_consola` y `auditor` que mencionaban versiones
+anteriores de este documento **no existen** en el seed.
 
-### 3. Operador de Consola
-**Email:** `operador@agrolivo.cl`  
-**Contraseña:** `password123` (o cualquier contraseña)  
-**Rol:** `operador_consola`  
-**Acceso a:** Operación, Recepción, Expedientes, Reportes  
-**Descripción:** Monitora alertas en tiempo real y registra vehículos. Puede escalar alertas críticas pero no crear reglas.
+## Qué ve cada rol (menú filtrado por rol)
 
----
+- **admin_parque** — todos los módulos, incluida Administración completa
+  (Usuarios, Zonas, Cámaras, NVRs, Tenants, Configuración).
+- **supervisor** — operación y gestión; recibe escalaciones (definido por regla).
+- **vigilante** — solo "Alertas" (consola operativa). Validado en sesión QA 2026-06-11.
+- **recepcionista** — Recepción vehicular y Expedientes.
+- **tecnico** — Salud técnica.
+- **responsable_seguridad** — operación; contacto primario de escalación.
 
-### 4. Recepcionista
-**Email:** `recepcionista@agrolivo.cl`  
-**Contraseña:** `password123` (o cualquier contraseña)  
-**Rol:** `recepcionista`  
-**Acceso a:** Recepción, Expedientes  
-**Descripción:** Registra ingresos/salidas de vehículos y consulta expedientes. Acceso limitado al sistema.
+## Autorización en el servidor (no solo menú)
 
----
+- Mutaciones de usuarios (`POST/PATCH /api/v1/users`) exigen rol `admin_parque`
+  (QA-05; guard `requireRole` en `src/auth.js`).
+- `GET /api/v1/users` queda abierto a cualquier usuario autenticado: alimenta los
+  contactos de escalación.
+- Todo el API exige JWT salvo `/auth/login`, `/auth/refresh` y `/health/*`.
 
-### 5. Auditor
-**Email:** `auditor@agrolivo.cl`  
-**Contraseña:** `password123` (o cualquier contraseña)  
-**Rol:** `auditor`  
-**Acceso a:** Operación, Expedientes, Reportes, Salud  
-**Descripción:** Solo lectura. Puede auditar operaciones pero no realizar acciones operativas.
+## Sesión (D10)
 
----
+- Access token: 60 min. Refresh rotativo de un solo uso, tope absoluto 10 h.
+- Reusar un refresh token ya usado → 401 (replay detectado).
+- Las sesiones de refresh viven en memoria del backend: **reiniciar el backend
+  invalida los refresh** (hay que volver a loguear).
+- Logout limpia `tns_token` y `tns_refresh_token` del localStorage.
 
-## Instrucciones de Acceso
+## Cómo entrar
 
-### Opción 1: Usar usuarios predefinidos
-1. Ir a http://localhost:3000/login
-2. Ingresar cualquiera de los emails listados arriba
-3. Ingresar cualquier contraseña (ej: `password123`)
-4. Hacer clic en "Ingresar"
+1. Levantar la app: `npm run dev` (web :3000, api :4000 con `STORE=mysql`).
+2. Ir a http://localhost:3000/login.
+3. Usar un email del seed + `password123`, o los botones de acceso rápido
+   (Admin / Operador / Recepción) que auto-rellenan el formulario.
 
-### Opción 2: Crear usuarios personalizados
-El sistema está configurado con autenticación mockeada. Puedes ingresar **cualquier email y contraseña válidos** y se creará automáticamente una sesión con rol `admin_parque`:
-
-- Email: `tu-email@tudominio.com`
-- Contraseña: `cualquier-password`
-
----
-
-## Características por Rol
-
-### admin_parque (Administrador)
-- ✅ Ver Consola Operativa
-- ✅ Registrar vehículos
-- ✅ Gestionar expedientes
-- ✅ Crear y editar reglas
-- ✅ Ver reportes
-- ✅ Monitorear salud del sistema
-- ✅ **Administración**: Usuarios, Zonas, Cámaras, NVRs, Tenants, Configuración
-
-### jefe_seguridad (Jefe de Seguridad)
-- ✅ Ver Consola Operativa
-- ✅ Registrar vehículos
-- ✅ Gestionar expedientes
-- ✅ Crear y editar reglas
-- ✅ Ver reportes
-- ✅ Monitorear salud del sistema
-- ❌ Administración restringida
-
-### operador_consola (Operador)
-- ✅ Ver Consola Operativa
-- ✅ Registrar vehículos
-- ✅ Gestionar expedientes
-- ✅ Ver reportes
-- ❌ Crear/editar reglas
-- ❌ Acceso a Salud
-
-### recepcionista (Recepcionista)
-- ❌ Consola Operativa
-- ✅ Registrar vehículos
-- ✅ Gestionar expedientes
-- ❌ Reportes
-- ❌ Salud
-- ❌ Administración
-
-### auditor (Auditor)
-- ✅ Ver Consola Operativa (solo lectura)
-- ❌ Registrar vehículos
-- ✅ Ver expedientes (solo lectura)
-- ✅ Ver reportes (solo lectura)
-- ✅ Monitorear salud (solo lectura)
-- ❌ Administración
-
----
-
-## Nota Importante
-
-**El sistema actual usa autenticación mockeada** para desarrollo y pruebas rápidas. Para producción, necesitas:
-
-1. Conectar un backend real de autenticación
-2. Integrar con un servidor de bases de datos (Neon, Supabase, etc.)
-3. Implementar JWT o sesiones seguras
-4. Remover el código mock del archivo `/components/providers/auth-provider.tsx`
-
----
-
-## Rutas Disponibles
-
-- `/` → Redirige a `/operacion`
-- `/login` → Pantalla de login
-- `/operacion` → Consola Operativa (principal)
-- `/recepcion` → Registro de vehículos
-- `/expedientes` → Gestión de infracciones
-- `/reglas` → Editor de reglas operativas
-- `/reportes` → Reportes y KPIs
-- `/salud` → Salud técnica del sistema
-- `/admin` → Panel de administración
-  - `/admin/usuarios` → Gestión de usuarios
-  - `/admin/zonas` → Gestión de zonas
-  - `/admin/camaras` → Gestión de cámaras
-  - `/admin/nvrs` → Gestión de NVRs
-  - `/admin/tenants` → Gestión de tenants
-  - `/admin/configuracion` → Configuración del sistema
-
----
-
-## Próximos Pasos de Desarrollo
-
-Para completar el sistema, implementa:
-
-1. **Backend API** - Endpoints para CRUD de todas las entidades
-2. **Base de datos** - Schema SQL con todas las tablas
-3. **WebSocket** - Conexión en tiempo real para alertas y eventos
-4. **Integración Dahua** - Consumo de eventos de cámaras
-5. **Autenticación real** - Better Auth o supabase-auth
-6. **Tests E2E** - Verificación de flujos completos
+Credencial inválida → 401 "Correo o contraseña incorrectos".
+Usuario con `status != 'ACTIVE'` → 401.
