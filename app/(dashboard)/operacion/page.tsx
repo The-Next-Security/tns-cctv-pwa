@@ -1,11 +1,16 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { AlertTriangle, ArrowUpRight, Filter, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { AlertTriangle, ArrowUpDown, ArrowUpRight, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { StatCard } from '@/components/dashboard/stat-card'
 import { IncomingAlertsStatGroup } from '@/components/dashboard/incoming-alerts-stat-group'
 import { OperacionContextPanel } from '@/components/dashboard/operacion-context-panel'
@@ -14,29 +19,33 @@ import { AlertDialog } from '@/components/operacion/alert-dialog'
 import { AlertPopup } from '@/components/operacion/alert-popup'
 import { EscalateSheet } from '@/components/operacion/escalate-sheet'
 import { ConnectionStatus } from '@/components/operacion/connection-status'
+import {
+  AlertsFilterBar,
+  STATUS_VIEW_LABELS,
+  type CriticalityFilter,
+  type StatusView,
+} from '@/components/operacion/alerts-filter-bar'
 import { useRealtime } from '@/hooks/use-realtime'
 import { alerts as alertsApi } from '@/lib/api'
 import { PARK_ZONES } from '@/lib/constants'
 import { toast } from 'sonner'
 import { DEMO_ALERT_POPUP_KEY } from '@/lib/reset-demo'
 import { URGENCY_STYLES, type UrgencyLevel } from '@/lib/constants'
-import { UrgencyBadge, UrgencyText } from '@/components/ui/urgency-badge'
+import { UrgencyText } from '@/components/ui/urgency-badge'
 import type { Alert } from '@/lib/types'
 import { getAlertClass } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { sortAlertsByMostRecent } from '@/lib/alert-list'
+import { ALERT_SORT_LABELS, ALERT_SORT_OPTIONS, sortAlerts, type AlertSortBy, type ZoneNameMap } from '@/lib/alert-list'
 
-type StatusView = 'activas' | 'pendiente' | 'en_revision' | 'escaladas' | 'resueltas' | 'criticas' | 'baja_prioridad' | 'all'
+const VALID_STATUS_VIEWS: ReadonlyArray<StatusView> = [
+  'activas', 'pendiente', 'en_revision', 'escaladas', 'resueltas', 'criticas', 'baja_prioridad', 'all',
+]
+const VALID_CRITICALITY_FILTERS: ReadonlyArray<CriticalityFilter> = ['all', 'critica', 'baja_prioridad']
 
-const STATUS_VIEW_LABELS: Record<StatusView, string> = {
-  activas: 'Alertas activas',
-  pendiente: 'Pendientes de atención',
-  en_revision: 'En revisión',
-  escaladas: 'Alertas escaladas',
-  resueltas: 'Resueltas hoy',
-  criticas: 'Críticas sin atender',
-  baja_prioridad: 'Baja prioridad sin atender',
-  all: 'Todas las alertas',
+const ZONE_NAMES: ZoneNameMap = Object.fromEntries(PARK_ZONES.map(zone => [zone.id, zone.name]))
+
+function parseEnumParam<T extends string>(raw: string | null, valid: ReadonlyArray<T>, fallback: T): T {
+  return raw !== null && valid.includes(raw as T) ? (raw as T) : fallback
 }
 
 const STATUS_VIEW_URGENCY: Partial<Record<StatusView, UrgencyLevel>> = {
@@ -93,10 +102,45 @@ function matchesStatusView(alert: Alert, view: StatusView): boolean {
   }
 }
 
-export default function OperacionPage() {
-  const [statusView, setStatusView] = useState<StatusView>('activas')
-  const [zoneFilter, setZoneFilter] = useState<string>('all')
-  const [criticalityFilter, setCriticalityFilter] = useState<string>('all')
+function OperacionPageContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  // QA-03: los filtros y el orden viven en la URL — deep-links, sobreviven a refresh/PWA re-launch
+  const statusView = parseEnumParam(searchParams.get('view'), VALID_STATUS_VIEWS, 'activas')
+  const criticalityFilter = parseEnumParam(searchParams.get('crit'), VALID_CRITICALITY_FILTERS, 'all')
+  const sortBy = parseEnumParam(searchParams.get('sort'), ALERT_SORT_OPTIONS, 'recientes')
+  const zoneParam = searchParams.get('zone')
+  const zoneFilter = zoneParam !== null && PARK_ZONES.some(zone => String(zone.id) === zoneParam) ? zoneParam : 'all'
+
+  const updateParams = useCallback((updates: Record<string, string | null>) => {
+    const params = new URLSearchParams(searchParams.toString())
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) params.delete(key)
+      else params.set(key, value)
+    }
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }, [searchParams, router, pathname])
+
+  const setStatusView = useCallback(
+    (view: StatusView) => updateParams({ view: view === 'activas' ? null : view }),
+    [updateParams]
+  )
+  const setCriticalityFilter = useCallback(
+    (value: CriticalityFilter) => updateParams({ crit: value === 'all' ? null : value }),
+    [updateParams]
+  )
+  const setZoneFilter = useCallback(
+    (value: string) => updateParams({ zone: value === 'all' ? null : value }),
+    [updateParams]
+  )
+  const setSortBy = useCallback(
+    (value: AlertSortBy) => updateParams({ sort: value === 'recientes' ? null : value }),
+    [updateParams]
+  )
+
   const [priorityAlert, setPriorityAlert] = useState<Alert | null>(null)
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
   const [showPopup, setShowPopup] = useState(false)
@@ -184,7 +228,7 @@ export default function OperacionPage() {
     return true
   })
 
-  const sortedFilteredAlerts = sortAlertsByMostRecent(filteredAlerts)
+  const sortedFilteredAlerts = sortAlerts(filteredAlerts, sortBy, ZONE_NAMES)
 
   // Stats
   const stats = {
@@ -374,108 +418,19 @@ export default function OperacionPage() {
 
         {/* Main panel */}
         <div className="soft-panel soft-card-compact overflow-hidden">
-          {/* Filters bar */}
+          {/* Filters bar — chips esenciales + panel de filtros (sin scroll horizontal en móvil) */}
           <div className="border-b border-ds-hairline/60 panel-compact pb-3 sm:pb-4">
-            <div className="mobile-scroll-x scroll-fade-x">
-              <div className="filter-scroll-row">
-                <Filter className="h-4 w-4 text-ds-ink-muted shrink-0 hidden sm:block" />
-
-                <Tabs value={statusView} onValueChange={(v) => setStatusView(v as StatusView)} className="w-auto shrink-0">
-                  <TabsList className="h-9 sm:h-10 rounded-xl bg-ds-muted p-0.5 sm:p-1">
-                    <TabsTrigger value="activas" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md">
-                      Activas
-                      {(stats.criticalPending + stats.lowPriorityPending + stats.inReview) > 0 && (
-                        <Badge
-                          variant="secondary"
-                          className="ml-1.5 h-5 px-1.5 border-0 text-[10px] font-semibold tabular-nums bg-ds-accent-faded text-ds-accent"
-                        >
-                          {stats.criticalPending + stats.lowPriorityPending + stats.inReview}
-                        </Badge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="criticas"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-[var(--urgency-critical-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-critical)] text-[var(--urgency-critical)]"
-                    >
-                      Crít.
-                      {stats.criticalPending > 0 && (
-                        <UrgencyBadge level="critical" pulse className="ml-1.5 h-5 px-1.5 py-0 text-[10px]">
-                          {stats.criticalPending}
-                        </UrgencyBadge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="baja_prioridad"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
-                    >
-                      Baja Prior.
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="en_revision"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-review)]"
-                    >
-                      Revisión
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="escaladas"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-[var(--urgency-escalated-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-escalated)] text-[var(--urgency-escalated)]"
-                    >
-                      Escal.
-                      {stats.escalated > 0 && (
-                        <UrgencyBadge level="escalated" className="ml-1.5 h-5 px-1.5 py-0 text-[10px]">
-                          {stats.escalated}
-                        </UrgencyBadge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="resueltas"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-resolved)]"
-                    >
-                      Resueltas
-                    </TabsTrigger>
-                    <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md">Todas</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-
-                {/* Filtro rápido por clase */}
-                <Tabs value={criticalityFilter} onValueChange={setCriticalityFilter} className="w-auto shrink-0">
-                  <TabsList className="h-9 sm:h-10 rounded-xl bg-ds-muted p-0.5 sm:p-1">
-                    <TabsTrigger value="all" className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md">Todas</TabsTrigger>
-                    <TabsTrigger
-                      value="critica"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-[var(--urgency-critical-bg)] data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-critical)] text-[var(--urgency-critical)]"
-                    >
-                      Críticas
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="baja_prioridad"
-                      className="rounded-lg px-2.5 sm:px-3 text-xs sm:text-sm data-[state=active]:bg-ds-surface data-[state=active]:shadow-card-md data-[state=active]:text-[var(--urgency-pending)]"
-                    >
-                      Baja Prior.
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-
-                <Select value={zoneFilter} onValueChange={setZoneFilter}>
-                  <SelectTrigger className="w-[130px] sm:w-[180px] h-9 sm:h-10 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm shrink-0">
-                    <SelectValue placeholder="Zona" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las zonas</SelectItem>
-                    {PARK_ZONES.map(zone => (
-                      <SelectItem key={zone.id} value={String(zone.id)}>
-                        {zone.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Button variant="outline" size="icon" onClick={handleRefresh} className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl border-0 bg-ds-muted shadow-none hover:bg-ds-muted/70 shrink-0">
-                  <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
-                  <span className="sr-only">Actualizar</span>
-                </Button>
-              </div>
-            </div>
+            <AlertsFilterBar
+              statusView={statusView}
+              onStatusViewChange={setStatusView}
+              criticalityFilter={criticalityFilter}
+              onCriticalityFilterChange={setCriticalityFilter}
+              zoneFilter={zoneFilter}
+              onZoneFilterChange={setZoneFilter}
+              activeAlertsCount={stats.criticalPending + stats.lowPriorityPending + stats.inReview}
+              isLoading={isLoading}
+              onRefresh={handleRefresh}
+            />
           </div>
 
           {/* List header + content */}
@@ -496,11 +451,35 @@ export default function OperacionPage() {
                   {filteredAlerts.length} alerta{filteredAlerts.length === 1 ? '' : 's'} en esta vista
                 </p>
               </div>
-              {statusView !== 'activas' && (
-                <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="h-8 sm:h-9 shrink-0 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm">
-                  Volver
-                </Button>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label="Ordenar alertas"
+                      className="h-8 sm:h-9 gap-1.5 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm"
+                    >
+                      <ArrowUpDown className="h-4 w-4" />
+                      <span className="hidden sm:inline">{ALERT_SORT_LABELS[sortBy]}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuRadioGroup value={sortBy} onValueChange={value => setSortBy(value as AlertSortBy)}>
+                      {ALERT_SORT_OPTIONS.map(option => (
+                        <DropdownMenuRadioItem key={option} value={option}>
+                          {ALERT_SORT_LABELS[option]}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {statusView !== 'activas' && (
+                  <Button variant="outline" size="sm" onClick={() => setStatusView('activas')} className="h-8 sm:h-9 shrink-0 rounded-xl border-0 bg-ds-muted shadow-none text-xs sm:text-sm">
+                    Volver
+                  </Button>
+                )}
+              </div>
             </div>
 
             <p className="hidden sm:block text-caption rounded-xl bg-ds-accent-faded px-4 py-3 border border-ds-accent/20">
@@ -628,5 +607,14 @@ export default function OperacionPage() {
         }}
       />
     </div>
+  )
+}
+
+// useSearchParams exige un límite de Suspense en App Router
+export default function OperacionPage() {
+  return (
+    <Suspense fallback={null}>
+      <OperacionPageContent />
+    </Suspense>
   )
 }
