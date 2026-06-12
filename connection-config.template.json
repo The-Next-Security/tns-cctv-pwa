@@ -1,0 +1,25 @@
+{
+  "_comentario": "Copia este archivo como connection-config.json y completa con credenciales reales. NUNCA commitear connection-config.json — está en .gitignore.",
+  "_instrucciones": "cp connection-config.template.json connection-config.json",
+  "environment": 0,
+  "development": {
+    "host": "YOUR_DEV_HOST",
+    "port": 3306,
+    "username": "YOUR_DEV_USER",
+    "password": "YOUR_DEV_PASSWORD",
+    "database": "YOUR_DEV_DATABASE",
+    "pool": {
+      "max_size": 10
+    }
+  },
+  "production": {
+    "host": "YOUR_PROD_HOST",
+    "port": 3306,
+    "username": "YOUR_PROD_USER",
+    "password": "YOUR_PROD_PASSWORD",
+    "database": "YOUR_PROD_DATABASE",
+    "pool": {
+      "max_size": 20
+    }
+  }
+}

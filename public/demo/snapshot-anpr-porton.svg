@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1c1917"/>
+      <stop offset="100%" stop-color="#292524"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#road)"/>
+  <rect x="0" y="0" width="640" height="80" fill="#0f172a" opacity="0.85"/>
+  <rect x="40" y="20" width="180" height="40" rx="4" fill="#1e293b" stroke="#334155"/>
+  <text x="130" y="46" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="13">PORTÓN RECEPCIÓN · ACCESO SUR</text>
+  <rect x="0" y="80" width="120" height="280" fill="#44403c"/>
+  <rect x="520" y="80" width="120" height="280" fill="#44403c"/>
+  <rect x="120" y="200" width="400" height="160" fill="#57534e"/>
+  <line x1="120" y1="280" x2="520" y2="280" stroke="#fbbf24" stroke-width="2" stroke-dasharray="16 12"/>
+  <rect x="200" y="230" width="240" height="90" rx="6" fill="#1e3a2f" stroke="#22c55e" stroke-width="2" opacity="0.35"/>
+  <rect x="248" y="268" width="144" height="36" rx="4" fill="#0a0807" stroke="#f5d175" stroke-width="2"/>
+  <text x="320" y="292" text-anchor="middle" fill="#f5d175" font-family="monospace" font-size="22" font-weight="700">BCDF-12</text>
+  <text x="16" y="24" fill="#22c55e" font-family="monospace" font-size="12" font-weight="700">Ï ANPR ACTIVO</text>
+  <text x="500" y="24" fill="#94a3b8" font-family="monospace" font-size="11">CAM-ANPR-RC01</text>
+  <text x="16" y="344" fill="#6b7280" font-family="monospace" font-size="11">CAPTURA ANPR · DEMO TNS TRACK</text>
+</svg>
