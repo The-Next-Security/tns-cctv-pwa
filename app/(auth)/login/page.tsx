@@ -178,7 +178,7 @@ export default function LoginPage() {
                   ))}
                 </div>
                 <p className="mt-3 text-center text-[11px] text-ds-ink-muted">
-                  Modo demo — cualquier contraseña funciona
+                  Usuarios demo del seed (ver USUARIOS_PRUEBA.md) — contraseña común de desarrollo
                 </p>
               </div>
             </form>
