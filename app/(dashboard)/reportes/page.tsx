@@ -25,11 +25,12 @@ const tiempoRespuesta = [
   { hora: '20:00', promedio: 58 },
 ]
 
+// Colores vía tokens del design system (QA-15 #56) — nunca hex raw.
 const criticidadDistribuccion = [
-  { name: 'Baja', value: 35, color: '#3b82f6' },
-  { name: 'Media', value: 28, color: '#fbbf24' },
-  { name: 'Alta', value: 22, color: '#f97316' },
-  { name: 'Crítica', value: 15, color: '#ef4444' },
+  { name: 'Baja', value: 35, color: 'var(--criticality-baja)' },
+  { name: 'Media', value: 28, color: 'var(--criticality-media)' },
+  { name: 'Alta', value: 22, color: 'var(--criticality-alta)' },
+  { name: 'Crítica', value: 15, color: 'var(--criticality-critica)' },
 ]
 
 const resolucionPorTipo = [
@@ -60,6 +61,16 @@ export default function ReportesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Aviso de mock visible (D6 / QA-15 #56): esta vista aún no consume la BD. */}
+      <div
+        className="rounded-xl border px-4 py-3 text-sm text-ds-ink-body"
+        style={{ backgroundColor: 'rgb(250 173 20 / 0.12)', borderColor: 'rgb(250 173 20 / 0.35)' }}
+        role="status"
+      >
+        <span className="font-semibold">Datos de demostración</span> — los KPIs y gráficos de esta
+        vista aún no provienen de la base de datos (migración D11 pendiente).
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -148,7 +159,7 @@ export default function ReportesPage() {
                 <XAxis dataKey="zona" angle={-45} textAnchor="end" height={80} fontSize={12} />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="alertas" fill="#3b82f6" />
+                <Bar dataKey="alertas" fill="var(--cctv-accent-blue)" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -166,7 +177,7 @@ export default function ReportesPage() {
                 <XAxis dataKey="hora" />
                 <YAxis />
                 <Tooltip />
-                <Line type="monotone" dataKey="promedio" stroke="#3b82f6" strokeWidth={2} />
+                <Line type="monotone" dataKey="promedio" stroke="var(--cctv-accent-blue)" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -187,7 +198,7 @@ export default function ReportesPage() {
                   labelLine={false}
                   label={({ name, value }) => `${name}: ${value}%`}
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill="var(--cctv-accent-blue)"
                   dataKey="value"
                 >
                   {criticidadDistribuccion.map((entry, index) => (
@@ -212,7 +223,7 @@ export default function ReportesPage() {
                 <XAxis dataKey="dia" />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="total" fill="#10b981" />
+                <Bar dataKey="total" fill="var(--alert-success)" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -232,8 +243,8 @@ export default function ReportesPage() {
               <YAxis dataKey="tipo" type="category" width={150} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="resueltas" fill="#10b981" />
-              <Bar dataKey="pendientes" fill="#ef4444" />
+              <Bar dataKey="resueltas" fill="var(--alert-success)" />
+              <Bar dataKey="pendientes" fill="var(--criticality-alta)" />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
